@@ -1,0 +1,355 @@
+{
+  "info": {
+    "name": "Social & Artist Platform API",
+    "description": "Postman Collection for testing Profile, Media Upload, and Posts & Articles modules.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8081"
+    },
+    {
+      "key": "userId",
+      "value": "artist-100"
+    },
+    {
+      "key": "postId",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Module 2: Profile",
+      "item": [
+        {
+          "name": "Update / Upsert Profile (me)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "X-User-Id",
+                "value": "{{userId}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Alex Rivers\",\n  \"phone\": \"+1-555-0199\",\n  \"email\": \"alex.rivers@artstudio.com\",\n  \"experience\": \"7 years of 3D modeling and lighting for animated features\",\n  \"address\": \"Los Angeles, CA\",\n  \"languages\": [\"English\", \"Spanish\"],\n  \"otherLanguage\": \"Basic French\",\n  \"talents\": [\"3D Animation\", \"Character Sculpting\", \"Compositing\"],\n  \"workTypes\": [\"Full-time\", \"Contract\", \"Remote\"],\n  \"profileImageKey\": \"avatar-user100.png\",\n  \"coverImageKey\": \"cover-user100.jpg\",\n  \"demoVideos\": [\n    {\n      \"objectKey\": \"reel-part1.mp4\",\n      \"url\": \"http://localhost:8081/api/media/files/reel-part1.mp4\",\n      \"fileName\": \"demoreel_2026.mp4\",\n      \"contentType\": \"video/mp4\",\n      \"sizeBytes\": 3145728\n    }\n  ],\n  \"videoUrls\": [\n    \"https://vimeo.com/channels/staffpicks/987654\",\n    \"https://www.youtube.com/watch?v=dQw4w9WgXcQ\"\n  ],\n  \"visibility\": \"public\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/profiles/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "profiles", "me"]
+            }
+          }
+        },
+        {
+          "name": "Get Profile - Owner View (Shows Phone/Email)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-Id",
+                "value": "{{userId}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/profiles/{{userId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "profiles", "{{userId}}"]
+            }
+          }
+        },
+        {
+          "name": "Get Profile - Public / Unauthorized View (Hides Phone/Email)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-Id",
+                "value": "other-user-99",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/profiles/{{userId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "profiles", "{{userId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Module 3: Media Upload",
+      "item": [
+        {
+          "name": "Upload Media File (multipart)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-User-Id",
+                "value": "{{userId}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/media/upload",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "media", "upload"]
+            }
+          }
+        },
+        {
+          "name": "Request Scoped Upload URL",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-User-Id",
+                "value": "{{userId}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/media/upload/request-url?fileName=artwork.png&contentType=image/png&sizeBytes=2048576",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "media", "upload", "request-url"],
+              "query": [
+                {
+                  "key": "fileName",
+                  "value": "artwork.png"
+                },
+                {
+                  "key": "contentType",
+                  "value": "image/png"
+                },
+                {
+                  "key": "sizeBytes",
+                  "value": "2048576"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Attach Media to Post",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-User-Id",
+                "value": "{{userId}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"objectKey\": \"artwork_01.png\",\n  \"url\": \"http://localhost:8081/api/media/files/artwork_01.png\",\n  \"fileName\": \"artwork_01.png\",\n  \"contentType\": \"image/png\",\n  \"sizeBytes\": 1048576\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/posts/{{postId}}/media",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "posts", "{{postId}}", "media"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Module 4: Posts and Articles",
+      "item": [
+        {
+          "name": "Create Post",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-User-Id",
+                "value": "{{userId}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"post\",\n  \"content\": \"Sharing my latest real-time lighting test! Comments and critique welcome.\",\n  \"attachments\": [\n    {\n      \"objectKey\": \"lighting_preview.png\",\n      \"url\": \"http://localhost:8081/api/media/files/lighting_preview.png\",\n      \"fileName\": \"lighting_preview.png\",\n      \"contentType\": \"image/png\",\n      \"sizeBytes\": 1048576\n    }\n  ],\n  \"visibility\": \"public\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/posts",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "posts"]
+            }
+          }
+        },
+        {
+          "name": "Create Article (Title Required)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-User-Id",
+                "value": "{{userId}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"article\",\n  \"title\": \"Mastering Volumetric Fog in Real-Time Renderers\",\n  \"content\": \"Volumetric lighting adds instant mood and cinematic depth to scene compositions. In this breakdown, we explore raymarching density textures and light attenuation curves...\",\n  \"visibility\": \"public\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/posts",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "posts"]
+            }
+          }
+        },
+        {
+          "name": "Get Feed (Cursor-based Pagination)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-Id",
+                "value": "{{userId}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/posts?limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "posts"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10"
+                },
+                {
+                  "key": "cursor",
+                  "value": "",
+                  "disabled": true
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Post by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-Id",
+                "value": "{{userId}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/posts/{{postId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "posts", "{{postId}}"]
+            }
+          }
+        },
+        {
+          "name": "Update Post (Author Only)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "X-User-Id",
+                "value": "{{userId}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Mastering Volumetric Fog in Real-Time Renderers (Revised)\",\n  \"content\": \"Updated with higher resolution breakdown frames.\",\n  \"visibility\": \"public\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/posts/{{postId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "posts", "{{postId}}"]
+            }
+          }
+        },
+        {
+          "name": "Report Post for Spam/Abuse",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-User-Id",
+                "value": "reporter-user-2",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Inappropriate or spam promotional link\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/posts/{{postId}}/report",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "posts", "{{postId}}", "report"]
+            }
+          }
+        },
+        {
+          "name": "Delete Post (Author Only)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-User-Id",
+                "value": "{{userId}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/posts/{{postId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "posts", "{{postId}}"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

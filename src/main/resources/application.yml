@@ -1,13 +1,40 @@
+server:
+  port: ${PORT:8081}
+  servlet:
+    context-path: /
+
 spring:
   application:
     name: social-backend
   profiles:
     active: dev
-
-server:
-  port: 8080
   servlet:
-    context-path: /
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 55MB
+
+app:
+  media:
+    storage-dir: uploads
+    base-url: /api/media/files/
+    max-demo-video-size-bytes: 5242880 # 5 MB
+    allowed-content-types:
+      - image/jpeg
+      - image/png
+      - image/webp
+      - image/gif
+      - video/mp4
+      - video/webm
+      - video/quicktime
+      - audio/mpeg
+      - audio/wav
+      - audio/ogg
+      - audio/mp4
+      - audio/aac
+      - application/pdf
+      - application/msword
+      - application/vnd.openxmlformats-officedocument.wordprocessingml.document
+      - text/plain
 
 # Actuator endpoints
 management:
