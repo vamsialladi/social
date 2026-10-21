@@ -1,0 +1,416 @@
+{
+  "info": {
+    "name": "TrueHunt - Module 5 & 6 API Collection",
+    "description": "Postman Collection for testing Module 5 (Opportunities) and Module 6 (Network & Connections)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "aliceId",
+      "value": ""
+    },
+    {
+      "key": "bobId",
+      "value": ""
+    },
+    {
+      "key": "connectionId",
+      "value": ""
+    },
+    {
+      "key": "opportunityId",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Users Setup",
+      "item": [
+        {
+          "name": "Create User 1 (Alice - Artist)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.data && jsonData.data.id) {",
+                  "    pm.collectionVariables.set('aliceId', jsonData.data.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"alice_singer\",\n  \"name\": \"Alice Wonder\",\n  \"email\": \"alice@example.com\",\n  \"headline\": \"Classical Vocalist & Composer\",\n  \"role\": \"ARTIST\",\n  \"location\": \"Mumbai, India\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/users",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users"]
+            }
+          }
+        },
+        {
+          "name": "Create User 2 (Bob - Casting Director)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.data && jsonData.data.id) {",
+                  "    pm.collectionVariables.set('bobId', jsonData.data.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"bob_casting\",\n  \"name\": \"Bob Vance\",\n  \"email\": \"bob@example.com\",\n  \"headline\": \"Lead Casting Director at CineMedia\",\n  \"role\": \"EMPLOYER\",\n  \"location\": \"Hyderabad, India\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/users",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users"]
+            }
+          }
+        },
+        {
+          "name": "Get Current User Profile (Alice)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-Id",
+                "value": "{{aliceId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users", "me"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Module 5 - Opportunities",
+      "item": [
+        {
+          "name": "GET Opportunities (Initial / Empty State)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/opportunities",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "opportunities"]
+            }
+          }
+        },
+        {
+          "name": "POST Create Opportunity (As Bob)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.data && jsonData.data.id) {",
+                  "    pm.collectionVariables.set('opportunityId', jsonData.data.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-Id",
+                "value": "{{bobId}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Lead Female Vocalist for Feature Film OST\",\n  \"content\": \"Looking for a classically trained vocalist with contemporary range for a major upcoming feature soundtrack recording in Hyderabad.\",\n  \"employer\": \"CineMedia Productions\",\n  \"compensation\": \"₹150,000 per track\",\n  \"location\": \"Hyderabad, India\",\n  \"expiryDate\": \"2026-12-31T23:59:59Z\",\n  \"mediaUrls\": [\n    \"https://example.com/demo-sheet.pdf\"\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/opportunities",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "opportunities"]
+            }
+          }
+        },
+        {
+          "name": "GET Opportunities (Feed - Newest First)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/opportunities?limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "opportunities"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET Single Opportunity by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/opportunities/{{opportunityId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "opportunities", "{{opportunityId}}"]
+            }
+          }
+        },
+        {
+          "name": "POST Create Ordinary Post (As Alice)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-Id",
+                "value": "{{aliceId}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"Rehearsing our morning raagas! Have a musical week ahead everyone!\",\n  \"mediaUrls\": [\n    \"https://example.com/practice-clip.mp4\"\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/posts",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "posts"]
+            }
+          }
+        },
+        {
+          "name": "GET Ordinary Posts Feed (Opportunity Excluded)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/posts",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "posts"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Module 6 - Network & Connections",
+      "item": [
+        {
+          "name": "GET Suggested Profiles (For Alice - Excludes Self)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-Id",
+                "value": "{{aliceId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/connections/suggestions",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "connections", "suggestions"]
+            }
+          }
+        },
+        {
+          "name": "POST Send Connection Request (Alice -> Bob)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.data && jsonData.data.id) {",
+                  "    pm.collectionVariables.set('connectionId', jsonData.data.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-Id",
+                "value": "{{aliceId}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"recipientId\": \"{{bobId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/connections",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "connections"]
+            }
+          }
+        },
+        {
+          "name": "POST Send Self-Connection Request (Should Fail 400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-Id",
+                "value": "{{aliceId}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"recipientId\": \"{{aliceId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/connections",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "connections"]
+            }
+          }
+        },
+        {
+          "name": "POST Send Duplicate Request (Should Fail 409)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-Id",
+                "value": "{{aliceId}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"recipientId\": \"{{bobId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/connections",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "connections"]
+            }
+          }
+        },
+        {
+          "name": "PATCH Accept Connection Request (As Recipient Bob)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-Id",
+                "value": "{{bobId}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"accepted\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/connections/{{connectionId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "connections", "{{connectionId}}"]
+            }
+          }
+        },
+        {
+          "name": "GET Accepted Connections (For Alice)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-Id",
+                "value": "{{aliceId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/connections",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "connections"]
+            }
+          }
+        },
+        {
+          "name": "GET Accepted Connections (For Bob)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-Id",
+                "value": "{{bobId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/connections",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "connections"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
