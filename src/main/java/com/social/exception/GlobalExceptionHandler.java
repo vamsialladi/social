@@ -28,7 +28,7 @@ public class GlobalExceptionHandler {
             fields.put(fieldError.getField(), fieldError.getDefaultMessage());
         }
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(ErrorResponse.of("VALIDATION_ERROR", "Check the submitted fields.", fields));
+                .body(ErrorResponse.of("VALIDATION_ERROR", "Check the submitted fields.", fields, HttpStatus.BAD_REQUEST.value()));
     }
 
     @ExceptionHandler(ConstraintViolationException.class)
@@ -39,61 +39,36 @@ public class GlobalExceptionHandler {
             fields.put(propertyPath, violation.getMessage());
         });
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(ErrorResponse.of("VALIDATION_ERROR", "Check the submitted fields.", fields));
+                .body(ErrorResponse.of("VALIDATION_ERROR", "Check the submitted fields.", fields, HttpStatus.BAD_REQUEST.value()));
     }
 
-    // 400 - Invalid input
-    @ExceptionHandler(BadRequestException.class)
-    public ResponseEntity<ErrorResponse> handleBadRequest(BadRequestException ex) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(ErrorResponse.of("INVALID_INPUT", ex.getMessage()));
+    // Specific ApiExceptions (BadRequestException, ForbiddenException, UnauthorizedException, ConflictException, ResourceNotFoundException)
+    @ExceptionHandler(ApiException.class)
+    public ResponseEntity<ErrorResponse> handleApiException(ApiException ex) {
+        HttpStatus status = ex.getStatus() != null ? ex.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR;
+        String code = mapStatusToErrorCode(status);
+        return ResponseEntity.status(status)
+                .body(ErrorResponse.of(code, ex.getMessage(), status.value()));
     }
 
+    // 400 - Other invalid inputs
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ErrorResponse> handleIllegalArgument(IllegalArgumentException ex) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(ErrorResponse.of("INVALID_INPUT", ex.getMessage()));
+                .body(ErrorResponse.of("INVALID_INPUT", ex.getMessage(), HttpStatus.BAD_REQUEST.value()));
     }
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     public ResponseEntity<ErrorResponse> handleMaxUploadSize(MaxUploadSizeExceededException ex) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(ErrorResponse.of("INVALID_INPUT", "File size exceeds maximum allowed upload limit."));
-    }
-
-    // 401 - Not authenticated
-    @ExceptionHandler(UnauthorizedException.class)
-    public ResponseEntity<ErrorResponse> handleUnauthorized(UnauthorizedException ex) {
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                .body(ErrorResponse.of("UNAUTHORIZED", ex.getMessage()));
-    }
-
-    // 403 - Authenticated but not allowed
-    @ExceptionHandler(ForbiddenException.class)
-    public ResponseEntity<ErrorResponse> handleForbidden(ForbiddenException ex) {
-        return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body(ErrorResponse.of("FORBIDDEN", ex.getMessage()));
-    }
-
-    // 404 - Missing or invisible resource
-    @ExceptionHandler(ResourceNotFoundException.class)
-    public ResponseEntity<ErrorResponse> handleNotFound(ResourceNotFoundException ex) {
-        return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(ErrorResponse.of("NOT_FOUND", ex.getMessage()));
-    }
-
-    // 409 - Conflicting state
-    @ExceptionHandler(ConflictException.class)
-    public ResponseEntity<ErrorResponse> handleConflict(ConflictException ex) {
-        return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(ErrorResponse.of("CONFLICT", ex.getMessage()));
+                .body(ErrorResponse.of("INVALID_INPUT", "File size exceeds maximum allowed upload limit.", HttpStatus.BAD_REQUEST.value()));
     }
 
     // 429 - Rate limit hit
     @ExceptionHandler(RateLimitException.class)
     public ResponseEntity<ErrorResponse> handleRateLimit(RateLimitException ex) {
         return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
-                .body(ErrorResponse.of("RATE_LIMIT_EXCEEDED", ex.getMessage()));
+                .body(ErrorResponse.of("RATE_LIMIT_EXCEEDED", ex.getMessage(), HttpStatus.TOO_MANY_REQUESTS.value()));
     }
 
     // 500 - Unexpected server failure (no stack traces or secrets exposed to client)
@@ -101,13 +76,25 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleFileStorage(FileStorageException ex) {
         log.error("File storage error: ", ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ErrorResponse.of("INTERNAL_SERVER_ERROR", "An unexpected server failure occurred during file storage."));
+                .body(ErrorResponse.of("INTERNAL_SERVER_ERROR", "An unexpected server failure occurred during file storage.", HttpStatus.INTERNAL_SERVER_ERROR.value()));
     }
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGenericException(Exception ex) {
         log.error("Unhandled server exception: ", ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ErrorResponse.of("INTERNAL_SERVER_ERROR", "An unexpected server error occurred."));
+                .body(ErrorResponse.of("INTERNAL_SERVER_ERROR", "An unexpected server error occurred.", HttpStatus.INTERNAL_SERVER_ERROR.value()));
+    }
+
+    private String mapStatusToErrorCode(HttpStatus status) {
+        return switch (status) {
+            case BAD_REQUEST -> "INVALID_INPUT";
+            case UNAUTHORIZED -> "UNAUTHORIZED";
+            case FORBIDDEN -> "FORBIDDEN";
+            case NOT_FOUND -> "NOT_FOUND";
+            case CONFLICT -> "CONFLICT";
+            case TOO_MANY_REQUESTS -> "RATE_LIMIT_EXCEEDED";
+            default -> "INTERNAL_SERVER_ERROR";
+        };
     }
 }

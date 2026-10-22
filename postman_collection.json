@@ -1,37 +1,54 @@
 {
   "info": {
-    "name": "Social & Artist Platform API",
-    "description": "Postman Collection for testing Profile, Media Upload, and Posts & Articles modules.",
+    "name": "TrueHunt - Module 5 & 6 API Collection",
+    "description": "Postman Collection for testing Module 5 (Opportunities) and Module 6 (Network & Connections)",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
     {
       "key": "baseUrl",
-      "value": "http://localhost:8081"
+      "value": "http://localhost:8080"
     },
     {
-      "key": "userId",
-      "value": "artist-100"
+      "key": "aliceId",
+      "value": ""
     },
     {
-      "key": "postId",
+      "key": "bobId",
+      "value": ""
+    },
+    {
+      "key": "connectionId",
+      "value": ""
+    },
+    {
+      "key": "opportunityId",
       "value": ""
     }
   ],
   "item": [
     {
-      "name": "Module 2: Profile",
+      "name": "1. Users Setup",
       "item": [
         {
-          "name": "Update / Upsert Profile (me)",
+          "name": "Create User 1 (Alice - Artist)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.data && jsonData.data.id) {",
+                  "    pm.collectionVariables.set('aliceId', jsonData.data.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "request": {
-            "method": "PATCH",
+            "method": "POST",
             "header": [
-              {
-                "key": "X-User-Id",
-                "value": "{{userId}}",
-                "type": "text"
-              },
               {
                 "key": "Content-Type",
                 "value": "application/json"
@@ -39,313 +56,357 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Alex Rivers\",\n  \"phone\": \"+1-555-0199\",\n  \"email\": \"alex.rivers@artstudio.com\",\n  \"experience\": \"7 years of 3D modeling and lighting for animated features\",\n  \"address\": \"Los Angeles, CA\",\n  \"languages\": [\"English\", \"Spanish\"],\n  \"otherLanguage\": \"Basic French\",\n  \"talents\": [\"3D Animation\", \"Character Sculpting\", \"Compositing\"],\n  \"workTypes\": [\"Full-time\", \"Contract\", \"Remote\"],\n  \"profileImageKey\": \"avatar-user100.png\",\n  \"coverImageKey\": \"cover-user100.jpg\",\n  \"demoVideos\": [\n    {\n      \"objectKey\": \"reel-part1.mp4\",\n      \"url\": \"http://localhost:8081/api/media/files/reel-part1.mp4\",\n      \"fileName\": \"demoreel_2026.mp4\",\n      \"contentType\": \"video/mp4\",\n      \"sizeBytes\": 3145728\n    }\n  ],\n  \"videoUrls\": [\n    \"https://vimeo.com/channels/staffpicks/987654\",\n    \"https://www.youtube.com/watch?v=dQw4w9WgXcQ\"\n  ],\n  \"visibility\": \"public\"\n}"
+              "raw": "{\n  \"username\": \"alice_singer\",\n  \"name\": \"Alice Wonder\",\n  \"email\": \"alice@example.com\",\n  \"headline\": \"Classical Vocalist & Composer\",\n  \"role\": \"ARTIST\",\n  \"location\": \"Mumbai, India\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/api/profiles/me",
+              "raw": "{{baseUrl}}/api/users",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "profiles", "me"]
+              "path": ["api", "users"]
             }
           }
         },
         {
-          "name": "Get Profile - Owner View (Shows Phone/Email)",
+          "name": "Create User 2 (Bob - Casting Director)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.data && jsonData.data.id) {",
+                  "    pm.collectionVariables.set('bobId', jsonData.data.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"bob_casting\",\n  \"name\": \"Bob Vance\",\n  \"email\": \"bob@example.com\",\n  \"headline\": \"Lead Casting Director at CineMedia\",\n  \"role\": \"EMPLOYER\",\n  \"location\": \"Hyderabad, India\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/users",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users"]
+            }
+          }
+        },
+        {
+          "name": "Get Current User Profile (Alice)",
           "request": {
             "method": "GET",
             "header": [
               {
                 "key": "X-User-Id",
-                "value": "{{userId}}",
-                "type": "text"
+                "value": "{{aliceId}}"
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/profiles/{{userId}}",
+              "raw": "{{baseUrl}}/api/users/me",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "profiles", "{{userId}}"]
-            }
-          }
-        },
-        {
-          "name": "Get Profile - Public / Unauthorized View (Hides Phone/Email)",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "X-User-Id",
-                "value": "other-user-99",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/profiles/{{userId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "profiles", "{{userId}}"]
+              "path": ["api", "users", "me"]
             }
           }
         }
       ]
     },
     {
-      "name": "Module 3: Media Upload",
+      "name": "2. Module 5 - Opportunities",
       "item": [
         {
-          "name": "Upload Media File (multipart)",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "X-User-Id",
-                "value": "{{userId}}",
-                "type": "text"
-              }
-            ],
-            "body": {
-              "mode": "formdata",
-              "formdata": [
-                {
-                  "key": "file",
-                  "type": "file",
-                  "src": []
-                }
-              ]
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/media/upload",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "media", "upload"]
-            }
-          }
-        },
-        {
-          "name": "Request Scoped Upload URL",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "X-User-Id",
-                "value": "{{userId}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/media/upload/request-url?fileName=artwork.png&contentType=image/png&sizeBytes=2048576",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "media", "upload", "request-url"],
-              "query": [
-                {
-                  "key": "fileName",
-                  "value": "artwork.png"
-                },
-                {
-                  "key": "contentType",
-                  "value": "image/png"
-                },
-                {
-                  "key": "sizeBytes",
-                  "value": "2048576"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "name": "Attach Media to Post",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "X-User-Id",
-                "value": "{{userId}}",
-                "type": "text"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"objectKey\": \"artwork_01.png\",\n  \"url\": \"http://localhost:8081/api/media/files/artwork_01.png\",\n  \"fileName\": \"artwork_01.png\",\n  \"contentType\": \"image/png\",\n  \"sizeBytes\": 1048576\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/posts/{{postId}}/media",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "posts", "{{postId}}", "media"]
-            }
-          }
-        }
-      ]
-    },
-    {
-      "name": "Module 4: Posts and Articles",
-      "item": [
-        {
-          "name": "Create Post",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "X-User-Id",
-                "value": "{{userId}}",
-                "type": "text"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"type\": \"post\",\n  \"content\": \"Sharing my latest real-time lighting test! Comments and critique welcome.\",\n  \"attachments\": [\n    {\n      \"objectKey\": \"lighting_preview.png\",\n      \"url\": \"http://localhost:8081/api/media/files/lighting_preview.png\",\n      \"fileName\": \"lighting_preview.png\",\n      \"contentType\": \"image/png\",\n      \"sizeBytes\": 1048576\n    }\n  ],\n  \"visibility\": \"public\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/posts",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "posts"]
-            }
-          }
-        },
-        {
-          "name": "Create Article (Title Required)",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "X-User-Id",
-                "value": "{{userId}}",
-                "type": "text"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"type\": \"article\",\n  \"title\": \"Mastering Volumetric Fog in Real-Time Renderers\",\n  \"content\": \"Volumetric lighting adds instant mood and cinematic depth to scene compositions. In this breakdown, we explore raymarching density textures and light attenuation curves...\",\n  \"visibility\": \"public\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/posts",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "posts"]
-            }
-          }
-        },
-        {
-          "name": "Get Feed (Cursor-based Pagination)",
+          "name": "GET Opportunities (Initial / Empty State)",
           "request": {
             "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/opportunities",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "opportunities"]
+            }
+          }
+        },
+        {
+          "name": "POST Create Opportunity (As Bob)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.data && jsonData.data.id) {",
+                  "    pm.collectionVariables.set('opportunityId', jsonData.data.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
             "header": [
               {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
                 "key": "X-User-Id",
-                "value": "{{userId}}",
-                "type": "text"
+                "value": "{{bobId}}"
               }
             ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Lead Female Vocalist for Feature Film OST\",\n  \"content\": \"Looking for a classically trained vocalist with contemporary range for a major upcoming feature soundtrack recording in Hyderabad.\",\n  \"employer\": \"CineMedia Productions\",\n  \"compensation\": \"₹150,000 per track\",\n  \"location\": \"Hyderabad, India\",\n  \"expiryDate\": \"2026-12-31T23:59:59Z\",\n  \"mediaUrls\": [\n    \"https://example.com/demo-sheet.pdf\"\n  ]\n}"
+            },
             "url": {
-              "raw": "{{baseUrl}}/api/posts?limit=10",
+              "raw": "{{baseUrl}}/api/opportunities",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "posts"],
+              "path": ["api", "opportunities"]
+            }
+          }
+        },
+        {
+          "name": "GET Opportunities (Feed - Newest First)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/opportunities?limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "opportunities"],
               "query": [
                 {
                   "key": "limit",
                   "value": "10"
-                },
-                {
-                  "key": "cursor",
-                  "value": "",
-                  "disabled": true
                 }
               ]
             }
           }
         },
         {
-          "name": "Get Post by ID",
+          "name": "GET Single Opportunity by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/opportunities/{{opportunityId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "opportunities", "{{opportunityId}}"]
+            }
+          }
+        },
+        {
+          "name": "POST Create Ordinary Post (As Alice)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-Id",
+                "value": "{{aliceId}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"Rehearsing our morning raagas! Have a musical week ahead everyone!\",\n  \"mediaUrls\": [\n    \"https://example.com/practice-clip.mp4\"\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/posts",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "posts"]
+            }
+          }
+        },
+        {
+          "name": "GET Ordinary Posts Feed (Opportunity Excluded)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/posts",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "posts"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Module 6 - Network & Connections",
+      "item": [
+        {
+          "name": "GET Suggested Profiles (For Alice - Excludes Self)",
           "request": {
             "method": "GET",
             "header": [
               {
                 "key": "X-User-Id",
-                "value": "{{userId}}",
-                "type": "text"
+                "value": "{{aliceId}}"
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/posts/{{postId}}",
+              "raw": "{{baseUrl}}/api/connections/suggestions",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "posts", "{{postId}}"]
+              "path": ["api", "connections", "suggestions"]
             }
           }
         },
         {
-          "name": "Update Post (Author Only)",
-          "request": {
-            "method": "PATCH",
-            "header": [
-              {
-                "key": "X-User-Id",
-                "value": "{{userId}}",
-                "type": "text"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
+          "name": "POST Send Connection Request (Alice -> Bob)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.data && jsonData.data.id) {",
+                  "    pm.collectionVariables.set('connectionId', jsonData.data.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
               }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"title\": \"Mastering Volumetric Fog in Real-Time Renderers (Revised)\",\n  \"content\": \"Updated with higher resolution breakdown frames.\",\n  \"visibility\": \"public\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/posts/{{postId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "posts", "{{postId}}"]
             }
-          }
-        },
-        {
-          "name": "Report Post for Spam/Abuse",
+          ],
           "request": {
             "method": "POST",
             "header": [
               {
-                "key": "X-User-Id",
-                "value": "reporter-user-2",
-                "type": "text"
-              },
-              {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "X-User-Id",
+                "value": "{{aliceId}}"
               }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"reason\": \"Inappropriate or spam promotional link\"\n}"
+              "raw": "{\n  \"recipientId\": \"{{bobId}}\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/api/posts/{{postId}}/report",
+              "raw": "{{baseUrl}}/api/connections",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "posts", "{{postId}}", "report"]
+              "path": ["api", "connections"]
             }
           }
         },
         {
-          "name": "Delete Post (Author Only)",
+          "name": "POST Send Self-Connection Request (Should Fail 400)",
           "request": {
-            "method": "DELETE",
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-Id",
+                "value": "{{aliceId}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"recipientId\": \"{{aliceId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/connections",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "connections"]
+            }
+          }
+        },
+        {
+          "name": "POST Send Duplicate Request (Should Fail 409)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-Id",
+                "value": "{{aliceId}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"recipientId\": \"{{bobId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/connections",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "connections"]
+            }
+          }
+        },
+        {
+          "name": "PATCH Accept Connection Request (As Recipient Bob)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-Id",
+                "value": "{{bobId}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"accepted\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/connections/{{connectionId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "connections", "{{connectionId}}"]
+            }
+          }
+        },
+        {
+          "name": "GET Accepted Connections (For Alice)",
+          "request": {
+            "method": "GET",
             "header": [
               {
                 "key": "X-User-Id",
-                "value": "{{userId}}",
-                "type": "text"
+                "value": "{{aliceId}}"
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/posts/{{postId}}",
+              "raw": "{{baseUrl}}/api/connections",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "posts", "{{postId}}"]
+              "path": ["api", "connections"]
+            }
+          }
+        },
+        {
+          "name": "GET Accepted Connections (For Bob)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-Id",
+                "value": "{{bobId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/connections",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "connections"]
             }
           }
         }

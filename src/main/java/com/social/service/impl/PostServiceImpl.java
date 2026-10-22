@@ -144,6 +144,7 @@ public class PostServiceImpl implements PostService {
                 .title(StringUtils.hasText(request.getTitle()) ? request.getTitle().trim() : null)
                 .content(request.getContent().trim())
                 .attachments(new ArrayList<>(attachments))
+                .mediaUrls(request.getMediaUrls() != null ? new ArrayList<>(request.getMediaUrls()) : new ArrayList<>())
                 .visibility(visibility)
                 .isSpam(flaggedAsSpam)
                 .reportCount(0)
@@ -164,7 +165,7 @@ public class PostServiceImpl implements PostService {
         // Ownership check
         validateAuthorOwnership(post, currentUserId, "edit");
 
-        if (post.getType() == PostType.ARTICLE && request.getTitle() != null && !StringUtils.hasText(request.getTitle())) {
+        if ("article".equalsIgnoreCase(post.getType()) && request.getTitle() != null && !StringUtils.hasText(request.getTitle())) {
             throw new BadRequestException("Article title cannot be updated to empty");
         }
 

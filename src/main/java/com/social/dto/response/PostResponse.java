@@ -1,12 +1,14 @@
 package com.social.dto.response;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.social.entity.Post;
 import com.social.entity.PostType;
 import com.social.entity.PostVisibility;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -14,10 +16,13 @@ public class PostResponse {
 
     private String id;
     private String authorId;
-    private PostType type;
+    private String authorName;
+    private String authorAvatarUrl;
+    private String type;
     private String title;
     private String content;
-    private List<MediaFileReferenceDto> attachments;
+    private List<MediaFileReferenceDto> attachments = new ArrayList<>();
+    private List<String> mediaUrls = new ArrayList<>();
     private PostVisibility visibility;
     private Instant createdAt;
     private Instant updatedAt;
@@ -25,18 +30,27 @@ public class PostResponse {
     public PostResponse() {
     }
 
-    public PostResponse(String id, String authorId, PostType type, String title, String content,
-                        List<MediaFileReferenceDto> attachments, PostVisibility visibility,
-                        Instant createdAt, Instant updatedAt) {
+    public PostResponse(String id, String authorId, String authorName, String authorAvatarUrl,
+                        String type, String title, String content,
+                        List<MediaFileReferenceDto> attachments, List<String> mediaUrls,
+                        PostVisibility visibility, Instant createdAt, Instant updatedAt) {
         this.id = id;
         this.authorId = authorId;
+        this.authorName = authorName;
+        this.authorAvatarUrl = authorAvatarUrl;
         this.type = type;
         this.title = title;
         this.content = content;
-        this.attachments = attachments;
+        this.attachments = attachments != null ? attachments : new ArrayList<>();
+        this.mediaUrls = mediaUrls != null ? mediaUrls : new ArrayList<>();
         this.visibility = visibility;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
+    }
+
+    @JsonProperty("_id")
+    public String getMongoId() {
+        return id;
     }
 
     public static PostResponse fromEntity(Post post) {
@@ -54,10 +68,13 @@ public class PostResponse {
         return PostResponse.builder()
                 .id(post.getId())
                 .authorId(post.getAuthorId())
+                .authorName(post.getAuthorName())
+                .authorAvatarUrl(post.getAuthorAvatarUrl())
                 .type(post.getType())
                 .title(post.getTitle())
                 .content(post.getContent())
                 .attachments(attachmentDtos)
+                .mediaUrls(post.getMediaUrls() != null ? post.getMediaUrls() : Collections.emptyList())
                 .visibility(post.getVisibility())
                 .createdAt(post.getCreatedAt())
                 .updatedAt(post.getUpdatedAt())
@@ -71,10 +88,13 @@ public class PostResponse {
     public static class Builder {
         private String id;
         private String authorId;
-        private PostType type;
+        private String authorName;
+        private String authorAvatarUrl;
+        private String type = "post";
         private String title;
         private String content;
-        private List<MediaFileReferenceDto> attachments;
+        private List<MediaFileReferenceDto> attachments = new ArrayList<>();
+        private List<String> mediaUrls = new ArrayList<>();
         private PostVisibility visibility;
         private Instant createdAt;
         private Instant updatedAt;
@@ -89,8 +109,23 @@ public class PostResponse {
             return this;
         }
 
+        public Builder authorName(String authorName) {
+            this.authorName = authorName;
+            return this;
+        }
+
+        public Builder authorAvatarUrl(String authorAvatarUrl) {
+            this.authorAvatarUrl = authorAvatarUrl;
+            return this;
+        }
+
+        public Builder type(String type) {
+            this.type = type != null ? type.toLowerCase() : "post";
+            return this;
+        }
+
         public Builder type(PostType type) {
-            this.type = type;
+            this.type = type != null ? type.toValue() : "post";
             return this;
         }
 
@@ -105,7 +140,12 @@ public class PostResponse {
         }
 
         public Builder attachments(List<MediaFileReferenceDto> attachments) {
-            this.attachments = attachments;
+            this.attachments = attachments != null ? attachments : new ArrayList<>();
+            return this;
+        }
+
+        public Builder mediaUrls(List<String> mediaUrls) {
+            this.mediaUrls = mediaUrls != null ? mediaUrls : new ArrayList<>();
             return this;
         }
 
@@ -125,7 +165,8 @@ public class PostResponse {
         }
 
         public PostResponse build() {
-            return new PostResponse(id, authorId, type, title, content, attachments, visibility, createdAt, updatedAt);
+            return new PostResponse(id, authorId, authorName, authorAvatarUrl, type, title, content,
+                    attachments, mediaUrls, visibility, createdAt, updatedAt);
         }
     }
 
@@ -145,12 +186,32 @@ public class PostResponse {
         this.authorId = authorId;
     }
 
+    public String getAuthorName() {
+        return authorName;
+    }
+
+    public void setAuthorName(String authorName) {
+        this.authorName = authorName;
+    }
+
+    public String getAuthorAvatarUrl() {
+        return authorAvatarUrl;
+    }
+
+    public void setAuthorAvatarUrl(String authorAvatarUrl) {
+        this.authorAvatarUrl = authorAvatarUrl;
+    }
+
     public PostType getType() {
-        return type;
+        return type != null ? PostType.fromString(type) : null;
     }
 
     public void setType(PostType type) {
-        this.type = type;
+        this.type = type != null ? type.toValue() : null;
+    }
+
+    public void setType(String type) {
+        this.type = type != null ? type.toLowerCase() : null;
     }
 
     public String getTitle() {
@@ -175,6 +236,14 @@ public class PostResponse {
 
     public void setAttachments(List<MediaFileReferenceDto> attachments) {
         this.attachments = attachments;
+    }
+
+    public List<String> getMediaUrls() {
+        return mediaUrls;
+    }
+
+    public void setMediaUrls(List<String> mediaUrls) {
+        this.mediaUrls = mediaUrls;
     }
 
     public PostVisibility getVisibility() {
