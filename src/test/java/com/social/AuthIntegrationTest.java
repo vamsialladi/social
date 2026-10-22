@@ -487,7 +487,7 @@ class AuthIntegrationTest {
 
         String testIp = "10.99.88.77";
 
-        // Exceed max-requests (configured as 10 in application-test.yml)
+        // Exceed max-requests (configured as 10 in application.properties)
         for (int i = 0; i < 10; i++) {
             mockMvc.perform(post("/api/auth/login")
                             .header("X-Forwarded-For", testIp)
@@ -512,7 +512,7 @@ class AuthIntegrationTest {
     void testRegisterRateLimiting() throws Exception {
         String testIp = "10.99.88.99";
 
-        // Exceed max-requests (10 in application-test.yml)
+        // Exceed max-requests (10 in application.properties)
         for (int i = 0; i < 10; i++) {
             RegisterRequest regReq = RegisterRequest.builder()
                     .email("ratereg" + i + "@example.com")

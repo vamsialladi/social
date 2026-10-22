@@ -16,15 +16,62 @@ public interface PostRepository extends JpaRepository<Post, String> {
 
     @Query("SELECT p FROM Post p WHERE LOWER(p.type) <> LOWER(:excludeType) " +
            "AND (p.isSpam = false OR p.isSpam IS NULL) " +
-           "AND (p.visibility = com.social.entity.PostVisibility.PUBLIC OR (:viewerId IS NOT NULL AND p.authorId = :viewerId)) " +
-           "AND (:cursorTime IS NULL OR p.createdAt < :cursorTime) " +
+           "AND p.visibility = com.social.entity.PostVisibility.PUBLIC " +
            "ORDER BY p.createdAt DESC")
-    List<Post> findFeedPosts(
+    List<Post> findFeedPostsPublic(
+            @Param("excludeType") String excludeType,
+            Pageable pageable
+    );
+
+    @Query("SELECT p FROM Post p WHERE LOWER(p.type) <> LOWER(:excludeType) " +
+           "AND (p.isSpam = false OR p.isSpam IS NULL) " +
+           "AND p.visibility = com.social.entity.PostVisibility.PUBLIC " +
+           "AND p.createdAt < :cursorTime " +
+           "ORDER BY p.createdAt DESC")
+    List<Post> findFeedPostsPublicWithCursor(
+            @Param("excludeType") String excludeType,
+            @Param("cursorTime") Instant cursorTime,
+            Pageable pageable
+    );
+
+    @Query("SELECT p FROM Post p WHERE LOWER(p.type) <> LOWER(:excludeType) " +
+           "AND (p.isSpam = false OR p.isSpam IS NULL) " +
+           "AND (p.visibility = com.social.entity.PostVisibility.PUBLIC OR p.authorId = :viewerId) " +
+           "ORDER BY p.createdAt DESC")
+    List<Post> findFeedPostsWithViewer(
+            @Param("excludeType") String excludeType,
+            @Param("viewerId") String viewerId,
+            Pageable pageable
+    );
+
+    @Query("SELECT p FROM Post p WHERE LOWER(p.type) <> LOWER(:excludeType) " +
+           "AND (p.isSpam = false OR p.isSpam IS NULL) " +
+           "AND (p.visibility = com.social.entity.PostVisibility.PUBLIC OR p.authorId = :viewerId) " +
+           "AND p.createdAt < :cursorTime " +
+           "ORDER BY p.createdAt DESC")
+    List<Post> findFeedPostsWithViewerAndCursor(
             @Param("excludeType") String excludeType,
             @Param("viewerId") String viewerId,
             @Param("cursorTime") Instant cursorTime,
             Pageable pageable
     );
+
+    default List<Post> findFeedPosts(
+            String excludeType,
+            String viewerId,
+            Instant cursorTime,
+            Pageable pageable
+    ) {
+        if (viewerId == null && cursorTime == null) {
+            return findFeedPostsPublic(excludeType, pageable);
+        } else if (viewerId == null) {
+            return findFeedPostsPublicWithCursor(excludeType, cursorTime, pageable);
+        } else if (cursorTime == null) {
+            return findFeedPostsWithViewer(excludeType, viewerId, pageable);
+        } else {
+            return findFeedPostsWithViewerAndCursor(excludeType, viewerId, cursorTime, pageable);
+        }
+    }
 
     default List<Post> findFeedPosts(
             PostType excludeType,

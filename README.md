@@ -25,15 +25,11 @@ social/
     │   │       │   └── impl/                   # Service Implementations (@Service)
     │   │       └── util/                       # Constants, Helper methods, and Utilities
     │   └── resources/
-    │       ├── application.yml                 # Main application configuration
-    │       ├── application-dev.yml             # Development profile configuration
-    │       └── application-prod.yml            # Production profile configuration
+    │       └── application.properties          # Primary application configuration (PostgreSQL)
     └── test/
-        ├── java/
-        │   └── com/social/
-        │       └── SocialApplicationTests.java # Context loading test
-        └── resources/
-            └── application-test.yml            # Test profile configuration
+        └── java/
+            └── com/social/
+                └── SocialApplicationTests.java # Context loading test
 ```
 
 ## Build & Run
