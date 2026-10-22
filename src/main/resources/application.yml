@@ -88,6 +88,3 @@ app:
       secure: false
       same-site: Lax
       max-age-seconds: 604800 # 7 days
-    jwt:
-      secret: ${JWT_SECRET:c29jaWFsLW1lZGlhLXNlY3JldC1rZXktZm9yLWF1dGhlbnRpY2F0aW9uLXN5c3RlbS0yMDI2LXN1cGVyLXNlY3VyZQ==}
-      expiration-seconds: 86400 # 24 hours

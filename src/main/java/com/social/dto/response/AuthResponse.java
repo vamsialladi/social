@@ -5,23 +5,15 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class AuthResponse {
 
-    private String token;
-    private String tokenType;
     private UserResponse user;
     private ProfileResponse profile;
 
     public AuthResponse() {
     }
 
-    public AuthResponse(String token, String tokenType, UserResponse user, ProfileResponse profile) {
-        this.token = token;
-        this.tokenType = tokenType;
+    public AuthResponse(UserResponse user, ProfileResponse profile) {
         this.user = user;
         this.profile = profile;
-    }
-
-    public AuthResponse(UserResponse user, ProfileResponse profile) {
-        this(null, null, user, profile);
     }
 
     public static Builder builder() {
@@ -29,20 +21,8 @@ public class AuthResponse {
     }
 
     public static class Builder {
-        private String token;
-        private String tokenType = "Bearer";
         private UserResponse user;
         private ProfileResponse profile;
-
-        public Builder token(String token) {
-            this.token = token;
-            return this;
-        }
-
-        public Builder tokenType(String tokenType) {
-            this.tokenType = tokenType;
-            return this;
-        }
 
         public Builder user(UserResponse user) {
             this.user = user;
@@ -55,24 +35,8 @@ public class AuthResponse {
         }
 
         public AuthResponse build() {
-            return new AuthResponse(token, tokenType, user, profile);
+            return new AuthResponse(user, profile);
         }
-    }
-
-    public String getToken() {
-        return token;
-    }
-
-    public void setToken(String token) {
-        this.token = token;
-    }
-
-    public String getTokenType() {
-        return tokenType;
-    }
-
-    public void setTokenType(String tokenType) {
-        this.tokenType = tokenType;
     }
 
     public UserResponse getUser() {

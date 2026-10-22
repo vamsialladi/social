@@ -6,7 +6,6 @@ import com.social.entity.UserStatus;
 import com.social.exception.ForbiddenException;
 import com.social.repository.UserRepository;
 import com.social.repository.UserSessionRepository;
-import com.social.service.JwtService;
 import com.social.util.UserContext;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
@@ -30,14 +29,11 @@ public class AuthenticationInterceptor implements HandlerInterceptor {
 
     private final UserSessionRepository sessionRepository;
     private final UserRepository userRepository;
-    private final JwtService jwtService;
 
     public AuthenticationInterceptor(UserSessionRepository sessionRepository,
-                                    UserRepository userRepository,
-                                    JwtService jwtService) {
+                                     UserRepository userRepository) {
         this.sessionRepository = sessionRepository;
         this.userRepository = userRepository;
-        this.jwtService = jwtService;
     }
 
     @Override
@@ -48,26 +44,20 @@ public class AuthenticationInterceptor implements HandlerInterceptor {
         String resolvedUserId = null;
 
         if (StringUtils.hasText(token)) {
-            // 1. Try decoding as JWT token
-            String jwtUserId = jwtService.extractUserId(token);
-            if (StringUtils.hasText(jwtUserId)) {
-                resolvedUserId = jwtUserId;
-            } else {
-                // 2. Try DB-backed session
-                Optional<UserSession> sessionOpt = sessionRepository.findByToken(token);
-                if (sessionOpt.isPresent()) {
-                    UserSession session = sessionOpt.get();
-                    if (!session.isExpired()) {
-                        resolvedUserId = session.getUserId();
-                    }
-                } else if (userRepository.existsById(token)) {
-                    // Backward-compatible fallback for direct user ID in session token
-                    resolvedUserId = token;
+            // Check DB-backed session
+            Optional<UserSession> sessionOpt = sessionRepository.findByToken(token);
+            if (sessionOpt.isPresent()) {
+                UserSession session = sessionOpt.get();
+                if (!session.isExpired()) {
+                    resolvedUserId = session.getUserId();
                 }
+            } else if (userRepository.existsById(token)) {
+                // Backward-compatible fallback for direct user ID in session token
+                resolvedUserId = token;
             }
         }
 
-        // Fallback to X-User-Id or userId header if not resolved via JWT or session cookie
+        // Fallback to X-User-Id or userId header if not resolved via session token or cookie
         if (!StringUtils.hasText(resolvedUserId)) {
             resolvedUserId = request.getHeader(USER_ID_HEADER);
             if (!StringUtils.hasText(resolvedUserId)) {

@@ -11,7 +11,6 @@ import com.social.entity.UserSession;
 import com.social.repository.ProfileRepository;
 import com.social.repository.UserRepository;
 import com.social.repository.UserSessionRepository;
-import com.social.service.JwtService;
 import com.social.util.IdGenerator;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.BeforeEach;
@@ -57,9 +56,6 @@ class AuthIntegrationTest {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
-    @Autowired
-    private JwtService jwtService;
-
     @BeforeEach
     void setUp() {
         sessionRepository.deleteAll();
@@ -68,7 +64,7 @@ class AuthIntegrationTest {
     }
 
     @Test
-    @DisplayName("Should register user successfully and create empty profile, session cookie, and return JWT token")
+    @DisplayName("Should register user successfully and create empty profile and session cookie")
     void testRegisterSuccess() throws Exception {
         RegisterRequest request = RegisterRequest.builder()
                 .email("  Alice.In.Wonderland@Example.COM  ")
@@ -83,8 +79,6 @@ class AuthIntegrationTest {
                 .andExpect(status().isCreated())
                 .andExpect(cookie().exists("session_token"))
                 .andExpect(cookie().httpOnly("session_token", true))
-                .andExpect(jsonPath("$.data.token").isNotEmpty())
-                .andExpect(jsonPath("$.data.tokenType").value("Bearer"))
                 .andExpect(jsonPath("$.data.user.id").isNotEmpty())
                 .andExpect(jsonPath("$.data.user._id").isNotEmpty())
                 .andExpect(jsonPath("$.data.user.email").value("alice.in.wonderland@example.com"))
@@ -105,11 +99,6 @@ class AuthIntegrationTest {
         Profile savedProfile = profileRepository.findByUserId(savedUser.getId()).orElse(null);
         assertNotNull(savedProfile);
         assertEquals("Alice", savedProfile.getDisplayName());
-
-        // Verify JWT token is valid and subject is saved user id
-        String token = objectMapper.readTree(result.getResponse().getContentAsString()).path("data").path("token").asText();
-        assertTrue(jwtService.validateToken(token));
-        assertEquals(savedUser.getId(), jwtService.extractUserId(token));
     }
 
     @Test
@@ -229,7 +218,7 @@ class AuthIntegrationTest {
     }
 
     @Test
-    @DisplayName("Should log in successfully with valid credentials and return JWT token & session cookie")
+    @DisplayName("Should log in successfully with valid credentials and return session cookie")
     void testLoginSuccess() throws Exception {
         // Register user
         RegisterRequest registerReq = RegisterRequest.builder()
@@ -257,8 +246,6 @@ class AuthIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(cookie().exists("session_token"))
                 .andExpect(cookie().httpOnly("session_token", true))
-                .andExpect(jsonPath("$.data.token").isNotEmpty())
-                .andExpect(jsonPath("$.data.tokenType").value("Bearer"))
                 .andExpect(jsonPath("$.data.user.email").value("login.test@example.com"))
                 .andExpect(jsonPath("$.data.profile.displayName").value("Login Tester"))
                 .andExpect(jsonPath("$.data.user.passwordHash").doesNotExist());
@@ -382,12 +369,12 @@ class AuthIntegrationTest {
     }
 
     @Test
-    @DisplayName("Should identify caller via Authorization Bearer JWT on GET /api/auth/me")
-    void testMeEndpointWithJwtBearerToken() throws Exception {
+    @DisplayName("Should identify caller via Authorization Bearer session token on GET /api/auth/me")
+    void testMeEndpointWithSessionBearerToken() throws Exception {
         RegisterRequest registerReq = RegisterRequest.builder()
-                .email("jwt.user@example.com")
+                .email("bearer.user@example.com")
                 .password("SecretPassword123!")
-                .displayName("JWT User")
+                .displayName("Bearer User")
                 .build();
 
         MvcResult registerResult = mockMvc.perform(post("/api/auth/register")
@@ -397,14 +384,15 @@ class AuthIntegrationTest {
                 .andExpect(status().isCreated())
                 .andReturn();
 
-        String token = objectMapper.readTree(registerResult.getResponse().getContentAsString()).path("data").path("token").asText();
-        assertFalse(token.isBlank());
+        jakarta.servlet.http.Cookie sessionCookie = registerResult.getResponse().getCookie("session_token");
+        assertNotNull(sessionCookie);
+        String sessionToken = sessionCookie.getValue();
 
         mockMvc.perform(get("/api/auth/me")
-                        .header("Authorization", "Bearer " + token))
+                        .header("Authorization", "Bearer " + sessionToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.user.email").value("jwt.user@example.com"))
-                .andExpect(jsonPath("$.data.profile.displayName").value("JWT User"));
+                .andExpect(jsonPath("$.data.user.email").value("bearer.user@example.com"))
+                .andExpect(jsonPath("$.data.profile.displayName").value("Bearer User"));
     }
 
     @Test
@@ -443,10 +431,10 @@ class AuthIntegrationTest {
     }
 
     @Test
-    @DisplayName("Should reject malformed or invalid JWT Bearer tokens with 401 Unauthorized")
-    void testMeEndpointWithMalformedJwt() throws Exception {
+    @DisplayName("Should reject malformed or invalid Bearer tokens with 401 Unauthorized")
+    void testMeEndpointWithMalformedBearerToken() throws Exception {
         mockMvc.perform(get("/api/auth/me")
-                        .header("Authorization", "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.invalid.signature"))
+                        .header("Authorization", "Bearer invalid-bearer-token-123456"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.error.code").value("NOT_AUTHENTICATED"));
     }
@@ -578,9 +566,7 @@ class AuthIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(loginReq)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.user.email").value("space.mixed@example.com"))
-                .andExpect(jsonPath("$.data.token").isNotEmpty())
-                .andExpect(jsonPath("$.data.tokenType").value("Bearer"));
+                .andExpect(jsonPath("$.data.user.email").value("space.mixed@example.com"));
     }
 
     @Test
@@ -635,13 +621,12 @@ class AuthIntegrationTest {
 
         Cookie sessionCookie = result.getResponse().getCookie("session_token");
         assertNotNull(sessionCookie);
+        String sessionToken = sessionCookie.getValue();
 
-        String jwtToken = objectMapper.readTree(result.getResponse().getContentAsString()).path("data").path("token").asText();
-
-        // Verify active session works with both Cookie and JWT
+        // Verify active session works with both Cookie and Bearer session token
         mockMvc.perform(get("/api/auth/me").cookie(sessionCookie))
                 .andExpect(status().isOk());
-        mockMvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + jwtToken))
+        mockMvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + sessionToken))
                 .andExpect(status().isOk());
 
         // Update user status to SUSPENDED
@@ -655,7 +640,7 @@ class AuthIntegrationTest {
                 .andExpect(jsonPath("$.error.code").value("FORBIDDEN"))
                 .andExpect(jsonPath("$.error.message").value(containsString("suspended")));
 
-        mockMvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + jwtToken))
+        mockMvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + sessionToken))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error.code").value("FORBIDDEN"))
                 .andExpect(jsonPath("$.error.message").value(containsString("suspended")));
@@ -670,14 +655,14 @@ class AuthIntegrationTest {
                 .andExpect(jsonPath("$.error.code").value("FORBIDDEN"))
                 .andExpect(jsonPath("$.error.message").value(containsString("deleted")));
 
-        mockMvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + jwtToken))
+        mockMvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + sessionToken))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error.code").value("FORBIDDEN"))
                 .andExpect(jsonPath("$.error.message").value(containsString("deleted")));
     }
 
     @Test
-    @DisplayName("Should authenticate seamlessly on other modules using session cookie, JWT, and X-Session-Id header")
+    @DisplayName("Should authenticate seamlessly on other modules using session cookie and X-Session-Id header")
     void testCrossModuleSessionAuthentication() throws Exception {
         RegisterRequest registerReq = RegisterRequest.builder()
                 .email("crossmodule@example.com")
@@ -695,7 +680,6 @@ class AuthIntegrationTest {
         assertNotNull(sessionCookie);
 
         String sessionId = sessionCookie.getValue();
-        String jwtToken = objectMapper.readTree(result.getResponse().getContentAsString()).path("data").path("token").asText();
 
         // 1. Call /api/notifications using session cookie
         mockMvc.perform(get("/api/notifications")
@@ -703,9 +687,9 @@ class AuthIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data").isArray());
 
-        // 2. Call /api/notifications using JWT Bearer token
+        // 2. Call /api/notifications using Bearer session token
         mockMvc.perform(get("/api/notifications")
-                        .header("Authorization", "Bearer " + jwtToken))
+                        .header("Authorization", "Bearer " + sessionId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data").isArray());
 
@@ -770,7 +754,6 @@ class AuthIntegrationTest {
                         .content(objectMapper.writeValueAsString(registerReq)))
                 .andExpect(status().isCreated())
                 .andExpect(cookie().exists("session_token"))
-                .andExpect(jsonPath("$.data.token").isNotEmpty())
                 .andExpect(jsonPath("$.data.user.email").value("no.display@example.com"))
                 .andExpect(jsonPath("$.data.profile.displayName").doesNotExist());
     }
@@ -842,14 +825,14 @@ class AuthIntegrationTest {
     }
 
     @Test
-    @DisplayName("Should allow conversation access with session cookie, JWT, and block unauthenticated callers")
+    @DisplayName("Should allow conversation access with session cookie and block unauthenticated callers")
     void testCrossModuleConversationsWithSessionCookieAndUnauthenticatedBlocked() throws Exception {
         // 1. Unauthenticated call to /api/conversations should fail with 401
         mockMvc.perform(get("/api/conversations"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.error.code").value("NOT_AUTHENTICATED"));
 
-        // 2. Register user to get valid session cookie & JWT
+        // 2. Register user to get valid session cookie
         RegisterRequest registerReq = RegisterRequest.builder()
                 .email("conv.session@example.com")
                 .password("Password123!")
@@ -864,7 +847,6 @@ class AuthIntegrationTest {
 
         Cookie sessionCookie = result.getResponse().getCookie("session_token");
         assertNotNull(sessionCookie);
-        String jwtToken = objectMapper.readTree(result.getResponse().getContentAsString()).path("data").path("token").asText();
 
         // 3. Authenticated call to /api/conversations with session cookie should succeed with 200 OK
         mockMvc.perform(get("/api/conversations")
@@ -872,9 +854,9 @@ class AuthIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data").isArray());
 
-        // 4. Authenticated call to /api/conversations with JWT Bearer should succeed with 200 OK
+        // 4. Authenticated call to /api/conversations with Bearer session token should succeed with 200 OK
         mockMvc.perform(get("/api/conversations")
-                        .header("Authorization", "Bearer " + jwtToken))
+                        .header("Authorization", "Bearer " + sessionCookie.getValue()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data").isArray());
     }

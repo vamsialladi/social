@@ -44,7 +44,6 @@ public class AuthServiceImpl implements AuthService {
     private final UserSessionRepository sessionRepository;
     private final PasswordEncoder passwordEncoder;
     private final RateLimiterService rateLimiterService;
-    private final com.social.service.JwtService jwtService;
 
     private final int loginMaxRequests;
     private final long loginWindowSeconds;
@@ -61,7 +60,6 @@ public class AuthServiceImpl implements AuthService {
             UserSessionRepository sessionRepository,
             PasswordEncoder passwordEncoder,
             RateLimiterService rateLimiterService,
-            com.social.service.JwtService jwtService,
             @Value("${app.auth.rate-limit.login.max-requests:5}") int loginMaxRequests,
             @Value("${app.auth.rate-limit.login.window-seconds:60}") long loginWindowSeconds,
             @Value("${app.auth.rate-limit.register.max-requests:5}") int registerMaxRequests,
@@ -75,7 +73,6 @@ public class AuthServiceImpl implements AuthService {
         this.sessionRepository = sessionRepository;
         this.passwordEncoder = passwordEncoder;
         this.rateLimiterService = rateLimiterService;
-        this.jwtService = jwtService;
         this.loginMaxRequests = loginMaxRequests;
         this.loginWindowSeconds = loginWindowSeconds;
         this.registerMaxRequests = registerMaxRequests;
@@ -128,12 +125,7 @@ public class AuthServiceImpl implements AuthService {
         String sessionId = createSession(userId);
         attachSessionCookie(response, sessionId, sessionDurationSeconds);
 
-        // 7. Generate JWT access token
-        String jwtToken = jwtService.generateToken(userId, email);
-
         return AuthResponse.builder()
-                .token(jwtToken)
-                .tokenType("Bearer")
                 .user(UserResponse.fromEntity(user))
                 .profile(ProfileResponse.fromEntity(profile))
                 .build();
@@ -182,12 +174,7 @@ public class AuthServiceImpl implements AuthService {
         Profile profile = profileRepository.findByUserId(user.getId())
                 .orElseGet(() -> createDefaultProfile(user.getId()));
 
-        // 8. Generate JWT access token
-        String jwtToken = jwtService.generateToken(user.getId(), user.getEmail());
-
         return AuthResponse.builder()
-                .token(jwtToken)
-                .tokenType("Bearer")
                 .user(UserResponse.fromEntity(user))
                 .profile(ProfileResponse.fromEntity(profile))
                 .build();
