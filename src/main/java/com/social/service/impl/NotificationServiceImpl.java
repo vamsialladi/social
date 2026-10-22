@@ -68,6 +68,23 @@ public class NotificationServiceImpl implements NotificationService {
     }
 
     @Override
+    @Transactional
+    public Notification sendNotification(String recipientId, String senderId, String type, String message, String referenceId) {
+        log.info("Creating notification of type {} for recipient {}", type, recipientId);
+        Notification notification = Notification.builder()
+                .id(IdGenerator.nextObjectId())
+                .recipientId(recipientId)
+                .senderId(senderId)
+                .type(type)
+                .message(message)
+                .referenceId(referenceId)
+                .read(false)
+                .createdAt(Instant.now())
+                .build();
+        return notificationRepository.save(notification);
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public NotificationsPageResponse getNotificationsForUser(String userId, String cursor, int limit) {
         int pageSize = (limit <= 0) ? 20 : Math.min(limit, 100);
@@ -102,6 +119,12 @@ public class NotificationServiceImpl implements NotificationService {
                 .nextCursor(nextCursor)
                 .hasMore(hasMore)
                 .build();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Notification> getNotificationsForUser(String recipientId) {
+        return notificationRepository.findByRecipientIdOrderByCreatedAtDesc(recipientId);
     }
 
     @Override

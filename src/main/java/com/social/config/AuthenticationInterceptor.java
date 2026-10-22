@@ -67,9 +67,12 @@ public class AuthenticationInterceptor implements HandlerInterceptor {
             }
         }
 
-        // Fallback to X-User-Id header if not resolved via JWT or session cookie (for legacy integration tests)
+        // Fallback to X-User-Id or userId header if not resolved via JWT or session cookie
         if (!StringUtils.hasText(resolvedUserId)) {
             resolvedUserId = request.getHeader(USER_ID_HEADER);
+            if (!StringUtils.hasText(resolvedUserId)) {
+                resolvedUserId = request.getHeader("userId");
+            }
         }
 
         if (StringUtils.hasText(resolvedUserId)) {
@@ -86,6 +89,7 @@ public class AuthenticationInterceptor implements HandlerInterceptor {
             }
 
             UserContext.setCurrentUserId(resolvedUserId);
+            UserContextHolder.setUserId(resolvedUserId);
         }
 
         return true;
@@ -97,6 +101,7 @@ public class AuthenticationInterceptor implements HandlerInterceptor {
                                 @NonNull Object handler,
                                 Exception ex) {
         UserContext.clear();
+        UserContextHolder.clear();
     }
 
     private String extractAuthToken(HttpServletRequest request) {

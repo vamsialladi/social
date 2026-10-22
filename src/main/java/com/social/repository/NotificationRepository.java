@@ -16,6 +16,8 @@ import java.util.Optional;
 @Repository
 public interface NotificationRepository extends JpaRepository<Notification, String> {
 
+    List<Notification> findByRecipientIdOrderByCreatedAtDesc(String recipientId);
+
     List<Notification> findByRecipientIdOrderByCreatedAtDesc(String recipientId, Pageable pageable);
 
     List<Notification> findByRecipientIdAndCreatedAtLessThanOrderByCreatedAtDesc(

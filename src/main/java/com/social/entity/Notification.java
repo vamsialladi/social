@@ -14,31 +14,34 @@ import java.time.Instant;
 public class Notification {
 
     @Id
-    @Column(name = "id", length = 36, nullable = false)
+    @Column(name = "id", length = 36, nullable = false, updatable = false)
     @JsonProperty("id")
     private String id;
 
     @Column(name = "recipient_id", length = 36, nullable = false)
     private String recipientId;
 
-    @Column(name = "actor_id", length = 36, nullable = false)
+    @Column(name = "actor_id", length = 36)
     private String actorId;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "type", length = 50, nullable = false)
     private NotificationType type;
 
-    @Column(name = "resource_type", length = 50, nullable = false)
+    @Column(name = "message", length = 500)
+    private String message;
+
+    @Column(name = "resource_type", length = 50)
     private String resourceType;
 
-    @Column(name = "resource_id", length = 36, nullable = false)
+    @Column(name = "resource_id", length = 36)
     private String resourceId;
 
     @Column(name = "read_at")
     private Instant readAt;
 
     @Column(name = "created_at", nullable = false, updatable = false)
-    private Instant createdAt;
+    private Instant createdAt = Instant.now();
 
     public Notification() {
     }
@@ -52,13 +55,25 @@ public class Notification {
         this.resourceType = resourceType;
         this.resourceId = resourceId;
         this.readAt = readAt;
-        this.createdAt = createdAt;
+        this.createdAt = createdAt != null ? createdAt : Instant.now();
+    }
+
+    public Notification(String id, String recipientId, String senderId, String type, String message, String referenceId, boolean read, Instant createdAt) {
+        this.id = id;
+        this.recipientId = recipientId;
+        this.actorId = senderId;
+        this.type = type != null ? NotificationType.fromValue(type) : null;
+        this.message = message;
+        this.resourceId = referenceId;
+        this.resourceType = "connection";
+        this.readAt = read ? Instant.now() : null;
+        this.createdAt = createdAt != null ? createdAt : Instant.now();
     }
 
     @PrePersist
     protected void onCreate() {
-        if (createdAt == null) {
-            createdAt = Instant.now();
+        if (this.createdAt == null) {
+            this.createdAt = Instant.now();
         }
     }
 
@@ -76,10 +91,11 @@ public class Notification {
         private String recipientId;
         private String actorId;
         private NotificationType type;
+        private String message;
         private String resourceType;
         private String resourceId;
         private Instant readAt;
-        private Instant createdAt;
+        private Instant createdAt = Instant.now();
 
         public Builder id(String id) {
             this.id = id;
@@ -96,8 +112,23 @@ public class Notification {
             return this;
         }
 
+        public Builder senderId(String senderId) {
+            this.actorId = senderId;
+            return this;
+        }
+
         public Builder type(NotificationType type) {
             this.type = type;
+            return this;
+        }
+
+        public Builder type(String type) {
+            this.type = type != null ? NotificationType.fromValue(type) : null;
+            return this;
+        }
+
+        public Builder message(String message) {
+            this.message = message;
             return this;
         }
 
@@ -111,8 +142,18 @@ public class Notification {
             return this;
         }
 
+        public Builder referenceId(String referenceId) {
+            this.resourceId = referenceId;
+            return this;
+        }
+
         public Builder readAt(Instant readAt) {
             this.readAt = readAt;
+            return this;
+        }
+
+        public Builder read(boolean read) {
+            this.readAt = read ? Instant.now() : null;
             return this;
         }
 
@@ -122,7 +163,9 @@ public class Notification {
         }
 
         public Notification build() {
-            return new Notification(id, recipientId, actorId, type, resourceType, resourceId, readAt, createdAt);
+            Notification n = new Notification(id, recipientId, actorId, type, resourceType, resourceId, readAt, createdAt);
+            n.setMessage(this.message);
+            return n;
         }
     }
 
@@ -150,12 +193,32 @@ public class Notification {
         this.actorId = actorId;
     }
 
+    public String getSenderId() {
+        return actorId;
+    }
+
+    public void setSenderId(String senderId) {
+        this.actorId = senderId;
+    }
+
     public NotificationType getType() {
         return type;
     }
 
     public void setType(NotificationType type) {
         this.type = type;
+    }
+
+    public void setType(String typeStr) {
+        this.type = typeStr != null ? NotificationType.fromValue(typeStr) : null;
+    }
+
+    public String getMessage() {
+        return message;
+    }
+
+    public void setMessage(String message) {
+        this.message = message;
     }
 
     public String getResourceType() {
@@ -174,12 +237,28 @@ public class Notification {
         this.resourceId = resourceId;
     }
 
+    public String getReferenceId() {
+        return resourceId;
+    }
+
+    public void setReferenceId(String referenceId) {
+        this.resourceId = referenceId;
+    }
+
     public Instant getReadAt() {
         return readAt;
     }
 
     public void setReadAt(Instant readAt) {
         this.readAt = readAt;
+    }
+
+    public boolean isRead() {
+        return readAt != null;
+    }
+
+    public void setRead(boolean read) {
+        this.readAt = read ? (this.readAt != null ? this.readAt : Instant.now()) : null;
     }
 
     public Instant getCreatedAt() {

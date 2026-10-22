@@ -1,3 +1,8 @@
+server:
+  port: ${PORT:8080}
+  servlet:
+    context-path: /
+
 spring:
   application:
     name: social-backend
@@ -18,10 +23,10 @@ spring:
       hibernate:
         format_sql: true
 
-server:
-  port: 8080
   servlet:
-    context-path: /
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 55MB
 
 # Actuator endpoints
 management:
@@ -44,6 +49,27 @@ springdoc:
 
 # Application configurations
 app:
+  media:
+    storage-dir: uploads
+    base-url: /api/media/files/
+    max-demo-video-size-bytes: 5242880 # 5 MB
+    allowed-content-types:
+      - image/jpeg
+      - image/png
+      - image/webp
+      - image/gif
+      - video/mp4
+      - video/webm
+      - video/quicktime
+      - audio/mpeg
+      - audio/wav
+      - audio/ogg
+      - audio/mp4
+      - audio/aac
+      - application/pdf
+      - application/msword
+      - application/vnd.openxmlformats-officedocument.wordprocessingml.document
+      - text/plain
   messaging:
     rate-limit:
       max-requests: 30
@@ -65,4 +91,3 @@ app:
     jwt:
       secret: ${JWT_SECRET:c29jaWFsLW1lZGlhLXNlY3JldC1rZXktZm9yLWF1dGhlbnRpY2F0aW9uLXN5c3RlbS0yMDI2LXN1cGVyLXNlY3VyZQ==}
       expiration-seconds: 86400 # 24 hours
-
