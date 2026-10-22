@@ -21,3 +21,9 @@ logging:
   level:
     root: WARN
     com.social: INFO
+
+app:
+  auth:
+    cookie:
+      secure: true
+

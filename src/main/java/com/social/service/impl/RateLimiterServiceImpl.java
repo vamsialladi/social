@@ -26,14 +26,19 @@ public class RateLimiterServiceImpl implements RateLimiterService {
 
     @Override
     public void checkRateLimit(String userId) {
-        if (userId == null || userId.isBlank()) {
+        checkRateLimit(userId, this.maxRequests, this.windowSeconds, "messages");
+    }
+
+    @Override
+    public void checkRateLimit(String key, int maxRequests, long windowSeconds, String actionDescription) {
+        if (key == null || key.isBlank()) {
             return;
         }
 
         Instant now = Instant.now();
         Instant windowStart = now.minusSeconds(windowSeconds);
 
-        userRequestTimestamps.compute(userId, (key, deque) -> {
+        userRequestTimestamps.compute(key, (k, deque) -> {
             if (deque == null) {
                 deque = new ArrayDeque<>();
             }
@@ -49,7 +54,7 @@ public class RateLimiterServiceImpl implements RateLimiterService {
                         ? Math.max(1, windowSeconds - (now.getEpochSecond() - oldest.getEpochSecond())) 
                         : windowSeconds;
                 throw new RateLimitExceededException(
-                        "Rate limit exceeded. You can send at most " + maxRequests + " messages per " + windowSeconds + " seconds.",
+                        "Rate limit exceeded. You can send at most " + maxRequests + " " + actionDescription + " per " + windowSeconds + " seconds.",
                         secondsToWait
                 );
             }

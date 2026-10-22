@@ -29,7 +29,7 @@ public class CurrentUserArgumentResolver implements HandlerMethodArgumentResolve
         String currentUserId = UserContext.getCurrentUserId();
 
         if (currentUserId == null && annotation != null && annotation.required()) {
-            throw new UnauthorizedException("User session/authentication is missing. Please provide the 'X-User-Id' or 'Authorization' header.");
+            throw new UnauthorizedException("User session/authentication is missing. Please sign in.");
         }
 
         return currentUserId;
