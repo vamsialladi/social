@@ -37,6 +37,6 @@ public class ProfileController {
             @Valid @RequestBody ProfileUpdateRequest request,
             @CurrentUser String currentUserId) {
         ProfileResponse updatedProfile = profileService.updateMyProfile(currentUserId, request);
-        return ResponseEntity.ok(ApiResponse.ok("Profile updated successfully", updatedProfile));
+        return ResponseEntity.ok(ApiResponse.ok(updatedProfile));
     }
 }

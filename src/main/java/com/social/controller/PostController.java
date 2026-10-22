@@ -15,6 +15,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/posts")
 @Tag(name = "Posts and Articles", description = "Endpoints for creating, managing, and browsing the feed of posts and articles")
@@ -28,12 +30,12 @@ public class PostController {
 
     @Operation(summary = "Get home feed posts & articles", description = "Retrieves visible posts and articles (excluding opportunities) ordered newest first with cursor pagination.")
     @GetMapping
-    public ResponseEntity<ApiResponse<CursorPageResponse<PostResponse>>> getFeed(
+    public ResponseEntity<ApiResponse<List<PostResponse>>> getFeed(
             @RequestParam(value = "cursor", required = false) String cursor,
             @RequestParam(value = "limit", defaultValue = "10") int limit,
             @CurrentUser(required = false) String viewerUserId) {
         CursorPageResponse<PostResponse> feed = postService.getFeed(cursor, limit, viewerUserId);
-        return ResponseEntity.ok(ApiResponse.ok(feed));
+        return ResponseEntity.ok(ApiResponse.paginated(feed.getData(), feed.getNextCursor()));
     }
 
     @Operation(summary = "Get post or article by ID", description = "Retrieves a single post by ID subject to visibility.")
@@ -51,7 +53,7 @@ public class PostController {
             @Valid @RequestBody PostCreateRequest request,
             @CurrentUser String authorId) {
         PostResponse createdPost = postService.createPost(request, authorId);
-        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok("Post published successfully", createdPost));
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(createdPost));
     }
 
     @Operation(summary = "Update post or article", description = "Allows the original author to edit their own post or article.")
@@ -61,7 +63,7 @@ public class PostController {
             @Valid @RequestBody PostUpdateRequest request,
             @CurrentUser String currentUserId) {
         PostResponse updatedPost = postService.updatePost(postId, request, currentUserId);
-        return ResponseEntity.ok(ApiResponse.ok("Post updated successfully", updatedPost));
+        return ResponseEntity.ok(ApiResponse.ok(updatedPost));
     }
 
     @Operation(summary = "Delete post or article", description = "Allows the original author to delete their own post.")
@@ -70,7 +72,7 @@ public class PostController {
             @PathVariable("postId") String postId,
             @CurrentUser String currentUserId) {
         postService.deletePost(postId, currentUserId);
-        return ResponseEntity.ok(ApiResponse.ok("Post deleted successfully", null));
+        return ResponseEntity.ok(ApiResponse.empty());
     }
 
     @Operation(summary = "Report post for spam or abuse", description = "Submits a report on a post. High report frequency triggers automatic spam suppression.")
@@ -80,6 +82,6 @@ public class PostController {
             @Valid @RequestBody(required = false) PostReportRequest request,
             @CurrentUser String reporterUserId) {
         postService.reportPost(postId, request, reporterUserId);
-        return ResponseEntity.ok(ApiResponse.ok("Post reported. Thank you for helping keep the community safe.", null));
+        return ResponseEntity.ok(ApiResponse.empty());
     }
 }

@@ -8,9 +8,8 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "posts", indexes = {
-        @Index(name = "idx_post_created_at", columnList = "created_at"),
+        @Index(name = "idx_post_type_created", columnList = "type, created_at DESC"),
         @Index(name = "idx_post_author_id", columnList = "author_id"),
-        @Index(name = "idx_post_type", columnList = "type"),
         @Index(name = "idx_post_visibility", columnList = "visibility")
 })
 public class Post {

@@ -35,7 +35,7 @@ public class MediaController {
             @RequestParam("file") MultipartFile file,
             @CurrentUser String ownerId) {
         MediaUploadResponse response = mediaService.uploadFile(file, ownerId);
-        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok("File uploaded successfully", response));
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(response));
     }
 
     @Operation(summary = "Request a short-lived scoped upload URL", description = "Generates a pre-scoped upload destination for direct uploads.")
@@ -56,7 +56,7 @@ public class MediaController {
             @Valid @RequestBody AttachMediaRequest request,
             @CurrentUser String ownerId) {
         MediaUploadResponse response = mediaService.attachMediaToPost(postId, request, ownerId);
-        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok("Media attached to post", response));
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(response));
     }
 
     @Operation(summary = "Retrieve/Stream stored media file", description = "Serves the file by objectKey with appropriate content type and caching.")

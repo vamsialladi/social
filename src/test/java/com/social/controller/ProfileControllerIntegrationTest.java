@@ -56,28 +56,28 @@ class ProfileControllerIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(updateRequest)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success", is(true)))
                 .andExpect(jsonPath("$.data.name", is("Jane Visual Artist")))
                 .andExpect(jsonPath("$.data.phone", is("+1-555-0199")))
-                .andExpect(jsonPath("$.data.email", is("jane@vfxartist.com")));
+                .andExpect(jsonPath("$.data.email", is("jane@vfxartist.com")))
+                .andExpect(jsonPath("$.meta.nextCursor").value(nullValue()));
 
         // 2. An unauthorized viewer views Jane's profile -> phone & email must be masked/null
         mockMvc.perform(get("/api/profiles/artist-jane")
                         .header("X-User-Id", "random-viewer"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success", is(true)))
                 .andExpect(jsonPath("$.data.name", is("Jane Visual Artist")))
                 .andExpect(jsonPath("$.data.experience", is("8 years senior animator")))
                 .andExpect(jsonPath("$.data.phone").doesNotExist())
-                .andExpect(jsonPath("$.data.email").doesNotExist());
+                .andExpect(jsonPath("$.data.email").doesNotExist())
+                .andExpect(jsonPath("$.meta.nextCursor").value(nullValue()));
 
         // 3. Jane views her own profile -> phone & email are present
         mockMvc.perform(get("/api/profiles/artist-jane")
                         .header("X-User-Id", "artist-jane"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success", is(true)))
                 .andExpect(jsonPath("$.data.phone", is("+1-555-0199")))
-                .andExpect(jsonPath("$.data.email", is("jane@vfxartist.com")));
+                .andExpect(jsonPath("$.data.email", is("jane@vfxartist.com")))
+                .andExpect(jsonPath("$.meta.nextCursor").value(nullValue()));
     }
 
     @Test
@@ -96,7 +96,7 @@ class ProfileControllerIntegrationTest {
         mockMvc.perform(get("/api/profiles/private-user")
                         .header("X-User-Id", "another-user"))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.success", is(false)))
-                .andExpect(jsonPath("$.message", containsString("This profile is private")));
+                .andExpect(jsonPath("$.error.code", is("FORBIDDEN")))
+                .andExpect(jsonPath("$.error.message", containsString("This profile is private")));
     }
 }

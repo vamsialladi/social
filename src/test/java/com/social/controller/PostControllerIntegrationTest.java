@@ -47,7 +47,7 @@ class PostControllerIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.success", is(false)));
+                .andExpect(jsonPath("$.error.code", is("UNAUTHORIZED")));
     }
 
     @Test
@@ -63,9 +63,9 @@ class PostControllerIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.success", is(true)))
                 .andExpect(jsonPath("$.data.authorId", is("user-123")))
-                .andExpect(jsonPath("$.data.content", is("Valid post content")));
+                .andExpect(jsonPath("$.data.content", is("Valid post content")))
+                .andExpect(jsonPath("$.meta.nextCursor").value(nullValue()));
     }
 
     @Test
@@ -80,8 +80,8 @@ class PostControllerIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.success", is(false)))
-                .andExpect(jsonPath("$.message", containsString("Title is required for articles")));
+                .andExpect(jsonPath("$.error.code", is("INVALID_INPUT")))
+                .andExpect(jsonPath("$.error.message", containsString("Title is required for articles")));
     }
 
     @Test
@@ -114,9 +114,9 @@ class PostControllerIntegrationTest {
         // Call GET /api/posts feed
         mockMvc.perform(get("/api/posts?limit=10"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success", is(true)))
-                .andExpect(jsonPath("$.data.data", hasSize(1)))
-                .andExpect(jsonPath("$.data.data[0].type", is("article")));
+                .andExpect(jsonPath("$.data", hasSize(1)))
+                .andExpect(jsonPath("$.data[0].type", is("article")))
+                .andExpect(jsonPath("$.meta.nextCursor").value(nullValue()));
     }
 
     @Test
@@ -144,6 +144,6 @@ class PostControllerIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(updateReq)))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.success", is(false)));
+                .andExpect(jsonPath("$.error.code", is("FORBIDDEN")));
     }
 }
