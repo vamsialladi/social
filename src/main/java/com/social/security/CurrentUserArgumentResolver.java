@@ -41,7 +41,17 @@ public class CurrentUserArgumentResolver implements HandlerMethodArgumentResolve
     }
 
     private String extractUserId(HttpServletRequest request) {
-        // 1. Check X-User-Id header
+        // 1. Check UserContextHolder or UserContext set by AuthenticationInterceptor
+        String contextUser = com.social.config.UserContextHolder.getUserId();
+        if (StringUtils.hasText(contextUser)) {
+            return contextUser;
+        }
+        String legacyUserContext = com.social.util.UserContext.getCurrentUserId();
+        if (StringUtils.hasText(legacyUserContext)) {
+            return legacyUserContext;
+        }
+
+        // 2. Check X-User-Id header
         String userIdHeader = request.getHeader(USER_ID_HEADER);
         if (StringUtils.hasText(userIdHeader)) {
             return userIdHeader;

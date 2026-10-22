@@ -99,6 +99,17 @@ public class AuthController {
                 }
             }
         }
+        String rawCookie = request.getHeader("Cookie");
+        if (StringUtils.hasText(rawCookie)) {
+            for (String part : rawCookie.split(";")) {
+                String[] pair = part.trim().split("=", 2);
+                if (pair.length == 2 && ("session_token".equalsIgnoreCase(pair[0].trim()) || "auth_token".equalsIgnoreCase(pair[0].trim()))) {
+                    if (StringUtils.hasText(pair[1])) {
+                        return pair[1].trim();
+                    }
+                }
+            }
+        }
         String sessionHeader = request.getHeader("X-Session-Id");
         if (StringUtils.hasText(sessionHeader)) {
             return sessionHeader.trim();

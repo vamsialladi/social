@@ -112,6 +112,19 @@ public class AuthenticationInterceptor implements HandlerInterceptor {
             }
         }
 
+        // Fallback: Check raw Cookie header if request.getCookies() is null or unparsed
+        String rawCookie = request.getHeader("Cookie");
+        if (StringUtils.hasText(rawCookie)) {
+            for (String part : rawCookie.split(";")) {
+                String[] pair = part.trim().split("=", 2);
+                if (pair.length == 2 && (SESSION_COOKIE_NAME.equalsIgnoreCase(pair[0].trim()) || AUTH_COOKIE_NAME.equalsIgnoreCase(pair[0].trim()))) {
+                    if (StringUtils.hasText(pair[1])) {
+                        return pair[1].trim();
+                    }
+                }
+            }
+        }
+
         // 3. Check X-Session-Id header
         String sessionHeader = request.getHeader(SESSION_ID_HEADER);
         if (StringUtils.hasText(sessionHeader)) {
