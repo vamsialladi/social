@@ -96,6 +96,8 @@ function Messages() {
   const replyInputRef = useRef(null)
   const attachmentInputRef = useRef(null)
 
+  const selectedMessage = messages.find((message) => message.id === selectedId)
+
   useEffect(() => {
     async function loadConversations() {
       try {
@@ -170,8 +172,6 @@ function Messages() {
       return matchesSearch && matchesCategory
     })
   }, [activeCategory, messages, search])
-
-  const selectedMessage = messages.find((message) => message.id === selectedId)
 
   function toggleStar(id) {
     setMessages((currentMessages) => currentMessages.map((message) => (
