@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import {
   ChevronDown,
   MoreHorizontal,
@@ -77,6 +77,7 @@ const initialMessages = [
 
 const categories = ['Opportunities', 'Unread', 'Connections', 'InMail', 'Starred']
 const mailboxOptions = ['Focused', 'Other', 'Archived', 'Spam']
+const emojis = ['😀', '😂', '😍', '😊', '👍', '🎉', '❤️', '🙏']
 
 function Messages() {
   const [messages, setMessages] = useState(initialMessages)
@@ -89,6 +90,10 @@ function Messages() {
   const [recipient, setRecipient] = useState('')
   const [messageText, setMessageText] = useState('')
   const [replyText, setReplyText] = useState('')
+  const [replyAttachment, setReplyAttachment] = useState(null)
+  const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false)
+  const replyInputRef = useRef(null)
+  const attachmentInputRef = useRef(null)
 
   const visibleMessages = useMemo(() => {
     const query = search.trim().toLowerCase()
@@ -117,9 +122,10 @@ function Messages() {
     event.preventDefault()
     const content = replyText.trim()
 
-    if (!selectedMessage || !content) return
+    if (!selectedMessage || (!content && !replyAttachment)) return
 
     const messageId = Date.now()
+    const attachment = replyAttachment
     setMessages((currentMessages) => currentMessages.map((message) => (
       message.id === selectedMessage.id
         ? {
@@ -129,15 +135,31 @@ function Messages() {
             ...(!message.thread?.length && !message.sponsored
               ? [{ id: `${message.id}-initial`, content: message.description, direction: 'incoming' }]
               : []),
-            { id: messageId, content, direction: 'outgoing' },
+            { id: messageId, content, attachment, direction: 'outgoing' },
           ],
-          preview: content,
+          preview: content || `Attachment: ${attachment.name}`,
           date: 'Now',
           unread: false,
         }
         : message
     )))
     setReplyText('')
+    setReplyAttachment(null)
+    setIsEmojiPickerOpen(false)
+  }
+
+  function insertEmoji(emoji) {
+    const input = replyInputRef.current
+    const start = input?.selectionStart ?? replyText.length
+    const end = input?.selectionEnd ?? replyText.length
+    const nextText = `${replyText.slice(0, start)}${emoji}${replyText.slice(end)}`
+
+    setReplyText(nextText)
+    setIsEmojiPickerOpen(false)
+    requestAnimationFrame(() => {
+      input?.focus()
+      input?.setSelectionRange(start + emoji.length, start + emoji.length)
+    })
   }
 
   function sendMessage(event) {
@@ -325,7 +347,13 @@ function Messages() {
                         className={`conversation-bubble${message.direction === 'outgoing' ? ' is-outgoing' : ''}`}
                         key={message.id}
                       >
-                        {message.content}
+                        {message.content && <span>{message.content}</span>}
+                        {message.attachment && (
+                          <span className="conversation-attachment">
+                            <Paperclip size={14} aria-hidden="true" />
+                            {message.attachment.name}
+                          </span>
+                        )}
                       </div>
                     ))}
                   </article>
@@ -335,25 +363,77 @@ function Messages() {
                   <label className="message-reply-input">
                     <span className="visually-hidden">Write a message</span>
                     <input
+                      ref={replyInputRef}
                       placeholder="Write a message..."
                       value={replyText}
                       onChange={(event) => setReplyText(event.target.value)}
                     />
                   </label>
+                  {replyAttachment && (
+                    <div className="reply-attachment">
+                      <Paperclip size={15} aria-hidden="true" />
+                      <span>{replyAttachment.name}</span>
+                      <button
+                        type="button"
+                        aria-label="Remove attached file"
+                        onClick={() => {
+                          setReplyAttachment(null)
+                          if (attachmentInputRef.current) attachmentInputRef.current.value = ''
+                        }}
+                      >
+                        <X size={15} />
+                      </button>
+                    </div>
+                  )}
                   <div className="message-reply-actions">
                     <div>
-                      <button type="button" aria-label="Attach a file"><Paperclip size={18} /></button>
-                      <button type="button" aria-label="Add emoji"><Smile size={18} /></button>
+                      <input
+                        ref={attachmentInputRef}
+                        className="visually-hidden"
+                        type="file"
+                        onChange={(event) => setReplyAttachment(event.target.files?.[0] ?? null)}
+                        tabIndex={-1}
+                        aria-hidden="true"
+                      />
+                      <button
+                        type="button"
+                        aria-label="Attach a file"
+                        onClick={() => attachmentInputRef.current?.click()}
+                      >
+                        <Paperclip size={18} />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="Add emoji"
+                        aria-expanded={isEmojiPickerOpen}
+                        onClick={() => setIsEmojiPickerOpen((isOpen) => !isOpen)}
+                      >
+                        <Smile size={18} />
+                      </button>
                     </div>
                     <button
                       className="reply-send-button"
                       type="submit"
                       aria-label="Send message"
-                      disabled={!replyText.trim()}
+                      disabled={!replyText.trim() && !replyAttachment}
                     >
                       <Send size={17} />
                     </button>
                   </div>
+                  {isEmojiPickerOpen && (
+                    <div className="message-emoji-picker" aria-label="Choose an emoji">
+                      {emojis.map((emoji) => (
+                        <button
+                          key={emoji}
+                          type="button"
+                          aria-label={`Insert ${emoji}`}
+                          onClick={() => insertEmoji(emoji)}
+                        >
+                          {emoji}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </form>
               </>
             ) : (

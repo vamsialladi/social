@@ -381,6 +381,10 @@
   align-items: stretch;
 }
 
+.linkedin-profile-menu.is-open {
+  z-index: 1;
+}
+
 .linkedin-nav-item {
   position: relative;
   display: flex;
@@ -416,6 +420,10 @@
 .linkedin-nav-item:focus-visible::after,
 .linkedin-nav-item.is-active::after {
   transform: scaleX(1);
+}
+
+.linkedin-profile-menu.is-open > .linkedin-nav-item::after {
+  transform: scaleX(0);
 }
 
 .linkedin-nav-item .linkedin-nav-icon {
@@ -458,7 +466,7 @@
 
 .linkedin-profile-dropdown {
   position: absolute;
-  z-index: 10;
+  z-index: 20;
   top: calc(100% + 2px);
   right: -8px;
   width: 260px;
@@ -525,6 +533,12 @@
 .profile-dropdown-item:focus-visible {
   outline: none;
   background: #f3f6f8;
+ 
+
+}
+.profile-dropdown-person:hover
+{
+   width:  calc(100% - 20px);
 }
 
 .profile-dropdown-divider {
@@ -590,7 +604,6 @@
     font-size: 8px;
   }
 
-  .linkedin-business,
   .linkedin-nav-divider {
     display: none;
   }

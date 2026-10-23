@@ -1,10 +1,31 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import './App.css'
 import Messages from './assets/Components/Messages'
 import Home from './assets/Components/Home'
 import NetworkPage from './assets/Components/NetworkPage'
 import Endorsement from './assets/Components/Endorsement'
 import ProfilePage, { emptyProfileDetails } from './assets/Components/ProfilePage'
+import { trim } from 'zod'
+
+const navigationHashes = {
+  home: 'home',
+  network: 'network',
+  messaging: 'messages',
+  endorsement: 'endorsement',
+  opportunities: 'opportunities',
+  profile: 'profile',
+  settings: 'settings',
+  'account-settings': 'account-settings',
+  business: 'business',
+}
+
+function getNavigationFromHash() {
+  const hash = window.location.hash.slice(1)
+  const navigation = Object.entries(navigationHashes)
+    .find(([, route]) => route === hash)?.[0]
+
+  return navigation || (hash === 'artist-profile' ? 'profile' : 'home')
+}
 
 function NavigationIcon({ name }) {
   const iconPaths = {
@@ -42,10 +63,41 @@ function Navigation({
   profilePreview,
   profileDetails,
 }) {
+  const profileMenuRef = useRef(null)
+
+  useEffect(() => {
+    if (!isProfileMenuOpen) return undefined
+
+    function handlePointerDown(event) {
+      if (!profileMenuRef.current?.contains(event.target)) {
+        setIsProfileMenuOpen(false)
+      }
+    }
+
+    function handleKeyDown(event) {
+      if (event.key === 'Escape') setIsProfileMenuOpen(false)
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown)
+    document.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isProfileMenuOpen, setIsProfileMenuOpen])
+
   return (
     <nav className="linkedin-navbar" aria-label="Profile navigation">
       <div className="linkedin-navbar-inner">
-        <a href="#home" aria-label="TrueHunt home" onClick={() => setActiveNavigation('home')}>
+        <a
+          href="#home"
+          aria-label="TrueHunt home"
+          onClick={(event) => {
+            event.preventDefault()
+            setActiveNavigation('home')
+          }}
+        >
           <img className="truehunt-brand" src="/truehunt-logo.png" alt="TrueHunt" />
         </a>
         
@@ -57,21 +109,30 @@ function Navigation({
           <a
             className={`linkedin-nav-item${activeNavigation === 'home' ? ' is-active' : ''}`}
             href="#home"
-            onClick={() => setActiveNavigation('home')}
+            onClick={(event) => {
+              event.preventDefault()
+              setActiveNavigation('home')
+            }}
           >
             <NavigationIcon name="home" /><small>Home</small>
           </a>
           <a
             className={`linkedin-nav-item${activeNavigation === 'network' ? ' is-active' : ''}`}
             href="#network"
-            onClick={() => setActiveNavigation('network')}
+            onClick={(event) => {
+              event.preventDefault()
+              setActiveNavigation('network')
+            }}
           >
             <NavigationIcon name="network" /><small>Network</small>
           </a>
           <a
             className={`linkedin-nav-item${activeNavigation === 'messaging' ? ' is-active' : ''}`}
             href="#messages"
-            onClick={() => setActiveNavigation('messaging')}
+            onClick={(event) => {
+              event.preventDefault()
+              setActiveNavigation('messaging')
+            }}
           >
             <NavigationIcon name="messaging" /><small>Messaging</small>
           </a>
@@ -91,7 +152,7 @@ function Navigation({
           >
             <NavigationIcon name="opportunities" /><small>Opportunities</small>
           </button>
-          <div className="linkedin-profile-menu">
+          <div className={`linkedin-profile-menu${isProfileMenuOpen ? ' is-open' : ''}`} ref={profileMenuRef}>
             <button
               className={`linkedin-nav-item linkedin-me${['profile', 'settings', 'account-settings'].includes(activeNavigation) ? ' is-active' : ''}`}
               type="button"
@@ -110,9 +171,10 @@ function Navigation({
               <div className="linkedin-profile-dropdown" role="menu">
                 <a
                   className="profile-dropdown-person"
-                  href="#artist-profile"
+                  href="#profile"
                   role="menuitem"
-                  onClick={() => {
+                  onClick={(event) => {
+                    event.preventDefault()
                     setActiveNavigation('profile')
                     setIsProfileMenuOpen(false)
                   }}
@@ -145,7 +207,7 @@ function Navigation({
                   role="menuitem"
                   onClick={() => {
                     setActiveNavigation('account-settings')
-                    setIsProfileMenuOpen(false)
+                    setIsProfileMenuOpen(true)
                   }}
                 >
                   Account settings
@@ -169,10 +231,34 @@ function Navigation({
 }
 
 function App() {
-  const [activeNavigation, setActiveNavigation] = useState('home')
+  const [activeNavigation, setActiveNavigationState] = useState(getNavigationFromHash)
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false)
   const [profileDetails, setProfileDetails] = useState(emptyProfileDetails)
   const [profilePreview, setProfilePreview] = useState('')
+
+  function setActiveNavigation(navigation) {
+    const hash = navigationHashes[navigation]
+    if (!hash) return
+
+    const nextUrl = `#${hash}`
+    if (window.location.hash !== nextUrl) {
+      window.history.pushState({ navigation }, '', nextUrl)
+    }
+    setActiveNavigationState(navigation)
+  }
+
+  useEffect(() => {
+    function restoreNavigation() {
+      setActiveNavigationState(getNavigationFromHash())
+    }
+
+    window.addEventListener('popstate', restoreNavigation)
+    window.addEventListener('hashchange', restoreNavigation)
+    return () => {
+      window.removeEventListener('popstate', restoreNavigation)
+      window.removeEventListener('hashchange', restoreNavigation)
+    }
+  }, [])
 
   return (
     <main className={`cinemans-page is-preview${activeNavigation === 'home' ? ' is-home' : ''}`}>
@@ -205,7 +291,6 @@ function App() {
           profileDetails={profileDetails}
           profilePreview={profilePreview}
           onViewProfile={() => setActiveNavigation('profile')}
-          onManageEndorsements={() => setActiveNavigation('settings')}
         />
       </div>
       <div hidden={activeNavigation !== 'profile'}>
@@ -231,22 +316,26 @@ function App() {
                 ? 'Business tools will appear here.'
                 : 'Account settings will appear here.'}
           </p>
-          <button className="secondary-button" type="button" onClick={() => setActiveNavigation('profile')}>
-            Return to profile
-          </button>
-          <section className="home-promotion-card" aria-label="Sponsored movie industry promotion">
-            <div className="home-promotion-art">
-              <span className="home-promotion-label">PROMOTED</span>
-              <span className="home-promotion-art-title">THE NEXT<br />BIG PICTURE</span>
-              <span className="home-promotion-studio">NORTHSTAR FILMS</span>
-            </div>
-            <div className="home-promotion-content">
-              <h2>Bring your next story to the screen</h2>
-              <p>Northstar Films is meeting new writers, actors, and independent filmmakers for upcoming productions.</p>
-              <span className="home-promotion-caption">Make your mark in the movies.</span>
-              <button className="home-promotion-button" type="button">Explore film careers</button>
-            </div>
-          </section>
+          {activeNavigation === 'business' && (
+            <>
+              <button className="secondary-button" type="button" onClick={() => setActiveNavigation('profile')}>
+                Return to profile
+              </button>
+              <section className="home-promotion-card" aria-label="Sponsored movie industry promotion">
+                <div className="home-promotion-art">
+                  <span className="home-promotion-label">PROMOTED</span>
+                  <span className="home-promotion-art-title">THE NEXT<br />BIG PICTURE</span>
+                  <span className="home-promotion-studio">NORTHSTAR FILMS</span>
+                </div>
+                <div className="home-promotion-content">
+                  <h2>Bring your next story to the screen</h2>
+                  <p>Northstar Films is meeting new writers, actors, and independent filmmakers for upcoming productions.</p>
+                  <span className="home-promotion-caption">Make your mark in the movies.</span>
+                  <button className="home-promotion-button" type="button">Explore film careers</button>
+                </div>
+              </section>
+            </>
+          )}
         </section>
       )}
     </main>

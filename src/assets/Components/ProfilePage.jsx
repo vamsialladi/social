@@ -17,6 +17,7 @@ export const emptyProfileDetails = {
 }
 
 const MAX_VIDEO_SIZE = 5 * 1024 * 1024
+const MAX_VIDEO_DURATION = 3 * 60
 
 const languages = [
   'English',
@@ -31,15 +32,8 @@ const languages = [
 ]
 
 const talents = [
-  'Acting',
-  'Dancing',
-  'Singing',
-  'Direction',
-  'Cinematography',
-  'Writing',
-  'Editing',
-  'Music',
-  'Production',
+  'Acting', 'Direction', 'Cinematography',' Editing', 'Screenwriting',
+  'Art Direction', 'Sound Design', 'Music', 'Dance & Choreography', 'Production Management', 'Makeup & Costume', 'VFX & Animation',
 ]
 
 const workTypes = [
@@ -49,6 +43,7 @@ const workTypes = [
   'Reels',
   'Advertisements',
   'serials',
+  'Other',
 ]
 
 function SelectionGroup({ label, options, selected, onChange }) {
@@ -143,14 +138,74 @@ function ProfilePage({
 
     if (previousUrl) URL.revokeObjectURL(previousUrl)
 
-    const video = file ? { file, url: URL.createObjectURL(file) } : null
-    uploadedVideoUrls.current[index] = video?.url ?? ''
+    uploadedVideoUrls.current[index] = ''
     setUploadedVideos((videos) => {
       const nextVideos = [...videos]
-      nextVideos[index] = video
+      nextVideos[index] = null
       return nextVideos
     })
+    setValidationError('')
     setIsSubmitted(false)
+
+    if (!file) return
+
+    if (file.size > MAX_VIDEO_SIZE) {
+      event.target.value = ''
+      setValidationError('Each video must be no larger than 5 MB. Please choose a smaller video file.')
+      return
+    }
+
+    const url = URL.createObjectURL(file)
+    uploadedVideoUrls.current[index] = url
+    setUploadedVideos((videos) => {
+      const nextVideos = [...videos]
+      nextVideos[index] = { file, url }
+      return nextVideos
+    })
+    const video = document.createElement('video')
+    video.preload = 'metadata'
+    video.onloadedmetadata = () => {
+      if (uploadedVideoUrls.current[index] !== url || event.target.files?.[0] !== file) {
+        URL.revokeObjectURL(url)
+        return
+      }
+
+      if (!Number.isFinite(video.duration) || video.duration > MAX_VIDEO_DURATION) {
+        URL.revokeObjectURL(url)
+        uploadedVideoUrls.current[index] = ''
+        event.target.value = ''
+        setUploadedVideos((videos) => {
+          const nextVideos = [...videos]
+          nextVideos[index] = null
+          return nextVideos
+        })
+        setValidationError('Each video must be no longer than 3 minutes. Please choose a shorter video.')
+        return
+      }
+
+      setUploadedVideos((videos) => {
+        const nextVideos = [...videos]
+        nextVideos[index] = { file, url, duration: video.duration }
+        return nextVideos
+      })
+    }
+    video.onerror = () => {
+      if (uploadedVideoUrls.current[index] !== url || event.target.files?.[0] !== file) {
+        URL.revokeObjectURL(url)
+        return
+      }
+
+      URL.revokeObjectURL(url)
+      uploadedVideoUrls.current[index] = ''
+      event.target.value = ''
+      setUploadedVideos((videos) => {
+        const nextVideos = [...videos]
+        nextVideos[index] = null
+        return nextVideos
+      })
+      setValidationError('This video could not be read. Please choose a valid video file.')
+    }
+    video.src = url
   }
 
   function handleAddVideoUrl() {
@@ -211,13 +266,19 @@ function ProfilePage({
 
     const form = event.currentTarget
     const videoInputs = Array.from(form.querySelectorAll('input[type="file"][data-video]'))
-    const oversizedVideoIndex = uploadedVideos.findIndex(
-      (video) => video && video.file.size > MAX_VIDEO_SIZE,
-    )
+    const invalidVideoIndex = uploadedVideos.findIndex((video) => video && (
+      video.file.size > MAX_VIDEO_SIZE
+      || video.duration === undefined
+      || video.duration > MAX_VIDEO_DURATION
+    ))
 
-    if (oversizedVideoIndex !== -1) {
-      videoInputs[oversizedVideoIndex].focus()
-      setValidationError('Each video must be no larger than 5 MB. Please choose a smaller video file.')
+    if (invalidVideoIndex !== -1) {
+      videoInputs[invalidVideoIndex].focus()
+      setValidationError(
+        uploadedVideos[invalidVideoIndex].duration === undefined
+          ? 'Please wait for the selected video to finish processing.'
+          : 'Each video must be no larger than 5 MB and no longer than 3 minutes.',
+      )
       return
     }
 
@@ -285,7 +346,7 @@ function ProfilePage({
                   type="button"
                   onClick={() => setIsEditingProfile(true)}
                 >
-                  <span aria-hidden="true">✎</span> Edit
+                  <span aria-hidden="true">✎</span> Edit profile
                 </button>
               )}
             </div>
@@ -296,7 +357,7 @@ function ProfilePage({
               <aside className="work-status-card">
                 <span className="status-dot" aria-hidden="true" />
                 <div>
-                  <strong>Worked in</strong>
+                  <strong>Previous Worked in</strong>
                   <p>{profileDetails.workTypes.length > 0 ? profileDetails.workTypes.join(' · ') : 'Add your previous work in Edit profile'}</p>
                 </div>
               </aside>
@@ -728,7 +789,7 @@ function ProfilePage({
             onChange={setSelectedTalents}
           />
           <SelectionGroup
-            label="Worked in"
+            label="Previous Worked in"
             options={workTypes}
             selected={selectedWorkTypes}
             onChange={setSelectedWorkTypes}
@@ -769,7 +830,7 @@ function ProfilePage({
                     aria-label={`Preview ${uploadedVideos[number - 1].file.name}`}
                   />
                 )}
-                <span className="field-hint">Video file · 5 MB maximum</span>
+                <span className="field-hint">Video file · 3 minutes maximum · 5 MB maximum</span>
               </div>
             ))}
           </div>

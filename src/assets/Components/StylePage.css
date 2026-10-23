@@ -1229,6 +1229,10 @@
   border: 0;
 }
 
+.selection-group + .selection-group {
+  margin-top: 24px;
+}
+
 .selection-group legend {
   padding: 0;
 }
