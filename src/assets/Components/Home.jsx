@@ -2,6 +2,15 @@ import { useEffect, useRef, useState } from 'react'
 import './Home.css'
 import Article from './Article.jsx'
 
+function ProfileAvatarPlaceholder() {
+  return (
+    <svg className="home-avatar-placeholder" viewBox="0 0 100 100" aria-hidden="true">
+      <circle cx="50" cy="35" r="21" />
+      <path d="M10 96c2-23 18-39 40-39s38 16 40 39H10Z" />
+    </svg>
+  )
+}
+
 function Home({
   profileDetails,
   profilePreview,
@@ -21,7 +30,6 @@ function Home({
   const mediaUrls = useRef([])
 
   const name = profileDetails.name.trim() || 'Your name'
-  const initials = name === 'Your name' ? '?' : name.charAt(0).toUpperCase()
   const languages = [
     ...profileDetails.languages.filter((language) => language !== 'Other'),
     ...(profileDetails.otherLanguage ? [profileDetails.otherLanguage] : []),
@@ -127,10 +135,10 @@ function Home({
           >
             <div className="home-profile-cover" />
             <div className="home-profile-content">
-              <div className="home-avatar home-profile-avatar">
+              <div className={`home-avatar home-profile-avatar${profilePreview ? '' : ' is-placeholder'}`}>
                 {profilePreview
                   ? <img src={profilePreview} alt={`${name}'s profile`} />
-                  : initials}
+                  : <ProfileAvatarPlaceholder />}
               </div>
               <h1>{name}</h1>
               {profileDetails.talents.length > 0 && (
@@ -155,10 +163,10 @@ function Home({
           {activeNavigation === 'home' && (
           <section className="home-card home-composer" aria-label="Create a post">
             <div className="home-composer-top">
-              <div className="home-avatar" aria-hidden="true">
+              <div className={`home-avatar${profilePreview ? '' : ' is-placeholder'}`} aria-hidden="true">
                 {profilePreview
                   ? <img src={profilePreview} alt="" />
-                  : initials}
+                  : <ProfileAvatarPlaceholder />}
               </div>
               <button
                 className="home-start-post"
@@ -277,10 +285,10 @@ function Home({
               {visiblePosts.map((post) => (
                 <article className="home-card home-post" key={post.id}>
                   <header className="home-post-header">
-                    <div className="home-avatar" aria-hidden="true">
+                    <div className={`home-avatar${profilePreview ? '' : ' is-placeholder'}`} aria-hidden="true">
                       {profilePreview
                         ? <img src={profilePreview} alt="" />
-                        : initials}
+                        : <ProfileAvatarPlaceholder />}
                     </div>
                     <div>
                       <strong>{name}</strong>

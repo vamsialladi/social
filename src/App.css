@@ -354,6 +354,12 @@
   font: inherit;
 }
 
+.cinemans-page input[type="search"]::-webkit-search-cancel-button {
+  display: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
 .linkedin-search input::placeholder {
   color: #55535a;
   opacity: 1;
@@ -379,6 +385,10 @@
   position: relative;
   display: flex;
   align-items: stretch;
+}
+
+.linkedin-profile-menu.is-open {
+  z-index: 1;
 }
 
 .linkedin-nav-item {
@@ -416,6 +426,10 @@
 .linkedin-nav-item:focus-visible::after,
 .linkedin-nav-item.is-active::after {
   transform: scaleX(1);
+}
+
+.linkedin-profile-menu.is-open > .linkedin-nav-item::after {
+  transform: scaleX(0);
 }
 
 .linkedin-nav-item .linkedin-nav-icon {
@@ -456,12 +470,20 @@
   object-fit: cover;
 }
 
+.linkedin-mini-avatar svg {
+  width: 100%;
+  height: 100%;
+  fill: #adb3b6;
+}
+
 .linkedin-profile-dropdown {
   position: absolute;
-  z-index: 10;
+  z-index: 20;
   top: calc(100% + 2px);
-  right: -8px;
+  right: 0;
   width: 260px;
+  max-width: calc(100vw - 16px);
+  box-sizing: border-box;
   padding: 8px;
   border: 1px solid #e3e1e5;
   border-radius: 10px;
@@ -473,6 +495,7 @@
 .profile-dropdown-item {
   display: flex;
   width: 100%;
+  box-sizing: border-box;
   align-items: center;
   border: 0;
   border-radius: 7px;
@@ -525,6 +548,14 @@
 .profile-dropdown-item:focus-visible {
   outline: none;
   background: #f3f6f8;
+ 
+
+}
+
+.profile-dropdown-logout:hover,
+.profile-dropdown-logout:focus-visible {
+  background: #fff1f1;
+  color: #c62828;
 }
 
 .profile-dropdown-divider {
@@ -590,8 +621,298 @@
     font-size: 8px;
   }
 
-  .linkedin-business,
   .linkedin-nav-divider {
     display: none;
   }
+}
+
+.cinemans-page.is-dark {
+  color-scheme: dark;
+  background: #15171b;
+  color: #e5e7eb;
+}
+
+.cinemans-page.is-dark .linkedin-navbar,
+.cinemans-page.is-dark .linkedin-profile-dropdown,
+.cinemans-page.is-dark .profile-dropdown-person,
+.cinemans-page.is-dark .profile-dropdown-item,
+.cinemans-page.is-dark .navigation-placeholder,
+.cinemans-page.is-dark .home-card,
+.cinemans-page.is-dark .home-post,
+.cinemans-page.is-dark .home-news-card,
+.cinemans-page.is-dark .home-empty-feed,
+.cinemans-page.is-dark .network-manage-card,
+.cinemans-page.is-dark .network-tip-card,
+.cinemans-page.is-dark .network-tabs,
+.cinemans-page.is-dark .network-invitations,
+.cinemans-page.is-dark .network-suggestions,
+.cinemans-page.is-dark .network-catch-up,
+.cinemans-page.is-dark .network-profile-card,
+.cinemans-page.is-dark .messages-shell,
+.cinemans-page.is-dark .message-preview,
+.cinemans-page.is-dark .article-editor,
+.cinemans-page.is-dark .notifications-profile-card,
+.cinemans-page.is-dark .notifications-manage-button,
+.cinemans-page.is-dark .notifications-content,
+.cinemans-page.is-dark .artist-profile,
+.cinemans-page.is-dark .artist-section,
+.cinemans-page.is-dark .work-status-card,
+.cinemans-page.is-dark .sidebar-card,
+.cinemans-page.is-dark .profile-modal-form,
+.cinemans-page.is-dark .reference-modal,
+.cinemans-page.is-dark .experience-modal,
+.cinemans-page.is-dark .form-section {
+  border-color: #393d45;
+  background-color: #202329;
+  color: #e5e7eb;
+}
+
+.cinemans-page.is-dark .linkedin-navbar {
+  border-color: #393d45;
+  color: #c3c8d0;
+}
+
+.cinemans-page.is-dark .linkedin-search,
+.cinemans-page.is-dark .messages-page .messages-search {
+  box-sizing: border-box;
+  border: 1px solid #444953;
+  background: #282c33;
+  color: #e5e7eb;
+  transition: background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.cinemans-page.is-dark .linkedin-search:hover,
+.cinemans-page.is-dark .messages-page .messages-search:hover {
+  border-color: #59616d;
+  background: #30353d;
+}
+
+.cinemans-page.is-dark .linkedin-search:focus-within,
+.cinemans-page.is-dark .messages-page .messages-search:focus-within {
+  border-color: #78aef8;
+  background: #282c33;
+  box-shadow: 0 0 0 3px rgba(120, 174, 248, 0.2);
+}
+
+.cinemans-page.is-dark .linkedin-search input,
+.cinemans-page.is-dark .messages-page .messages-search input {
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #e5e7eb;
+  color-scheme: dark;
+}
+
+.cinemans-page.is-dark .linkedin-search input::placeholder,
+.cinemans-page.is-dark .messages-page .messages-search input::placeholder {
+  color: #a4aab4;
+  opacity: 1;
+}
+
+.cinemans-page.is-dark .linkedin-nav-item,
+.cinemans-page.is-dark .profile-dropdown-person,
+.cinemans-page.is-dark .profile-dropdown-item,
+.cinemans-page.is-dark .navigation-placeholder :is(h1, p) {
+  color: #e5e7eb;
+}
+
+.cinemans-page.is-dark .profile-dropdown-person:hover,
+.cinemans-page.is-dark .profile-dropdown-person:focus-visible,
+.cinemans-page.is-dark .profile-dropdown-item:hover,
+.cinemans-page.is-dark .profile-dropdown-item:focus-visible {
+  background: #30353d;
+}
+
+.cinemans-page.is-dark .profile-dropdown-logout:hover,
+.cinemans-page.is-dark .profile-dropdown-logout:focus-visible {
+  background: #512b30;
+  color: #ffb4b4;
+}
+
+.cinemans-page.is-dark .profile-dropdown-divider,
+.cinemans-page.is-dark .linkedin-nav-divider {
+  background: #393d45;
+}
+
+.cinemans-page.is-dark .home-page {
+  --home-ink: #e5e7eb;
+  --home-muted: #a4aab4;
+  --home-line: #393d45;
+}
+
+.cinemans-page.is-dark .home-page :is(.home-profile-content > .home-profile-headline,
+  .home-profile-tags span,
+  .home-composer-actions button,
+  .home-feed-heading,
+  .home-feed-sort,
+  .home-empty-feed h2,
+  .home-post-title,
+  .home-post-content,
+  .home-news-card h2) {
+  color: #e5e7eb;
+}
+
+.cinemans-page.is-dark .home-page :is(.home-composer, .home-post-form, .home-start-post) {
+  border-color: #444953;
+  background-color: #282c33;
+  color: #e5e7eb;
+}
+
+.cinemans-page.is-dark .network-page {
+  --network-ink: #e5e7eb;
+  --network-muted: #a4aab4;
+  --network-line: #393d45;
+}
+
+.cinemans-page.is-dark .network-page :is(.network-manage-item, .network-tab,
+  .network-profile-role, .network-profile-location, .network-mutual-connections) {
+  color: #c3c8d0;
+}
+
+.cinemans-page.is-dark .messages-page {
+  --messages-ink: #e5e7eb;
+  --messages-muted: #a4aab4;
+  --messages-line: #393d45;
+  background: #181a1f;
+}
+
+.cinemans-page.is-dark .messages-page :is(.messages-header h1, .message-contact h2,
+  .sponsored-content h3, .message-preview, .message-preview-heading time) {
+  color: #e5e7eb;
+}
+
+.cinemans-page.is-dark .messages-page :is(.messages-list, .message-detail,
+  .messages-content, .sponsored-content) {
+  background-color: #202329;
+}
+
+.cinemans-page.is-dark .messages-page :is(.message-preview:hover, .message-preview.is-active,
+  .sponsored-meta) {
+  background-color: #2a3038;
+}
+
+.cinemans-page.is-dark .messages-page :is(.messages-filters, .message-detail-header,
+  .message-composer, .compose-form, .message-sponsored) {
+  border-color: #393d45;
+  background-color: #202329;
+  color: #e5e7eb;
+}
+
+.cinemans-page.is-dark .messages-page :is(.messages-filter-chip, .messages-search,
+  .message-composer textarea, .compose-form textarea) {
+  border-color: #444953;
+  background-color: #282c33;
+  color: #e5e7eb;
+}
+
+.cinemans-page.is-dark .article-page,
+.cinemans-page.is-dark .notifications-page {
+  color: #e5e7eb;
+}
+
+.cinemans-page.is-dark .article-page :is(.article-back-button, .article-cover-placeholder,
+  .article-document-preview, .article-content-input),
+.cinemans-page.is-dark .notifications-page :is(.notifications-profile-content h1,
+  .notifications-profile-content > p, .notifications-manage-button,
+  .notifications-content h2) {
+  color: #e5e7eb;
+}
+
+.cinemans-page.is-dark .article-page :is(.article-cover-area, .article-add-menu,
+  .article-add-menu button, .article-add-button) {
+  border-color: #444953;
+  background-color: #282c33;
+  color: #e5e7eb;
+}
+
+.cinemans-page.is-dark .artist-content {
+  background: #181a1f;
+}
+
+.cinemans-page.is-dark .artist-profile :is(h2, h3, h4, p, strong, dt, dd,
+  .artist-headline, .artist-location, .artist-experience, .experience-entry-meta,
+  .experience-entry-highlights, .profile-empty-hint) {
+  color: #e5e7eb;
+}
+
+.cinemans-page.is-dark .artist-profile :is(.profile-tags span, .insight-item,
+  .video-upload-card, .video-url-section, .preview-profile, .preview-details,
+  .choice-chip span) {
+  border-color: #393d45;
+  background-color: #282c33;
+  color: #e5e7eb;
+}
+
+.cinemans-page.is-dark .notifications-page :is(.notifications-profile-tags span,
+  .notifications-content h2) {
+  border-color: #393d45;
+  background-color: #282c33;
+  color: #e5e7eb;
+}
+
+.cinemans-page.is-dark .cinemans-page,
+.cinemans-page.is-dark .artist-identity,
+.cinemans-page.is-dark .artist-section,
+.cinemans-page.is-dark .work-status-card,
+.cinemans-page.is-dark .sidebar-card,
+.cinemans-page.is-dark .navigation-placeholder {
+  border-color: #393d45;
+}
+
+.cinemans-page.is-dark :is(input, textarea, select) {
+  border-color: #444953;
+  background-color: #282c33;
+  color: #e5e7eb;
+  color-scheme: dark;
+}
+
+.cinemans-page.is-dark .messages-page .message-reply {
+  border-color: #444953;
+  background: #202329;
+}
+
+.cinemans-page.is-dark .messages-page .message-reply-input input {
+  border: 0;
+  background: transparent;
+  color: #e5e7eb;
+}
+
+.cinemans-page.is-dark .messages-page .message-reply-input input::placeholder {
+  color: #a4aab4;
+  opacity: 1;
+}
+
+.cinemans-page.is-dark .messages-page .compose-dialog {
+  border: 1px solid #393d45;
+  background: #202329;
+  color: #e5e7eb;
+}
+
+.cinemans-page.is-dark .messages-page .compose-dialog :is(h2, label) {
+  color: #e5e7eb;
+}
+
+.cinemans-page.is-dark .messages-page .compose-dialog header {
+  border-color: #393d45;
+}
+
+.cinemans-page.is-dark .messages-page .compose-dialog :is(input, textarea) {
+  border: 1px solid #444953;
+  background: #282c33;
+  color: #e5e7eb;
+  color-scheme: dark;
+}
+
+.cinemans-page.is-dark .messages-page .compose-dialog :is(input, textarea)::placeholder {
+  color: #a4aab4;
+  opacity: 1;
+}
+
+.cinemans-page.is-dark .home-promotion-content {
+  background: #202329;
+  color: #e5e7eb;
+}
+
+.cinemans-page.is-dark .home-promotion-content :is(h2, p, .home-promotion-caption) {
+  color: #e5e7eb;
 }

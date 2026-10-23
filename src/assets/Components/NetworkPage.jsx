@@ -19,6 +19,7 @@ const suggestedProfiles = [
     id: 'maya',
     name: 'Maya Krishnan',
     initials: 'MK',
+    status: 'active',
     role: 'Actor · Voice artist',
     location: 'Hyderabad, Telangana',
     mutualConnections: '12 mutual connections',
@@ -28,6 +29,7 @@ const suggestedProfiles = [
     id: 'rohan',
     name: 'Rohan Mehta',
     initials: 'RM',
+    status: 'offline',
     role: 'Cinematographer · Editor',
     location: 'Mumbai, Maharashtra',
     mutualConnections: '8 mutual connections',
@@ -39,6 +41,7 @@ function NetworkPage({ onMessage }) {
   const [activeTab, setActiveTab] = useState('grow')
   const [activeSection, setActiveSection] = useState('grow')
   const [connectedProfiles, setConnectedProfiles] = useState([])
+  const [followedProfiles, setFollowedProfiles] = useState([])
 
   function toggleConnection(profileId) {
     setConnectedProfiles((profiles) => (
@@ -48,14 +51,30 @@ function NetworkPage({ onMessage }) {
     ))
   }
 
+  function toggleFollow(profileId) {
+    setFollowedProfiles((profiles) => (
+      profiles.includes(profileId)
+        ? profiles.filter((id) => id !== profileId)
+        : [...profiles, profileId]
+    ))
+  }
+
   function renderProfileCard(profile) {
     const isConnected = connectedProfiles.includes(profile.id)
+    const isFollowing = followedProfiles.includes(profile.id)
 
     return (
       <article className="network-profile-card" key={profile.id}>
         <div className={`network-profile-cover ${profile.avatarClass}`} />
-        <div className={`network-profile-avatar ${profile.avatarClass}`} aria-hidden="true">
-          {profile.initials}
+        <div className="network-profile-avatar-wrap">
+          <div className={`network-profile-avatar ${profile.avatarClass}`} aria-hidden="true">
+            {profile.initials}
+          </div>
+          <span
+            className={`network-presence-dot is-${profile.status}`}
+            role="img"
+            aria-label={`${profile.name} is ${profile.status}`}
+          />
         </div>
         <div className="network-profile-content">
           <h3>{profile.name}</h3>
@@ -65,14 +84,24 @@ function NetworkPage({ onMessage }) {
             <UsersRound size={14} aria-hidden="true" />
             {profile.mutualConnections}
           </p>
-          <button
-            className={`network-connect-button${isConnected ? ' is-connected' : ''}`}
-            type="button"
-            aria-pressed={isConnected}
-            onClick={() => toggleConnection(profile.id)}
-          >
-            {isConnected ? 'Connected' : 'Connect'}
-          </button>
+          <div className="network-profile-actions">
+            <button
+              className={`network-connect-button${isConnected ? ' is-connected' : ''}`}
+              type="button"
+              aria-pressed={isConnected}
+              onClick={() => toggleConnection(profile.id)}
+            >
+              {isConnected ? 'Connected' : 'Connect'}
+            </button>
+            <button
+              className={`network-follow-button${isFollowing ? ' is-following' : ''}`}
+              type="button"
+              aria-pressed={isFollowing}
+              onClick={() => toggleFollow(profile.id)}
+            >
+              {isFollowing ? 'Following' : 'Follow'}
+            </button>
+          </div>
           <button
             className="network-message-button"
             type="button"
@@ -103,7 +132,13 @@ function NetworkPage({ onMessage }) {
                 >
                   <Icon size={19} strokeWidth={2.2} aria-hidden="true" />
                   <span>{label}</span>
-                  <small>{label === 'Connections' ? connectedProfiles.length : count ?? 0}</small>
+                  <small>
+                    {label === 'Connections'
+                      ? connectedProfiles.length
+                      : label === 'Following & followers'
+                        ? followedProfiles.length
+                        : count ?? 0}
+                  </small>
                 </button>
               ))}
             </nav>

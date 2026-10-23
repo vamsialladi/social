@@ -72,8 +72,28 @@
   font-size: 16px;
 }
 
+.cinemans-page.is-dark .messages-page .messages-search input[type="search"] {
+  box-sizing: border-box;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  outline: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  box-shadow: none;
+  color: #e5e7eb;
+  color-scheme: dark;
+}
+
 .messages-search input::placeholder {
   color: #5b6570;
+  opacity: 1;
+}
+
+.cinemans-page.is-dark .messages-page .messages-search input[type="search"]::placeholder {
+  color: #a4aab4;
   opacity: 1;
 }
 
@@ -464,6 +484,7 @@
 }
 
 .message-reply {
+  position: relative;
   margin: auto 14px 14px;
   padding: 12px 14px 8px;
   border: 1px solid #d3d3d3;
@@ -516,6 +537,11 @@
   justify-content: space-between;
 }
 
+.message-emoji-control {
+  position: relative;
+  display: flex;
+}
+
 .message-reply-actions button {
   display: grid;
   width: 32px;
@@ -547,6 +573,74 @@
 
 .message-reply-actions .reply-send-button:hover {
   background: #004182;
+}
+
+.message-emoji-picker {
+  position: absolute;
+  z-index: 5;
+  bottom: calc(100% + 8px);
+  left: 0;
+  display: grid;
+  grid-template-columns: repeat(4, 40px);
+  gap: 2px;
+  padding: 6px;
+  border: 1px solid #d7dce2;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(26, 39, 52, 0.18);
+  animation: emoji-picker-pop 160ms ease-out;
+}
+
+.message-emoji-picker button {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color 140ms ease, transform 140ms ease;
+}
+
+.message-emoji-picker button:hover {
+  z-index: 1;
+  background: #eef6ff;
+  transform: scale(1.2);
+}
+
+.message-emoji-picker button:active {
+  transform: scale(0.92);
+}
+
+.message-emoji-picker button:focus-visible {
+  z-index: 1;
+  outline: 2px solid #0a66c2;
+  outline-offset: 1px;
+}
+
+@keyframes emoji-picker-pop {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.96);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .message-emoji-picker,
+  .message-emoji-picker button {
+    animation: none;
+    transition: none;
+  }
 }
 
 .messages-empty,

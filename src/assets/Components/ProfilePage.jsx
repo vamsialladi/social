@@ -14,9 +14,11 @@ export const emptyProfileDetails = {
   workTypes: [],
   videos: [],
   videoUrls: [],
+  experiences: [],
 }
 
 const MAX_VIDEO_SIZE = 5 * 1024 * 1024
+const MAX_VIDEO_DURATION = 3 * 60
 
 const languages = [
   'English',
@@ -31,15 +33,8 @@ const languages = [
 ]
 
 const talents = [
-  'Acting',
-  'Dancing',
-  'Singing',
-  'Direction',
-  'Cinematography',
-  'Writing',
-  'Editing',
-  'Music',
-  'Production',
+  'Acting', 'Direction', 'Cinematography',' Editing', 'Screenwriting',
+  'Art Direction', 'Sound Design', 'Music', 'Dance & Choreography', 'Production Management', 'Makeup & Costume', 'VFX & Animation',
 ]
 
 const workTypes = [
@@ -48,7 +43,7 @@ const workTypes = [
   'Short films',
   'Reels',
   'Advertisements',
-  'serials',
+  'Serials',
 ]
 
 function SelectionGroup({ label, options, selected, onChange }) {
@@ -79,6 +74,24 @@ function SelectionGroup({ label, options, selected, onChange }) {
   )
 }
 
+function PreviewSectionHeading({ children, isOwner, onEdit, sectionId }) {
+  return (
+    <div className="preview-section-heading">
+      <h3>{children}</h3>
+      {isOwner && (
+        <button
+          className="language-edit-button"
+          type="button"
+          onClick={() => onEdit(sectionId)}
+          aria-label={`Edit ${children}`}
+        >
+          Edit
+        </button>
+      )}
+    </div>
+  )
+}
+
 function ProfilePage({
   isOwner = true,
   profileDetails,
@@ -87,11 +100,8 @@ function ProfilePage({
   setProfilePreview,
 }) {
   const [profilePic, setProfilePic] = useState(null)
-  const [coverPreview, setCoverPreview] = useState('')
   const [selectedLanguages, setSelectedLanguages] = useState([])
-  const [languageDraft, setLanguageDraft] = useState([])
   const [otherLanguageDraft, setOtherLanguageDraft] = useState('')
-  const [isEditingLanguages, setIsEditingLanguages] = useState(false)
   const [selectedTalents, setSelectedTalents] = useState([])
   const [selectedWorkTypes, setSelectedWorkTypes] = useState([])
   const [uploadedVideos, setUploadedVideos] = useState([null, null, null])
@@ -101,21 +111,33 @@ function ProfilePage({
   const [savedVideoUrls, setSavedVideoUrls] = useState([])
   const [validationError, setValidationError] = useState('')
   const [isSubmitted, setIsSubmitted] = useState(false)
+  const [profileFormKey, setProfileFormKey] = useState(0)
   const [isEditingProfile, setIsEditingProfile] = useState(false)
+  const [isExperienceModalOpen, setIsExperienceModalOpen] = useState(false)
+  const [editingExperienceId, setEditingExperienceId] = useState(null)
   const [isContactModalOpen, setIsContactModalOpen] = useState(false)
   const [referenceId, setReferenceId] = useState('')
   const [submittedReferenceId, setSubmittedReferenceId] = useState('')
+  const [editingSection, setEditingSection] = useState('')
+  const experienceBeingEdited = (profileDetails.experiences || [])
+    .find((experience) => experience.id === editingExperienceId)
+
+  useEffect(() => {
+    if (!isExperienceModalOpen) return undefined
+
+    function handleExperienceModalKeyDown(event) {
+      if (event.key === 'Escape') setIsExperienceModalOpen(false)
+    }
+
+    document.addEventListener('keydown', handleExperienceModalKeyDown)
+    return () => document.removeEventListener('keydown', handleExperienceModalKeyDown)
+  }, [isExperienceModalOpen])
+
   useEffect(() => {
     return () => {
       if (profilePreview) URL.revokeObjectURL(profilePreview)
     }
   }, [profilePreview])
-
-  useEffect(() => {
-    return () => {
-      if (coverPreview) URL.revokeObjectURL(coverPreview)
-    }
-  }, [coverPreview])
 
   useEffect(() => {
     const videoUrls = uploadedVideoUrls.current
@@ -132,25 +154,80 @@ function ProfilePage({
     setProfilePreview(file ? URL.createObjectURL(file) : '')
   }
 
-  function handleCoverChange(event) {
-    const file = event.target.files?.[0]
-    if (file) setCoverPreview(URL.createObjectURL(file))
-  }
-
   function handleVideoChange(event, index) {
     const file = event.target.files?.[0] ?? null
     const previousUrl = uploadedVideoUrls.current[index]
 
     if (previousUrl) URL.revokeObjectURL(previousUrl)
 
-    const video = file ? { file, url: URL.createObjectURL(file) } : null
-    uploadedVideoUrls.current[index] = video?.url ?? ''
+    uploadedVideoUrls.current[index] = ''
     setUploadedVideos((videos) => {
       const nextVideos = [...videos]
-      nextVideos[index] = video
+      nextVideos[index] = null
       return nextVideos
     })
+    setValidationError('')
     setIsSubmitted(false)
+
+    if (!file) return
+
+    if (file.size > MAX_VIDEO_SIZE) {
+      event.target.value = ''
+      setValidationError('Each video must be no larger than 5 MB. Please choose a smaller video file.')
+      return
+    }
+
+    const url = URL.createObjectURL(file)
+    uploadedVideoUrls.current[index] = url
+    setUploadedVideos((videos) => {
+      const nextVideos = [...videos]
+      nextVideos[index] = { file, url }
+      return nextVideos
+    })
+    const video = document.createElement('video')
+    video.preload = 'metadata'
+    video.onloadedmetadata = () => {
+      if (uploadedVideoUrls.current[index] !== url || event.target.files?.[0] !== file) {
+        URL.revokeObjectURL(url)
+        return
+      }
+
+      if (!Number.isFinite(video.duration) || video.duration > MAX_VIDEO_DURATION) {
+        URL.revokeObjectURL(url)
+        uploadedVideoUrls.current[index] = ''
+        event.target.value = ''
+        setUploadedVideos((videos) => {
+          const nextVideos = [...videos]
+          nextVideos[index] = null
+          return nextVideos
+        })
+        setValidationError('Each video must be no longer than 3 minutes. Please choose a shorter video.')
+        return
+      }
+
+      setUploadedVideos((videos) => {
+        const nextVideos = [...videos]
+        nextVideos[index] = { file, url, duration: video.duration }
+        return nextVideos
+      })
+    }
+    video.onerror = () => {
+      if (uploadedVideoUrls.current[index] !== url || event.target.files?.[0] !== file) {
+        URL.revokeObjectURL(url)
+        return
+      }
+
+      URL.revokeObjectURL(url)
+      uploadedVideoUrls.current[index] = ''
+      event.target.value = ''
+      setUploadedVideos((videos) => {
+        const nextVideos = [...videos]
+        nextVideos[index] = null
+        return nextVideos
+      })
+      setValidationError('This video could not be read. Please choose a valid video file.')
+    }
+    video.src = url
   }
 
   function handleAddVideoUrl() {
@@ -183,25 +260,147 @@ function ProfilePage({
     setSavedVideoUrls((urls) => urls.filter((_, urlIndex) => urlIndex !== index))
   }
 
-  function handleEditLanguages() {
-    setLanguageDraft(profileDetails.languages)
+  function openSectionEditor(sectionId) {
+    if (editingSection === sectionId) {
+      closeSectionEditor()
+      return
+    }
+
+    uploadedVideoUrls.current.forEach((url) => {
+      if (url) URL.revokeObjectURL(url)
+    })
+    uploadedVideoUrls.current = []
+    setSelectedLanguages(profileDetails.languages)
     setOtherLanguageDraft(profileDetails.otherLanguage)
-    setIsEditingLanguages(true)
+    setSelectedTalents(profileDetails.talents)
+    setSelectedWorkTypes(profileDetails.workTypes || [])
+    setSavedVideoUrls(profileDetails.videoUrls)
+    setVideoUrlInput('')
+    setVideoUrlError('')
+    setValidationError('')
+    setUploadedVideos([null, null, null])
+    setEditingSection(sectionId)
   }
 
-  function handleSaveLanguages() {
-    setProfileDetails((details) => ({
-      ...details,
-      languages: languageDraft,
-      otherLanguage: languageDraft.includes('Other') ? otherLanguageDraft.trim() : '',
-    }))
-    setSelectedLanguages(languageDraft)
-    setIsEditingLanguages(false)
+  function closeSectionEditor() {
+    uploadedVideoUrls.current.forEach((url) => {
+      if (url) URL.revokeObjectURL(url)
+    })
+    uploadedVideoUrls.current = []
+    setUploadedVideos([null, null, null])
+    setEditingSection('')
+    setValidationError('')
+  }
+
+  function saveSectionEditor() {
+    if (editingSection === 'talents') {
+      setProfileDetails((details) => ({ ...details, talents: selectedTalents }))
+    } else if (editingSection === 'workTypes') {
+      setProfileDetails((details) => ({ ...details, workTypes: selectedWorkTypes }))
+    } else if (editingSection === 'languages') {
+      setProfileDetails((details) => ({
+        ...details,
+        languages: selectedLanguages,
+        otherLanguage: selectedLanguages.includes('Other') ? otherLanguageDraft.trim() : '',
+      }))
+    } else if (editingSection === 'videoLinks') {
+      setProfileDetails((details) => ({ ...details, videoUrls: savedVideoUrls }))
+    } else if (editingSection === 'videos') {
+      const pendingVideos = uploadedVideos.filter(Boolean)
+      const invalidVideo = pendingVideos.find((video) => (
+        video.file.size > MAX_VIDEO_SIZE
+        || video.duration === undefined
+        || video.duration > MAX_VIDEO_DURATION
+      ))
+
+      if (invalidVideo) {
+        setValidationError(
+          invalidVideo.duration === undefined
+            ? 'Please wait for the selected video to finish processing.'
+            : 'Each video must be no larger than 5 MB and no longer than 3 minutes.',
+        )
+        return
+      }
+
+      setProfileDetails((details) => ({
+        ...details,
+        videos: [...details.videos, ...pendingVideos].slice(0, 3),
+      }))
+      uploadedVideoUrls.current = []
+    }
+
+    setEditingSection('')
+  }
+
+  function handleEditProfile() {
+    setEditingSection('')
+    setSelectedLanguages(profileDetails.languages)
+    setOtherLanguageDraft(profileDetails.otherLanguage)
+    setSelectedTalents(profileDetails.talents)
+    setSavedVideoUrls(profileDetails.videoUrls)
+    setVideoUrlInput('')
+    setVideoUrlError('')
+    setProfileFormKey((key) => key + 1)
+    setIsEditingProfile(true)
   }
 
   function handleReferenceSubmit(event) {
     event.preventDefault()
     setSubmittedReferenceId(referenceId.trim())
+  }
+
+  function openExperienceModal(experience = null) {
+    setEditingExperienceId(experience?.id ?? null)
+    setIsExperienceModalOpen(true)
+  }
+
+  function handleExperienceSubmit(event) {
+    event.preventDefault()
+    const formData = new FormData(event.currentTarget)
+    const startDate = formData.get('startDate')
+    const endDate = formData.get('endDate')
+
+    if (endDate < startDate) {
+      const endDateInput = event.currentTarget.elements.namedItem('endDate')
+      endDateInput.setCustomValidity('End date must be on or after the start date.')
+      endDateInput.reportValidity()
+      return
+    }
+
+    const experience = {
+      id: editingExperienceId ?? `${Date.now()}`,
+      projectName: formData.get('projectName')?.toString().trim() || '',
+      organizationName: formData.get('organizationName')?.toString().trim() || '',
+      location: formData.get('location')?.toString().trim() || '',
+      workedAs: formData.get('workedAs')?.toString().trim() || '',
+      startDate,
+      endDate,
+      highlights: formData.get('highlights')?.toString().trim() || '',
+    }
+
+    setProfileDetails((details) => ({
+      ...details,
+      experiences: editingExperienceId
+        ? (details.experiences || []).map((item) => (
+          item.id === editingExperienceId ? experience : item
+        ))
+        : [...(details.experiences || []), experience],
+    }))
+    setIsExperienceModalOpen(false)
+    setEditingExperienceId(null)
+  }
+
+  function handleExperienceDelete() {
+    if (editingExperienceId === null) return
+
+    setProfileDetails((details) => ({
+      ...details,
+      experiences: (details.experiences || []).filter(
+        (experience) => experience.id !== editingExperienceId,
+      ),
+    }))
+    setIsExperienceModalOpen(false)
+    setEditingExperienceId(null)
   }
 
   function handleSubmit(event) {
@@ -211,18 +410,25 @@ function ProfilePage({
 
     const form = event.currentTarget
     const videoInputs = Array.from(form.querySelectorAll('input[type="file"][data-video]'))
-    const oversizedVideoIndex = uploadedVideos.findIndex(
-      (video) => video && video.file.size > MAX_VIDEO_SIZE,
-    )
+    const invalidVideoIndex = uploadedVideos.findIndex((video) => video && (
+      video.file.size > MAX_VIDEO_SIZE
+      || video.duration === undefined
+      || video.duration > MAX_VIDEO_DURATION
+    ))
 
-    if (oversizedVideoIndex !== -1) {
-      videoInputs[oversizedVideoIndex].focus()
-      setValidationError('Each video must be no larger than 5 MB. Please choose a smaller video file.')
+    if (invalidVideoIndex !== -1) {
+      videoInputs[invalidVideoIndex].focus()
+      setValidationError(
+        uploadedVideos[invalidVideoIndex].duration === undefined
+          ? 'Please wait for the selected video to finish processing.'
+          : 'Each video must be no larger than 5 MB and no longer than 3 minutes.',
+      )
       return
     }
 
     const formData = new FormData(form)
-    setProfileDetails({
+    setProfileDetails((details) => ({
+      ...details,
       userId: formData.get('userId')?.trim() || '',
       name: formData.get('name') || '',
       phone: formData.get('phone')?.trim() || '',
@@ -230,32 +436,27 @@ function ProfilePage({
       experience: formData.get('experience') || '',
       address: formData.get('address') || '',
       languages: selectedLanguages,
-      otherLanguage: profileDetails.otherLanguage,
-      talents: selectedTalents,
-      workTypes: selectedWorkTypes,
-      videos: uploadedVideos.filter(Boolean),
-      videoUrls: savedVideoUrls,
-    })
+      otherLanguage: selectedLanguages.includes('Other') ? otherLanguageDraft.trim() : '',
+    }))
     setIsEditingProfile(false)
   }
 
   return (
     <div className="profile-page-content">
         <section className="artist-profile" id="artist-profile" aria-labelledby="preview-title">
-          <div
-            className={`artist-cover ${coverPreview ? 'has-cover-image' : 'has-default-banner'}`}
-            style={{
-              backgroundImage: coverPreview
-                ? `linear-gradient(rgba(37, 25, 25, 0.12), rgba(37, 25, 25, 0.12)), url("${coverPreview}")`
-                : 'url("/Logo.png")',
-            }}
-          >
-          </div>
+          <div className="artist-cover has-default-banner" />
 
           <div className="artist-identity">
             {profilePreview
               ? <img className="artist-avatar" src={profilePreview} alt={`${profileDetails.name || 'Artist'}'s profile`} />
-              : <div className="artist-avatar avatar-fallback" aria-hidden="true">{profileDetails.name?.charAt(0).toUpperCase() || '?'}</div>}
+              : (
+                <div className="artist-avatar avatar-fallback" aria-hidden="true">
+                  <svg className="profile-avatar-placeholder" viewBox="0 0 100 100" focusable="false">
+                    <circle cx="50" cy="35" r="21" />
+                    <path d="M10 96c2-23 18-39 40-39s38 16 40 39H10Z" />
+                  </svg>
+                </div>
+              )}
             <div className="artist-identity-content">
               <h2 id="preview-title">{profileDetails.name || 'Your name'}</h2>
               <p className="artist-headline">
@@ -283,9 +484,9 @@ function ProfilePage({
                 <button
                   className="identity-edit-button"
                   type="button"
-                  onClick={() => setIsEditingProfile(true)}
+                  onClick={handleEditProfile}
                 >
-                  <span aria-hidden="true">✎</span> Edit
+                  <span aria-hidden="true">✎</span> Edit profile
                 </button>
               )}
             </div>
@@ -293,14 +494,34 @@ function ProfilePage({
 
           <div className="artist-content">
             <div className="artist-main">
-              <aside className="work-status-card">
-                <span className="status-dot" aria-hidden="true" />
-                <div>
-                  <strong>Worked in</strong>
-                  <p>{profileDetails.workTypes.length > 0 ? profileDetails.workTypes.join(' · ') : 'Add your previous work in Edit profile'}</p>
-                </div>
-              </aside>
-
+              <section className="artist-section">
+                <PreviewSectionHeading isOwner={isOwner} onEdit={openSectionEditor} sectionId="workTypes">
+                  Worked in
+                </PreviewSectionHeading>
+                {(profileDetails.workTypes || []).length > 0 ? (
+                  <div className="profile-tags">
+                    {(profileDetails.workTypes || []).map((workType) => <span key={workType}>{workType}</span>)}
+                  </div>
+                ) : (
+                  <p className="profile-empty-hint">
+                    {isOwner ? 'Select Edit to add your previous work types.' : 'No previous work types added yet.'}
+                  </p>
+                )}
+                {editingSection === 'workTypes' && (
+                  <div className="preview-inline-editor">
+                    <SelectionGroup
+                      label="Previous Worked in"
+                      options={workTypes}
+                      selected={selectedWorkTypes}
+                      onChange={setSelectedWorkTypes}
+                    />
+                    <div className="language-edit-actions">
+                      <button className="secondary-button" type="button" onClick={closeSectionEditor}>Cancel</button>
+                      <button className="contact-button" type="button" onClick={saveSectionEditor}>Save</button>
+                    </div>
+                  </div>
+                )}
+              </section>
               <section className="artist-section insights-section" id="artist-highlights">
                 <h3>Profile highlights</h3>
                 <div className="insights-grid">
@@ -320,55 +541,33 @@ function ProfilePage({
               </section>
 
               <section className="artist-section">
-                <h3>Talents</h3>
+                <PreviewSectionHeading isOwner={isOwner} onEdit={openSectionEditor} sectionId="talents">
+                  Talents
+                </PreviewSectionHeading>
                 {profileDetails.talents.length > 0
                   ? <div className="profile-tags">{profileDetails.talents.map((talent) => <span key={talent}>{talent}</span>)}</div>
-                  : <p className="profile-empty-hint">Add your talents in Edit profile.</p>}
+                  : <p className="profile-empty-hint">Select Edit to add your talents.</p>}
+                {editingSection === 'talents' && (
+                  <div className="preview-inline-editor">
+                    <SelectionGroup
+                      label="Your talents"
+                      options={talents}
+                      selected={selectedTalents}
+                      onChange={setSelectedTalents}
+                    />
+                    <div className="language-edit-actions">
+                      <button className="secondary-button" type="button" onClick={closeSectionEditor}>Cancel</button>
+                      <button className="contact-button" type="button" onClick={saveSectionEditor}>Save</button>
+                    </div>
+                  </div>
+                )}
               </section>
 
               <section className="artist-section" id="artist-languages">
-                <div className="language-section-heading">
-                  <h3>Languages</h3>
-                  {isOwner && !isEditingLanguages && (
-                    <button className="language-edit-button" type="button" onClick={handleEditLanguages}>
-                      Edit
-                    </button>
-                  )}
-                </div>
-                {isOwner && isEditingLanguages ? (
-                  <>
-                    <SelectionGroup
-                      label="Languages you know"
-                      options={languages}
-                      selected={languageDraft}
-                      onChange={setLanguageDraft}
-                    />
-                    {languageDraft.includes('Other') && (
-                      <div className="language-other-field">
-                        <label htmlFor="other-language">Specify your language</label>
-                        <input
-                          id="other-language"
-                          type="text"
-                          value={otherLanguageDraft}
-                          onChange={(event) => setOtherLanguageDraft(event.target.value)}
-                          placeholder="Enter another language"
-                        />
-                      </div>
-                    )}
-                    <div className="language-edit-actions">
-                      <button
-                        className="secondary-button"
-                        type="button"
-                        onClick={() => setIsEditingLanguages(false)}
-                      >
-                        Cancel
-                      </button>
-                      <button className="contact-button" type="button" onClick={handleSaveLanguages}>
-                        Save
-                      </button>
-                    </div>
-                  </>
-                ) : profileDetails.languages.length > 0 ? (
+                <PreviewSectionHeading isOwner={isOwner} onEdit={openSectionEditor} sectionId="languages">
+                  Languages
+                </PreviewSectionHeading>
+                {profileDetails.languages.length > 0 ? (
                   <div className="profile-tags">
                     {profileDetails.languages.map((language) => (
                       <span key={language}>
@@ -380,13 +579,41 @@ function ProfilePage({
                   </div>
                 ) : (
                   <p className="profile-empty-hint">
-                    {isOwner ? 'Select Edit to add your languages.' : 'No languages added yet.'}
+                    {isOwner ? 'Add languages in Edit profile.' : 'No languages added yet.'}
                   </p>
+                )}
+                {editingSection === 'languages' && (
+                  <div className="preview-inline-editor">
+                    <SelectionGroup
+                      label="Languages you know"
+                      options={languages}
+                      selected={selectedLanguages}
+                      onChange={setSelectedLanguages}
+                    />
+                    {selectedLanguages.includes('Other') && (
+                      <div className="form-field language-other-field">
+                        <label htmlFor="inline-other-language">Specify your language</label>
+                        <input
+                          id="inline-other-language"
+                          type="text"
+                          value={otherLanguageDraft}
+                          onChange={(event) => setOtherLanguageDraft(event.target.value)}
+                          placeholder="Enter another language"
+                        />
+                      </div>
+                    )}
+                    <div className="language-edit-actions">
+                      <button className="secondary-button" type="button" onClick={closeSectionEditor}>Cancel</button>
+                      <button className="contact-button" type="button" onClick={saveSectionEditor}>Save</button>
+                    </div>
+                  </div>
                 )}
               </section>
 
               <section className="artist-section" id="artist-demo-videos">
-                <h3>Demo videos</h3>
+                <PreviewSectionHeading isOwner={isOwner} onEdit={openSectionEditor} sectionId="videos">
+                  Demo videos
+                </PreviewSectionHeading>
                 {profileDetails.videos.length > 0 ? <div className="demo-video-list">
                   {profileDetails.videos.map((video, index) => (
                     <div className="demo-video-item" key={`${video}-${index}`}>
@@ -400,11 +627,107 @@ function ProfilePage({
                       <div><strong>Demo video {index + 1}</strong><span>{video.file.name}</span></div>
                     </div>
                   ))}
-                </div> : <p className="profile-empty-hint">Add your demo videos in Edit profile.</p>}
+                </div> : <p className="profile-empty-hint">Select Edit to add demo videos.</p>}
+                {editingSection === 'videos' && (
+                  <div className="preview-inline-editor">
+                    {profileDetails.videos.map((video, index) => (
+                      <div className="inline-video-existing" key={`${video.url}-${index}`}>
+                        <span>{video.file.name}</span>
+                        <button
+                          className="delete-video-url-button"
+                          type="button"
+                          onClick={() => setProfileDetails((details) => ({
+                            ...details,
+                            videos: details.videos.filter((_, videoIndex) => videoIndex !== index),
+                          }))}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                    {Array.from(
+                      { length: Math.max(0, 3 - profileDetails.videos.length) },
+                      (_, index) => index,
+                    ).map((index) => (
+                      <div className="video-upload-card" key={index}>
+                        <label htmlFor={`inline-video-${index}`}>
+                          <span className="video-label">Add demo video</span>
+                          <span className="video-prompt">Choose a video to upload</span>
+                        </label>
+                        <input
+                          id={`inline-video-${index}`}
+                          type="file"
+                          accept="video/*"
+                          onChange={(event) => handleVideoChange(event, index)}
+                        />
+                        {uploadedVideos[index] && (
+                          <span className="field-hint">{uploadedVideos[index].file.name}</span>
+                        )}
+                      </div>
+                    ))}
+                    {validationError && <p className="submit-error" role="alert">{validationError}</p>}
+                    <div className="language-edit-actions">
+                      <button className="secondary-button" type="button" onClick={closeSectionEditor}>Cancel</button>
+                      <button className="contact-button" type="button" onClick={saveSectionEditor}>Save</button>
+                    </div>
+                  </div>
+                )}
               </section>
-              {profileDetails.videoUrls.length > 0 && (
-                <section className="artist-section" id="artist-video-links">
-                  <h3>Video links</h3>
+              <section className="artist-section experience-section" id="artist-experience">
+                <div className="experience-section-heading">
+                  <h3>Experience</h3>
+                  {isOwner && (
+                    <button
+                      className="language-edit-button"
+                      type="button"
+                      onClick={() => openExperienceModal()}
+                    >
+                      Add
+                    </button>
+                  )}
+                </div>
+                {(profileDetails.experiences || []).length > 0 ? (
+                  <div className="experience-list">
+                    {profileDetails.experiences.map((experience) => (
+                      <article className="experience-entry" key={experience.id}>
+                        <div className="experience-entry-heading">
+                          <div>
+                            <h4>{experience.projectName || experience.movieName}</h4>
+                            <p>
+                              {experience.workedAs}
+                              {experience.organizationName && ` · ${experience.organizationName}`}
+                            </p>
+                          </div>
+                          {isOwner && (
+                            <button
+                              className="language-edit-button"
+                              type="button"
+                              onClick={() => openExperienceModal(experience)}
+                            >
+                              Edit
+                            </button>
+                          )}
+                        </div>
+                        <p className="experience-entry-meta">
+                          {experience.location} · {experience.startDate} – {experience.endDate}
+                        </p>
+                        {experience.highlights && (
+                          <p className="experience-entry-highlights">{experience.highlights}</p>
+                        )}
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="profile-empty-hint">
+                    {isOwner ? 'Add a movie or project to your experience.' : 'No experience added yet.'}
+                  </p>
+                )}
+              </section>
+              <section className="artist-section" id="artist-video-links">
+                <PreviewSectionHeading isOwner={isOwner} onEdit={openSectionEditor} sectionId="videoLinks">
+                  Video links
+                </PreviewSectionHeading>
+                {profileDetails.videoUrls.length > 0 ? (
                   <div className="artist-links">
                     {profileDetails.videoUrls.map((url, index) => (
                       <a href={url} target="_blank" rel="noreferrer" key={`${url}-${index}`}>
@@ -412,23 +735,59 @@ function ProfilePage({
                       </a>
                     ))}
                   </div>
-                </section>
-              )}
+                ) : (
+                  <p className="profile-empty-hint">Select Edit to add video links.</p>
+                )}
+                {editingSection === 'videoLinks' && (
+                  <div className="preview-inline-editor">
+                    <div className="video-url-entry">
+                      <div className="form-field">
+                        <label htmlFor="inline-video-url">Video URL</label>
+                        <input
+                          id="inline-video-url"
+                          type="url"
+                          value={videoUrlInput}
+                          disabled={savedVideoUrls.length >= 3}
+                          placeholder="Paste video URL (https://...)"
+                          onChange={(event) => {
+                            setVideoUrlInput(event.target.value)
+                            setVideoUrlError('')
+                          }}
+                        />
+                        {videoUrlError && <span className="field-error">{videoUrlError}</span>}
+                      </div>
+                      <button
+                        className="add-video-url-button"
+                        type="button"
+                        onClick={handleAddVideoUrl}
+                        disabled={savedVideoUrls.length >= 3 || !videoUrlInput.trim()}
+                      >
+                        <span aria-hidden="true">+</span> Add URL
+                      </button>
+                    </div>
+                    {savedVideoUrls.map((url, index) => (
+                      <div className="saved-video-url" key={`${url}-${index}`}>
+                        <a href={url} target="_blank" rel="noreferrer">Video {index + 1}: {url}</a>
+                        <button
+                          className="delete-video-url-button"
+                          type="button"
+                          onClick={() => handleRemoveVideoUrl(index)}
+                          aria-label={`Delete video URL ${index + 1}`}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    ))}
+                    <div className="language-edit-actions">
+                      <button className="secondary-button" type="button" onClick={closeSectionEditor}>Cancel</button>
+                      <button className="contact-button" type="button" onClick={saveSectionEditor}>Save</button>
+                    </div>
+                  </div>
+                )}
+              </section>
             </div>
 
             <aside className="artist-sidebar" id="artist-work">
-              <section className="sidebar-card">
-                <span className="sidebar-eyebrow">WORK EXPERIENCE</span>
-                <h3>Previous work</h3>
-                <p>{profileDetails.workTypes.length > 0 ? 'Has worked in these formats:' : 'Add your previous work in Edit profile.'}</p>
-                {profileDetails.workTypes.length > 0 && <div className="profile-tags">
-                  {profileDetails.workTypes.map((workType) => <span key={workType}>{workType}</span>)}
-                </div>}
-                <div className="sidebar-location">
-                  <span aria-hidden="true">⌖</span>
-                  <p>{profileDetails.address || 'Add your location in Edit profile'}</p>
-                </div>
-              </section>
               <section className="home-promotion-card" aria-label="Sponsored movie industry promotion">
                 <div className="home-promotion-art">
                   <span className="home-promotion-label">PROMOTED</span>
@@ -453,6 +812,134 @@ function ProfilePage({
           aria-label="Close profile editor"
           onClick={() => setIsEditingProfile(false)}
         />
+      )}
+      {isExperienceModalOpen && (
+        <>
+          <button
+            className="experience-modal-backdrop"
+            type="button"
+            aria-label="Close experience form"
+            onClick={() => setIsExperienceModalOpen(false)}
+          />
+          <section
+            className="experience-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="experience-modal-title"
+          >
+            <header className="profile-modal-heading">
+              <div>
+                <span className="eyebrow">WORK EXPERIENCE</span>
+                <h2 id="experience-modal-title">
+                  {experienceBeingEdited ? 'Edit experience' : 'Add experience'}
+                </h2>
+              </div>
+              <button
+                className="profile-modal-close"
+                type="button"
+                onClick={() => setIsExperienceModalOpen(false)}
+                aria-label="Close experience form"
+              >
+                ×
+              </button>
+            </header>
+            <form className="experience-form" onSubmit={handleExperienceSubmit}>
+              <div className="experience-form-grid">
+                <label className="form-field">
+                  Project Name
+                  <input
+                    name="projectName"
+                    type="text"
+                    defaultValue={experienceBeingEdited?.projectName || experienceBeingEdited?.movieName || ''}
+                    placeholder="Enter project name"
+                    required
+                  />
+                </label>
+                <label className="form-field">
+                  Organization name
+                  <input
+                    name="organizationName"
+                    type="text"
+                    defaultValue={experienceBeingEdited?.organizationName || ''}
+                    placeholder="Enter production or organization"
+                    required
+                  />
+                </label>
+                <label className="form-field">
+                  Location
+                  <input
+                    name="location"
+                    type="text"
+                    defaultValue={experienceBeingEdited?.location || ''}
+                    placeholder="City or region"
+                    required
+                  />
+                </label>
+                <label className="form-field">
+                  Worked as
+                  <input
+                    name="workedAs"
+                    type="text"
+                    defaultValue={experienceBeingEdited?.workedAs || ''}
+                    placeholder="Your role on this project"
+                    required
+                  />
+                </label>
+                <label className="form-field">
+                  Start date
+                  <input
+                    name="startDate"
+                    type="date"
+                    defaultValue={experienceBeingEdited?.startDate || ''}
+                    required
+                  />
+                </label>
+                <label className="form-field">
+                  End date
+                  <input
+                    name="endDate"
+                    type="date"
+                    defaultValue={experienceBeingEdited?.endDate || ''}
+                    onChange={(event) => event.currentTarget.setCustomValidity('')}
+                    required
+                  />
+                </label>
+                <label className="form-field experience-highlights-field">
+                  Highlights
+                  <textarea
+                    name="highlights"
+                    defaultValue={experienceBeingEdited?.highlights || ''}
+                    placeholder="Projects, contributions, or results you achieved"
+                    rows="5"
+                  />
+                </label>
+              </div>
+              <footer className="experience-form-footer">
+                {experienceBeingEdited && (
+                  <button
+                    className="delete-video-url-button"
+                    type="button"
+                    onClick={handleExperienceDelete}
+                  >
+                    Delete
+                  </button>
+                )}
+                <div className="experience-form-actions">
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    onClick={() => setIsExperienceModalOpen(false)}
+                  >
+                    Cancel
+                  </button>
+                  <button className="contact-button" type="submit">
+                    Save experience
+                  </button>
+                </div>
+              </footer>
+            </form>
+          </section>
+        </>
       )}
       {isContactModalOpen && (
         <>
@@ -546,6 +1033,7 @@ function ProfilePage({
       )}
       {/* This is profile edit page */}
       <form
+        key={profileFormKey}
         className={`profile-form${isEditingProfile ? ' profile-modal-form' : ''}`}
         onSubmit={handleSubmit}
         hidden={!isOwner || !isEditingProfile}
@@ -609,7 +1097,13 @@ function ProfilePage({
               </div>
               <div className="form-field">
                 <label htmlFor="full-name">Full name</label>
-                <input id="full-name" name="name" type="text" placeholder="e.g. Arjun Kumar" />
+                <input
+                  id="full-name"
+                  name="name"
+                  type="text"
+                  defaultValue={profileDetails.name}
+                  placeholder="e.g. Arjun Kumar"
+                />
               </div>
               <div className="form-field">
                 <label htmlFor="phone">Phone number</label>
@@ -642,6 +1136,7 @@ function ProfilePage({
                     type="number"
                     min="0"
                     step="1"
+                    defaultValue={profileDetails.experience}
                     placeholder="0"
                   />
                   <span>years</span>
@@ -652,126 +1147,12 @@ function ProfilePage({
                 <textarea
                   id="candidate-address"
                   name="address"
+                  defaultValue={profileDetails.address}
                   placeholder="Street address, city, state, postal code"
                   rows="3"
                 />
               </div>
             </div>
-          </div>
-          <div className="video-url-section">
-            <div className="video-url-heading">
-              <div>
-                <h3>Video URLs <span className="optional-label">Optional</span></h3>
-                <p>Paste a video link and click Add URL. You can add up to three links.</p>
-              </div>
-            </div>
-            <div className="video-url-entry">
-              <div className="form-field">
-                <label htmlFor="video-url-input">Video URL</label>
-                <input
-                  id="video-url-input"
-                  type="url"
-                  value={videoUrlInput}
-                  disabled={savedVideoUrls.length >= 3}
-                  placeholder="Paste video URL (https://...)"
-                  onChange={(event) => {
-                    setVideoUrlInput(event.target.value)
-                    setVideoUrlError('')
-                  }}
-                />
-                {videoUrlError && <span className="field-error">{videoUrlError}</span>}
-              </div>
-              <button
-                className="add-video-url-button"
-                type="button"
-                onClick={handleAddVideoUrl}
-                disabled={savedVideoUrls.length >= 3 || !videoUrlInput.trim()}
-              >
-                <span aria-hidden="true">+</span> Add URL
-              </button>
-            </div>
-            {savedVideoUrls.length > 0 && (
-              <div className="saved-video-urls" aria-live="polite">
-                <strong>Saved temporarily ({savedVideoUrls.length})</strong>
-                {savedVideoUrls.map((url, index) => (
-                  <div className="saved-video-url" key={`${url}-${index}`}>
-                    <a href={url} target="_blank" rel="noreferrer">
-                      <span aria-hidden="true">▶</span> Video {index + 1} · {url}
-                    </a>
-                    <button
-                      className="delete-video-url-button"
-                      type="button"
-                      onClick={() => handleRemoveVideoUrl(index)}
-                      aria-label={`Delete video URL ${index + 1}`}
-                    >
-                      Delete
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </section>
-
-        <section className="form-section">
-          <div className="section-heading">
-            <span className="section-number">02</span>
-            <div>
-              <h2>Your skills &amp; interests</h2>
-              <p>Select all talents and work types that apply.</p>
-            </div>
-          </div>
-          <SelectionGroup
-            label="Your talents"
-            options={talents}
-            selected={selectedTalents}
-            onChange={setSelectedTalents}
-          />
-          <SelectionGroup
-            label="Worked in"
-            options={workTypes}
-            selected={selectedWorkTypes}
-            onChange={setSelectedWorkTypes}
-          />
-        </section>
-
-        <section className="form-section video-section">
-          <div className="section-heading">
-            <span className="section-number">03</span>
-            <div>
-              <h2>Show us what you can do</h2>
-              <p>Upload up to three videos so casting teams can see you in action.</p>
-            </div>
-          </div>
-          <div className="video-grid">
-            {[1, 2, 3].map((number) => (
-              <div className="video-upload-card" key={number}>
-                <label htmlFor={`video-${number}`}>
-                  <span className="video-icon" aria-hidden="true">▶</span>
-                  <span className="video-label">Video {number}</span>
-                  <span className="video-prompt">Choose a video to upload</span>
-                </label>
-                <input
-                  id={`video-${number}`}
-                  name={`video-${number}`}
-                  type="file"
-                  accept="video/*"
-                  data-video
-                  onChange={(event) => handleVideoChange(event, number - 1)}
-                />
-                {uploadedVideos[number - 1] && (
-                  <video
-                    className="video-upload-preview"
-                    controls
-                    playsInline
-                    preload="metadata"
-                    src={uploadedVideos[number - 1].url}
-                    aria-label={`Preview ${uploadedVideos[number - 1].file.name}`}
-                  />
-                )}
-                <span className="field-hint">Video file · 5 MB maximum</span>
-              </div>
-            ))}
           </div>
         </section>
 
