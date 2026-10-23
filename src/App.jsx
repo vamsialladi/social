@@ -287,12 +287,12 @@ function App() {
               email: profile.email || '',
               experience: profile.experience || '',
               address: profile.address || '',
-              languages: profile.languages || [],
+              languages: Array.isArray(profile.languages) ? profile.languages : [],
               otherLanguage: profile.otherLanguage || '',
-              talents: profile.talents || [],
-              workTypes: profile.workTypes || [],
-              videos: profile.demoVideos || [],
-              videoUrls: profile.videoUrls || [],
+              talents: Array.isArray(profile.talents) ? profile.talents : [],
+              workTypes: Array.isArray(profile.workTypes) ? profile.workTypes : [],
+              videos: Array.isArray(profile.demoVideos) ? profile.demoVideos : [],
+              videoUrls: Array.isArray(profile.videoUrls) ? profile.videoUrls : [],
             })
             if (profile.profileImageUrl) {
               setProfilePreview(profile.profileImageUrl)

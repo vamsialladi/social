@@ -104,12 +104,18 @@ function ProfilePage({
   const [referenceId, setReferenceId] = useState('')
   const [submittedReferenceId, setSubmittedReferenceId] = useState('')
 
+  const talentsList = Array.isArray(profileDetails?.talents) ? profileDetails.talents : []
+  const workTypesList = Array.isArray(profileDetails?.workTypes) ? profileDetails.workTypes : []
+  const languagesList = Array.isArray(profileDetails?.languages) ? profileDetails.languages : []
+  const videosList = Array.isArray(profileDetails?.videos) ? profileDetails.videos : []
+  const videoUrlsList = Array.isArray(profileDetails?.videoUrls) ? profileDetails.videoUrls : []
+
   useEffect(() => {
     if (profileDetails) {
-      if (profileDetails.languages) setSelectedLanguages(profileDetails.languages)
-      if (profileDetails.talents) setSelectedTalents(profileDetails.talents)
-      if (profileDetails.workTypes) setSelectedWorkTypes(profileDetails.workTypes)
-      if (profileDetails.videoUrls) setSavedVideoUrls(profileDetails.videoUrls)
+      if (Array.isArray(profileDetails.languages)) setSelectedLanguages(profileDetails.languages)
+      if (Array.isArray(profileDetails.talents)) setSelectedTalents(profileDetails.talents)
+      if (Array.isArray(profileDetails.workTypes)) setSelectedWorkTypes(profileDetails.workTypes)
+      if (Array.isArray(profileDetails.videoUrls)) setSavedVideoUrls(profileDetails.videoUrls)
     }
   }, [profileDetails])
 
@@ -388,11 +394,11 @@ function ProfilePage({
             <div className="artist-identity-content">
               <h2 id="preview-title">{profileDetails.name || 'Your name'}</h2>
               <p className="artist-headline">
-                {profileDetails.talents.length > 0 ? profileDetails.talents.join(' · ') : 'Add your talents in Edit profile'}
+                {talentsList.length > 0 ? talentsList.join(' · ') : 'Add your talents in Edit profile'}
               </p>
-              <p className="artist-location">{profileDetails.address || 'Add your location in Edit profile'}</p>
+              <p className="artist-location">{profileDetails?.address || 'Add your location in Edit profile'}</p>
               <p className="artist-experience">
-                {profileDetails.experience ? `${profileDetails.experience} years of experience` : 'Add your experience in Edit profile'}
+                {profileDetails?.experience ? `${profileDetails.experience} years of experience` : 'Add your experience in Edit profile'}
               </p>
               {isSubmitted && <p className="profile-confirmation" role="status">Your profile preview is confirmed.</p>}
             </div>
@@ -426,7 +432,7 @@ function ProfilePage({
                 <span className="status-dot" aria-hidden="true" />
                 <div>
                   <strong>Previous Worked in</strong>
-                  <p>{profileDetails.workTypes.length > 0 ? profileDetails.workTypes.join(' · ') : 'Add your previous work in Edit profile'}</p>
+                  <p>{workTypesList.length > 0 ? workTypesList.join(' · ') : 'Add your previous work in Edit profile'}</p>
                 </div>
               </aside>
 
@@ -435,23 +441,23 @@ function ProfilePage({
                 <div className="insights-grid">
                   <div className="insight-item">
                     <span className="insight-icon" aria-hidden="true">✦</span>
-                    <div><strong>{profileDetails.experience ? `${profileDetails.experience} years` : '—'}</strong><span>Experience</span></div>
+                    <div><strong>{profileDetails?.experience ? `${profileDetails.experience} years` : '—'}</strong><span>Experience</span></div>
                   </div>
                   <div className="insight-item">
                     <span className="insight-icon" aria-hidden="true">◎</span>
-                    <div><strong>{profileDetails.languages.length || '—'}</strong><span>Languages</span></div>
+                    <div><strong>{languagesList.length || '—'}</strong><span>Languages</span></div>
                   </div>
                   <div className="insight-item">
                     <span className="insight-icon" aria-hidden="true">▶</span>
-                    <div><strong>{profileDetails.videos.length || '—'}</strong><span>Demo videos</span></div>
+                    <div><strong>{videosList.length || '—'}</strong><span>Demo videos</span></div>
                   </div>
                 </div>
               </section>
 
               <section className="artist-section">
                 <h3>Talents</h3>
-                {profileDetails.talents.length > 0
-                  ? <div className="profile-tags">{profileDetails.talents.map((talent) => <span key={talent}>{talent}</span>)}</div>
+                {talentsList.length > 0
+                  ? <div className="profile-tags">{talentsList.map((talent) => <span key={talent}>{talent}</span>)}</div>
                   : <p className="profile-empty-hint">Add your talents in Edit profile.</p>}
               </section>
 
@@ -497,11 +503,11 @@ function ProfilePage({
                       </button>
                     </div>
                   </>
-                ) : profileDetails.languages.length > 0 ? (
+                ) : languagesList.length > 0 ? (
                   <div className="profile-tags">
-                    {profileDetails.languages.map((language) => (
+                    {languagesList.map((language) => (
                       <span key={language}>
-                        {language === 'Other' && profileDetails.otherLanguage
+                        {language === 'Other' && profileDetails?.otherLanguage
                           ? `Other: ${profileDetails.otherLanguage}`
                           : language}
                       </span>
@@ -516,8 +522,8 @@ function ProfilePage({
 
               <section className="artist-section" id="artist-demo-videos">
                 <h3>Demo videos</h3>
-                {profileDetails.videos.length > 0 ? <div className="demo-video-list">
-                  {profileDetails.videos.map((video, index) => (
+                {videosList.length > 0 ? <div className="demo-video-list">
+                  {videosList.map((video, index) => (
                     <div className="demo-video-item" key={`${video.url || video.objectKey || index}`}>
                       <video
                         controls
@@ -531,11 +537,11 @@ function ProfilePage({
                   ))}
                 </div> : <p className="profile-empty-hint">Add your demo videos in Edit profile.</p>}
               </section>
-              {profileDetails.videoUrls.length > 0 && (
+              {videoUrlsList.length > 0 && (
                 <section className="artist-section" id="artist-video-links">
                   <h3>Video links</h3>
                   <div className="artist-links">
-                    {profileDetails.videoUrls.map((url, index) => (
+                    {videoUrlsList.map((url, index) => (
                       <a href={url} target="_blank" rel="noreferrer" key={`${url}-${index}`}>
                         Video {index + 1}: {url}
                       </a>
@@ -549,9 +555,9 @@ function ProfilePage({
               <section className="sidebar-card">
                 <span className="sidebar-eyebrow">WORK EXPERIENCE</span>
                 <h3>Previous work</h3>
-                <p>{profileDetails.workTypes.length > 0 ? 'Has worked in these formats:' : 'Add your previous work in Edit profile.'}</p>
-                {profileDetails.workTypes.length > 0 && <div className="profile-tags">
-                  {profileDetails.workTypes.map((workType) => <span key={workType}>{workType}</span>)}
+                <p>{workTypesList.length > 0 ? 'Has worked in these formats:' : 'Add your previous work in Edit profile.'}</p>
+                {workTypesList.length > 0 && <div className="profile-tags">
+                  {workTypesList.map((workType) => <span key={workType}>{workType}</span>)}
                 </div>}
                 <div className="sidebar-location">
                   <span aria-hidden="true">⌖</span>

@@ -18,13 +18,16 @@ function Notifications({ profileDetails, profilePreview, onViewProfile, onManage
     }
     loadNotifications()
   }, [])
-  const name = profileDetails.name.trim() || 'Your name'
+  const name = (profileDetails?.name || '').trim() || 'Your name'
   const initials = name === 'Your name' ? '?' : name.charAt(0).toUpperCase()
+  const languagesList = Array.isArray(profileDetails?.languages) ? profileDetails.languages : []
+  const workTypesList = Array.isArray(profileDetails?.workTypes) ? profileDetails.workTypes : []
+  const talentsList = Array.isArray(profileDetails?.talents) ? profileDetails.talents : []
   const languages = [
-    ...profileDetails.languages.filter((language) => language !== 'Other'),
-    ...(profileDetails.otherLanguage ? [profileDetails.otherLanguage] : []),
+    ...languagesList.filter((language) => language !== 'Other'),
+    ...(profileDetails?.otherLanguage ? [profileDetails.otherLanguage] : []),
   ]
-  const profileTags = [...languages, ...profileDetails.workTypes]
+  const profileTags = [...languages, ...workTypesList]
 
   return (
     <section className="notifications-page" aria-label="Notifications page">
@@ -50,11 +53,11 @@ function Notifications({ profileDetails, profilePreview, onViewProfile, onManage
                 : initials}
             </div>
             <h1>{name}</h1>
-            {profileDetails.talents.length > 0 && (
-              <p className="notifications-profile-headline">{profileDetails.talents.join(' · ')}</p>
+            {talentsList.length > 0 && (
+              <p className="notifications-profile-headline">{talentsList.join(' · ')}</p>
             )}
-            {profileDetails.address && <p>{profileDetails.address}</p>}
-            {profileDetails.experience && (
+            {profileDetails?.address && <p>{profileDetails.address}</p>}
+            {profileDetails?.experience && (
               <p>{profileDetails.experience} years of experience</p>
             )}
             {profileTags.length > 0 && (

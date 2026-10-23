@@ -21,11 +21,14 @@ function Home({
   const videoInputRef = useRef(null)
   const mediaUrls = useRef([])
 
-  const name = profileDetails.name.trim() || 'Your name'
+  const name = (profileDetails?.name || '').trim() || 'Your name'
   const initials = name === 'Your name' ? '?' : name.charAt(0).toUpperCase()
+  const talentsList = Array.isArray(profileDetails?.talents) ? profileDetails.talents : []
+  const workTypesList = Array.isArray(profileDetails?.workTypes) ? profileDetails.workTypes : []
+  const languagesList = Array.isArray(profileDetails?.languages) ? profileDetails.languages : []
   const languages = [
-    ...profileDetails.languages.filter((language) => language !== 'Other'),
-    ...(profileDetails.otherLanguage ? [profileDetails.otherLanguage] : []),
+    ...languagesList.filter((language) => language !== 'Other'),
+    ...(profileDetails?.otherLanguage ? [profileDetails.otherLanguage] : []),
   ]
 
   useEffect(() => () => {
@@ -235,16 +238,16 @@ function Home({
                   : initials}
               </div>
               <h1>{name}</h1>
-              {profileDetails.talents.length > 0 && (
-                <p className="home-profile-headline">{profileDetails.talents.join(' · ')}</p>
+              {talentsList.length > 0 && (
+                <p className="home-profile-headline">{talentsList.join(' · ')}</p>
               )}
-              {profileDetails.address && <p>{profileDetails.address}</p>}
-              {profileDetails.experience && (
+              {profileDetails?.address && <p>{profileDetails.address}</p>}
+              {profileDetails?.experience && (
                 <p>{profileDetails.experience} years of experience</p>
               )}
-              {(languages.length > 0 || profileDetails.workTypes.length > 0) && (
+              {(languages.length > 0 || workTypesList.length > 0) && (
                 <div className="home-profile-tags">
-                  {[...languages, ...profileDetails.workTypes].map((item) => (
+                  {[...languages, ...workTypesList].map((item) => (
                     <span key={item}>{item}</span>
                   ))}
                 </div>
@@ -386,8 +389,8 @@ function Home({
                     </div>
                     <div>
                       <strong>{post.authorName || name}</strong>
-                      {profileDetails.talents.length > 0 && (
-                        <span>{profileDetails.talents.join(' · ')}</span>
+                      {talentsList.length > 0 && (
+                        <span>{talentsList.join(' · ')}</span>
                       )}
                       <time>{post.createdAt}</time>
                     </div>

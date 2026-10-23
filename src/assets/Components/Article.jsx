@@ -9,7 +9,7 @@ function Article({ profileDetails, profilePreview, hidden, onBack, onPublish }) 
   const fileInputRef = useRef(null)
   const mediaKindRef = useRef('')
   const mediaRef = useRef(null)
-  const name = profileDetails.name.trim() || 'Your name'
+  const name = (profileDetails?.name || '').trim() || 'Your name'
   const initials = name === 'Your name' ? '?' : name.charAt(0).toUpperCase()
 
   useEffect(() => {
