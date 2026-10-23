@@ -1,10 +1,39 @@
-# TrueHunt Backend (Spring Boot)
+# TrueHunt (Full-Stack: React + Spring Boot)
 
-A production-ready REST API backend for **TrueHunt**, built using **Java 17/21**, **Spring Boot 3.3.4**, **Spring Security**, **JWT Authentication**, and **Spring Data JPA** with dual-profile support for **MySQL** and **H2** (zero-setup in-memory dev).
+Full-stack application for **TrueHunt**, containing:
+- **Frontend**: React 19 Single Page Application built with Vite
+- **Backend**: Spring Boot 3.3.4 REST API with Spring Security, JWT, and JPA (MySQL & H2)
 
 ---
 
-## 🌟 Key Features Implemented
+## 🚀 Running the Project
+
+### 1. Frontend (React + Vite)
+```bash
+npm install
+npm run dev
+```
+The React frontend runs on `http://localhost:5173`.
+
+### 2. Backend (Spring Boot)
+- **Run with H2 In-Memory (Zero Setup):**
+  ```bash
+  mvn spring-boot:run
+  ```
+- **Run with MySQL:**
+  ```bash
+  mvn spring-boot:run -Dspring-boot.run.profiles=mysql
+  ```
+The REST API runs on `http://localhost:8080`.
+
+### 3. Run Backend Test Suite (44 tests)
+```bash
+mvn test
+```
+
+---
+
+## 🌟 Key Backend Features Implemented
 
 1. **Authentication & Authorization (`/api/auth`)**:
    - Register (`POST /api/auth/register`): Unique email validation, BCrypt password hashing, creates initial empty profile.
@@ -46,77 +75,7 @@ A production-ready REST API backend for **TrueHunt**, built using **Java 17/21**
 
 ---
 
-## 🏗️ Technology Stack
-
-- **Language:** Java 17+ (LTS)
-- **Framework:** Spring Boot 3.3.4
-- **Security:** Spring Security 6 with JJWT (HMAC SHA-512)
-- **Persistence:** Spring Data JPA with Hibernate
-- **Database:** 
-  - `dev` profile: H2 in-memory (zero installation required)
-  - `mysql` profile: MySQL 8+
-- **Build Tool:** Apache Maven
-
----
-
-## 🚀 Getting Started
-
-### 1. Running Locally (Zero-Setup with H2)
-
-By default, the active profile is `dev` using H2 in-memory database:
-```bash
-mvn spring-boot:run
-```
-The server will start on `http://localhost:8080`.
-H2 Console is available at `http://localhost:8080/h2-console` (JDBC URL: `jdbc:h2:mem:truehunt`, User: `sa`, Password: `<empty>`).
-
-### 2. Running with MySQL
-
-To connect to your local MySQL 8 instance:
-1. Ensure the MySQL service (e.g. `MySQL80`) is running on port 3306.
-2. In `src/main/resources/application.yml` under profile `mysql`, update password if needed.
-3. Start the application with the `mysql` profile:
-```bash
-mvn spring-boot:run -Dspring-boot.run.profiles=mysql
-```
-
-### 3. Running Automated Tests
-
-Run the full integration test suite:
-```bash
-mvn test
-```
-
----
-
-## 📡 API Reference Summary
-
-### Response Envelopes
-
-#### Success Response Shape
-```json
-{
-  "data": {},
-  "meta": {
-    "nextCursor": "2026-10-23T11:00:00Z"
-  }
-}
-```
-
-#### Error Response Shape
-```json
-{
-  "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "Check the submitted fields.",
-    "fields": {
-      "content": "Content is required."
-    }
-  }
-}
-```
-
-### Endpoints Table
+## 📡 Endpoints Table
 
 | Method | Endpoint | Description | Auth Required |
 |---|---|---|---|
