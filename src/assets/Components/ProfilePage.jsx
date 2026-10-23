@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import './StylePage.css'
+import { mediaApi, profileApi } from '../../api/client'
 
 export const emptyProfileDetails = {
   userId: '',
@@ -82,6 +83,7 @@ function ProfilePage({
   setProfilePreview,
 }) {
   const [profilePic, setProfilePic] = useState(null)
+  const [coverPic, setCoverPic] = useState(null)
   const [coverPreview, setCoverPreview] = useState('')
   const [selectedLanguages, setSelectedLanguages] = useState([])
   const [languageDraft, setLanguageDraft] = useState([])
@@ -96,19 +98,30 @@ function ProfilePage({
   const [savedVideoUrls, setSavedVideoUrls] = useState([])
   const [validationError, setValidationError] = useState('')
   const [isSubmitted, setIsSubmitted] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
   const [isEditingProfile, setIsEditingProfile] = useState(false)
   const [isContactModalOpen, setIsContactModalOpen] = useState(false)
   const [referenceId, setReferenceId] = useState('')
   const [submittedReferenceId, setSubmittedReferenceId] = useState('')
+
+  useEffect(() => {
+    if (profileDetails) {
+      if (profileDetails.languages) setSelectedLanguages(profileDetails.languages)
+      if (profileDetails.talents) setSelectedTalents(profileDetails.talents)
+      if (profileDetails.workTypes) setSelectedWorkTypes(profileDetails.workTypes)
+      if (profileDetails.videoUrls) setSavedVideoUrls(profileDetails.videoUrls)
+    }
+  }, [profileDetails])
+
   useEffect(() => {
     return () => {
-      if (profilePreview) URL.revokeObjectURL(profilePreview)
+      if (profilePreview && profilePreview.startsWith('blob:')) URL.revokeObjectURL(profilePreview)
     }
   }, [profilePreview])
 
   useEffect(() => {
     return () => {
-      if (coverPreview) URL.revokeObjectURL(coverPreview)
+      if (coverPreview && coverPreview.startsWith('blob:')) URL.revokeObjectURL(coverPreview)
     }
   }, [coverPreview])
 
@@ -116,7 +129,7 @@ function ProfilePage({
     const videoUrls = uploadedVideoUrls.current
     return () => {
       videoUrls.forEach((url) => {
-        if (url) URL.revokeObjectURL(url)
+        if (url && url.startsWith('blob:')) URL.revokeObjectURL(url)
       })
     }
   }, [])
@@ -128,7 +141,8 @@ function ProfilePage({
   }
 
   function handleCoverChange(event) {
-    const file = event.target.files?.[0]
+    const file = event.target.files?.[0] ?? null
+    setCoverPic(file)
     if (file) setCoverPreview(URL.createObjectURL(file))
   }
 
@@ -259,7 +273,7 @@ function ProfilePage({
     setSubmittedReferenceId(referenceId.trim())
   }
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault()
     setValidationError('')
     setIsSubmitted(false)
@@ -267,37 +281,91 @@ function ProfilePage({
     const form = event.currentTarget
     const videoInputs = Array.from(form.querySelectorAll('input[type="file"][data-video]'))
     const invalidVideoIndex = uploadedVideos.findIndex((video) => video && (
-      video.file.size > MAX_VIDEO_SIZE
-      || video.duration === undefined
-      || video.duration > MAX_VIDEO_DURATION
+      (video.file && video.file.size > MAX_VIDEO_SIZE)
+      || (video.duration !== undefined && video.duration > MAX_VIDEO_DURATION)
     ))
 
     if (invalidVideoIndex !== -1) {
-      videoInputs[invalidVideoIndex].focus()
+      videoInputs[invalidVideoIndex]?.focus()
       setValidationError(
-        uploadedVideos[invalidVideoIndex].duration === undefined
-          ? 'Please wait for the selected video to finish processing.'
-          : 'Each video must be no larger than 5 MB and no longer than 3 minutes.',
+        'Each video must be no larger than 5 MB and no longer than 3 minutes.',
       )
       return
     }
 
     const formData = new FormData(form)
-    setProfileDetails({
-      userId: formData.get('userId')?.trim() || '',
-      name: formData.get('name') || '',
-      phone: formData.get('phone')?.trim() || '',
-      email: formData.get('email')?.trim() || '',
-      experience: formData.get('experience') || '',
-      address: formData.get('address') || '',
-      languages: selectedLanguages,
-      otherLanguage: profileDetails.otherLanguage,
-      talents: selectedTalents,
-      workTypes: selectedWorkTypes,
-      videos: uploadedVideos.filter(Boolean),
-      videoUrls: savedVideoUrls,
-    })
-    setIsEditingProfile(false)
+    setIsSaving(true)
+
+    try {
+      let profileImageKey = undefined
+      if (profilePic) {
+        const res = await mediaApi.upload(profilePic, 'profile_image')
+        profileImageKey = res.objectKey
+      }
+
+      let coverImageKey = undefined
+      if (coverPic) {
+        const res = await mediaApi.upload(coverPic, 'cover_image')
+        coverImageKey = res.objectKey
+      }
+
+      const demoVideos = []
+      for (const v of uploadedVideos) {
+        if (!v) continue
+        if (v.file) {
+          const res = await mediaApi.upload(v.file, 'demo_video')
+          demoVideos.push(res)
+        } else if (v.url || v.objectKey) {
+          demoVideos.push(v)
+        }
+      }
+
+      const updatePayload = {
+        name: formData.get('name') || '',
+        phone: formData.get('phone')?.trim() || '',
+        email: formData.get('email')?.trim() || '',
+        experience: formData.get('experience') || '',
+        address: formData.get('address') || '',
+        languages: selectedLanguages,
+        otherLanguage: profileDetails.otherLanguage,
+        talents: selectedTalents,
+        workTypes: selectedWorkTypes,
+        demoVideos: demoVideos.length > 0 ? demoVideos : (profileDetails.videos || []),
+        videoUrls: savedVideoUrls,
+        ...(profileImageKey ? { profileImageKey } : {}),
+        ...(coverImageKey ? { coverImageKey } : {}),
+      }
+
+      const updated = await profileApi.updateMyProfile(updatePayload)
+      setProfileDetails({
+        userId: updated.userId || updated.id || '',
+        name: updated.name || '',
+        phone: updated.phone || '',
+        email: updated.email || '',
+        experience: updated.experience || '',
+        address: updated.address || '',
+        languages: updated.languages || [],
+        otherLanguage: updated.otherLanguage || '',
+        talents: updated.talents || [],
+        workTypes: updated.workTypes || [],
+        videos: updated.demoVideos || demoVideos,
+        videoUrls: updated.videoUrls || savedVideoUrls,
+      })
+
+      if (updated.profileImageUrl) {
+        setProfilePreview(updated.profileImageUrl)
+      }
+      if (updated.coverImageUrl) {
+        setCoverPreview(updated.coverImageUrl)
+      }
+
+      setIsEditingProfile(false)
+      setIsSubmitted(true)
+    } catch (err) {
+      setValidationError(err.message || 'Failed to update profile.')
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   return (
@@ -450,15 +518,15 @@ function ProfilePage({
                 <h3>Demo videos</h3>
                 {profileDetails.videos.length > 0 ? <div className="demo-video-list">
                   {profileDetails.videos.map((video, index) => (
-                    <div className="demo-video-item" key={`${video}-${index}`}>
+                    <div className="demo-video-item" key={`${video.url || video.objectKey || index}`}>
                       <video
                         controls
                         playsInline
                         preload="metadata"
                         src={video.url}
-                        aria-label={`Play demo video ${index + 1}: ${video.file.name}`}
+                        aria-label={`Play demo video ${index + 1}: ${video.file?.name || video.fileName || `Demo Video ${index + 1}`}`}
                       />
-                      <div><strong>Demo video {index + 1}</strong><span>{video.file.name}</span></div>
+                      <div><strong>Demo video {index + 1}</strong><span>{video.file?.name || video.fileName || `Demo Video ${index + 1}`}</span></div>
                     </div>
                   ))}
                 </div> : <p className="profile-empty-hint">Add your demo videos in Edit profile.</p>}
@@ -670,7 +738,7 @@ function ProfilePage({
               </div>
               <div className="form-field">
                 <label htmlFor="full-name">Full name</label>
-                <input id="full-name" name="name" type="text" placeholder="e.g. Arjun Kumar" />
+                <input id="full-name" name="name" type="text" defaultValue={profileDetails.name} placeholder="e.g. Arjun Kumar" />
               </div>
               <div className="form-field">
                 <label htmlFor="phone">Phone number</label>
@@ -703,6 +771,7 @@ function ProfilePage({
                     type="number"
                     min="0"
                     step="1"
+                    defaultValue={profileDetails.experience}
                     placeholder="0"
                   />
                   <span>years</span>
@@ -713,6 +782,7 @@ function ProfilePage({
                 <textarea
                   id="candidate-address"
                   name="address"
+                  defaultValue={profileDetails.address}
                   placeholder="Street address, city, state, postal code"
                   rows="3"
                 />
@@ -827,7 +897,7 @@ function ProfilePage({
                     playsInline
                     preload="metadata"
                     src={uploadedVideos[number - 1].url}
-                    aria-label={`Preview ${uploadedVideos[number - 1].file.name}`}
+                    aria-label={`Preview ${uploadedVideos[number - 1].file?.name || uploadedVideos[number - 1].fileName || `Video ${number}`}`}
                   />
                 )}
                 <span className="field-hint">Video file · 3 minutes maximum · 5 MB maximum</span>
@@ -842,7 +912,9 @@ function ProfilePage({
             {isSubmitted && <p className="submit-success">Your profile is ready. Thanks for reaching out!</p>}
             {!validationError && !isSubmitted && <p>Your details help us connect you with the right opportunities.</p>}
           </div>
-          <button className="submit-button" type="submit">Submit</button>
+          <button className="submit-button" type="submit" disabled={isSaving}>
+            {isSaving ? 'Saving...' : 'Submit'}
+          </button>
         </footer>
       </form>
     </div>

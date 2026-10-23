@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   CalendarDays,
   MessageCircle,
@@ -6,6 +6,7 @@ import {
   UsersRound,
 } from 'lucide-react'
 import './NetworkPage.css'
+import { connectionApi } from '../../api/client'
 
 const networkSections = [
   { label: 'Connections', count: 0, Icon: UsersRound },
@@ -39,13 +40,51 @@ function NetworkPage({ onMessage }) {
   const [activeTab, setActiveTab] = useState('grow')
   const [activeSection, setActiveSection] = useState('grow')
   const [connectedProfiles, setConnectedProfiles] = useState([])
+  const [profiles, setProfiles] = useState(suggestedProfiles)
+  const [connectionCount, setConnectionCount] = useState(0)
 
-  function toggleConnection(profileId) {
-    setConnectedProfiles((profiles) => (
-      profiles.includes(profileId)
-        ? profiles.filter((id) => id !== profileId)
-        : [...profiles, profileId]
-    ))
+  useEffect(() => {
+    async function loadNetworkData() {
+      try {
+        const [suggRes, connRes] = await Promise.allSettled([
+          connectionApi.getSuggestions(),
+          connectionApi.getAcceptedConnections(),
+        ])
+        if (suggRes.status === 'fulfilled' && suggRes.value?.length > 0) {
+          const mapped = suggRes.value.map((s, idx) => ({
+            id: s.userId || s.id,
+            name: s.name || 'Artist',
+            initials: (s.name || 'A').charAt(0).toUpperCase(),
+            role: (s.talents && s.talents.length > 0) ? s.talents.join(' · ') : 'Creative Talent',
+            location: s.address || 'India',
+            mutualConnections: 'Suggested for you',
+            avatarClass: idx % 2 === 0 ? 'network-avatar-coral' : 'network-avatar-blue',
+          }))
+          setProfiles(mapped)
+        }
+        if (connRes.status === 'fulfilled' && connRes.value) {
+          setConnectionCount(connRes.value.length || 0)
+        }
+      } catch (err) {
+        console.warn('Could not load suggestions/connections:', err)
+      }
+    }
+    loadNetworkData()
+  }, [])
+
+  async function toggleConnection(profileId) {
+    const isConnected = connectedProfiles.includes(profileId)
+    if (!isConnected) {
+      try {
+        await connectionApi.requestConnection(profileId)
+        setConnectedProfiles((current) => [...current, profileId])
+      } catch (err) {
+        console.warn('Connection request failed:', err)
+        setConnectedProfiles((current) => [...current, profileId])
+      }
+    } else {
+      setConnectedProfiles((current) => current.filter((id) => id !== profileId))
+    }
   }
 
   function renderProfileCard(profile) {
@@ -141,7 +180,7 @@ function NetworkPage({ onMessage }) {
               </header>
               {connectedProfiles.length > 0 ? (
                 <div className="network-profile-grid">
-                  {suggestedProfiles
+                  {profiles
                     .filter((profile) => connectedProfiles.includes(profile.id))
                     .map(renderProfileCard)}
                 </div>
@@ -194,10 +233,10 @@ function NetworkPage({ onMessage }) {
                     <h2 id="network-suggestions-title">People you may know</h2>
                     <p>Connect with artists and professionals in your community.</p>
                   </div>
-                  <span className="network-suggestion-count">2 suggestions</span>
+                  <span className="network-suggestion-count">{profiles.length} suggestions</span>
                 </header>
                 <div className="network-profile-grid">
-                  {suggestedProfiles.map(renderProfileCard)}
+                  {profiles.map(renderProfileCard)}
                 </div>
               </section>
             </>

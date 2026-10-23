@@ -5,7 +5,7 @@ import Home from './assets/Components/Home'
 import NetworkPage from './assets/Components/NetworkPage'
 import Endorsement from './assets/Components/Endorsement'
 import ProfilePage, { emptyProfileDetails } from './assets/Components/ProfilePage'
-import { trim } from 'zod'
+import { authApi, profileApi } from './api/client'
 
 const navigationHashes = {
   home: 'home',
@@ -258,6 +258,52 @@ function App() {
       window.removeEventListener('popstate', restoreNavigation)
       window.removeEventListener('hashchange', restoreNavigation)
     }
+  }, [])
+
+  useEffect(() => {
+    async function initProfile() {
+      try {
+        let token = localStorage.getItem('truehunt_token')
+        if (!token) {
+          try {
+            const loginRes = await authApi.login({ email: 'demo@truehunt.com', password: 'Password123!' })
+            if (loginRes?.token) token = loginRes.token
+          } catch {
+            const regRes = await authApi.register({
+              email: 'demo@truehunt.com',
+              password: 'Password123!',
+              name: 'Chandrabose',
+            })
+            if (regRes?.token) token = regRes.token
+          }
+        }
+        if (token) {
+          const profile = await profileApi.getProfile('me')
+          if (profile) {
+            setProfileDetails({
+              userId: profile.userId || profile.id || '',
+              name: profile.name || '',
+              phone: profile.phone || '',
+              email: profile.email || '',
+              experience: profile.experience || '',
+              address: profile.address || '',
+              languages: profile.languages || [],
+              otherLanguage: profile.otherLanguage || '',
+              talents: profile.talents || [],
+              workTypes: profile.workTypes || [],
+              videos: profile.demoVideos || [],
+              videoUrls: profile.videoUrls || [],
+            })
+            if (profile.profileImageUrl) {
+              setProfilePreview(profile.profileImageUrl)
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Initial profile load failed:', err)
+      }
+    }
+    initProfile()
   }, [])
 
   return (

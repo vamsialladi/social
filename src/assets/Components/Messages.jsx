@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ChevronDown,
   MoreHorizontal,
@@ -11,6 +11,7 @@ import {
   X,
 } from 'lucide-react'
 import './Messages.css'
+import { mediaApi, messageApi } from '../../api/client'
 
 const initialMessages = [
   {
@@ -95,6 +96,66 @@ function Messages() {
   const replyInputRef = useRef(null)
   const attachmentInputRef = useRef(null)
 
+  useEffect(() => {
+    async function loadConversations() {
+      try {
+        const convs = await messageApi.getConversations()
+        if (convs && convs.length > 0) {
+          const mapped = convs.map((c, idx) => {
+            const other = c.participants?.[0] || { name: 'TrueHunt User' }
+            return {
+              id: c.id,
+              conversationId: c.id,
+              otherUserId: other.userId || other.id,
+              name: other.name || 'TrueHunt User',
+              initials: (other.name || 'U').split(/\s+/).map((n) => n[0]).join('').slice(0, 2).toUpperCase(),
+              color: idx % 2 === 0 ? 'green' : 'blue',
+              preview: c.lastMessage?.body || 'Start of conversation',
+              date: c.lastMessageAt ? new Date(c.lastMessageAt).toLocaleDateString() : 'Recent',
+              category: 'Connections',
+              unread: false,
+              sponsored: false,
+              subject: `Chat with ${other.name || 'User'}`,
+              description: c.lastMessage?.body || '',
+              thread: c.lastMessage ? [{
+                id: c.lastMessage.id,
+                content: c.lastMessage.body,
+                direction: 'incoming',
+              }] : [],
+            }
+          })
+          setMessages((current) => [...mapped, ...current.filter((m) => !mapped.some((x) => x.id === m.id))])
+          setSelectedId(mapped[0].id)
+        }
+      } catch (err) {
+        console.warn('Could not load conversations:', err)
+      }
+    }
+    loadConversations()
+  }, [])
+
+  useEffect(() => {
+    if (!selectedMessage?.conversationId) return
+    async function loadThread() {
+      try {
+        const res = await messageApi.getMessages(selectedMessage.conversationId)
+        if (res && res.data && res.data.length > 0) {
+          const thread = res.data.map((msg) => ({
+            id: msg.id,
+            content: msg.body,
+            direction: msg.senderId === selectedMessage.otherUserId ? 'incoming' : 'outgoing',
+          }))
+          setMessages((current) => current.map((m) => (
+            m.id === selectedMessage.id ? { ...m, thread } : m
+          )))
+        }
+      } catch (err) {
+        console.warn('Could not load messages for thread:', err)
+      }
+    }
+    loadThread()
+  }, [selectedMessage?.conversationId])
+
   const visibleMessages = useMemo(() => {
     const query = search.trim().toLowerCase()
 
@@ -118,7 +179,7 @@ function Messages() {
     )))
   }
 
-  function sendReply(event) {
+  async function sendReply(event) {
     event.preventDefault()
     const content = replyText.trim()
 
@@ -126,6 +187,23 @@ function Messages() {
 
     const messageId = Date.now()
     const attachment = replyAttachment
+
+    if (selectedMessage.conversationId) {
+      try {
+        let attachments = []
+        if (attachment) {
+          const uploaded = await mediaApi.upload(attachment, 'message_attachment')
+          attachments = [uploaded]
+        }
+        await messageApi.sendMessage(selectedMessage.conversationId, {
+          body: content || 'Attachment',
+          attachments,
+        })
+      } catch (err) {
+        console.warn('Failed to send reply to backend:', err)
+      }
+    }
+
     setMessages((currentMessages) => currentMessages.map((message) => (
       message.id === selectedMessage.id
         ? {
@@ -137,7 +215,7 @@ function Messages() {
               : []),
             { id: messageId, content, attachment, direction: 'outgoing' },
           ],
-          preview: content || `Attachment: ${attachment.name}`,
+          preview: content || `Attachment: ${attachment?.name}`,
           date: 'Now',
           unread: false,
         }

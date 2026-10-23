@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import './Home.css'
 import Article from './Article.jsx'
+import { feedApi, mediaApi } from '../../api/client'
 
 function Home({
   profileDetails,
@@ -28,7 +29,46 @@ function Home({
   ]
 
   useEffect(() => () => {
-    mediaUrls.current.forEach((url) => URL.revokeObjectURL(url))
+    mediaUrls.current.forEach((url) => {
+      if (url && url.startsWith('blob:')) URL.revokeObjectURL(url)
+    })
+  }, [])
+
+  useEffect(() => {
+    async function loadFeed() {
+      try {
+        const [postsRes, oppsRes] = await Promise.allSettled([
+          feedApi.getPosts(),
+          feedApi.getOpportunities(),
+        ])
+        const combined = []
+        if (postsRes.status === 'fulfilled' && postsRes.value?.data) {
+          combined.push(...postsRes.value.data)
+        }
+        if (oppsRes.status === 'fulfilled' && oppsRes.value?.data) {
+          combined.push(...oppsRes.value.data)
+        }
+        if (combined.length > 0) {
+          const formatted = combined.map((p) => ({
+            id: p.id,
+            title: p.title,
+            content: p.content,
+            type: p.type || 'post',
+            media: (p.attachments && p.attachments.length > 0) ? {
+              kind: p.attachments[0].contentType?.startsWith('video/') ? 'video' : 'image',
+              url: p.attachments[0].url,
+            } : null,
+            createdAt: p.createdAt ? new Date(p.createdAt).toLocaleString() : new Date().toLocaleString(),
+            authorName: p.authorName,
+            authorProfileImage: p.authorProfileImage,
+          }))
+          setPosts(formatted)
+        }
+      } catch (err) {
+        console.warn('Could not load feed:', err)
+      }
+    }
+    loadFeed()
   }, [])
 
   function selectMedia(event) {
@@ -36,7 +76,7 @@ function Home({
     event.target.value = ''
     if (!file) return
 
-    if (draftMedia) URL.revokeObjectURL(draftMedia.url)
+    if (draftMedia && draftMedia.url?.startsWith('blob:')) URL.revokeObjectURL(draftMedia.url)
     setDraftMedia({
       file,
       url: URL.createObjectURL(file),
@@ -46,31 +86,65 @@ function Home({
   }
 
   function removeDraftMedia() {
-    if (draftMedia) URL.revokeObjectURL(draftMedia.url)
+    if (draftMedia && draftMedia.url?.startsWith('blob:')) URL.revokeObjectURL(draftMedia.url)
     setDraftMedia(null)
   }
 
-  function publishPost(event) {
+  async function publishPost(event) {
     event.preventDefault()
     const content = draft.trim()
     if (!content && !draftMedia) return
 
-    if (draftMedia) mediaUrls.current.push(draftMedia.url)
+    try {
+      let attachments = []
+      if (draftMedia?.file) {
+        const uploaded = await mediaApi.upload(
+          draftMedia.file,
+          draftMedia.kind === 'video' ? 'post_video' : 'post_image'
+        )
+        attachments = [uploaded]
+      }
 
-    setPosts((currentPosts) => [
-      {
-        id: `${Date.now()}-${currentPosts.length}`,
-        content,
-        type: draftType,
-        media: draftMedia,
-        createdAt: new Date().toLocaleString(),
-      },
-      ...currentPosts,
-    ])
-    setDraft('')
-    setDraftMedia(null)
-    setDraftType('post')
-    setIsComposerOpen(false)
+      const created = await (draftType === 'opportunity'
+        ? feedApi.createOpportunity({ title: 'Opportunity', content, attachments })
+        : feedApi.createPost({ type: draftType, content, attachments })
+      )
+
+      const newPost = {
+        id: created.id || `${Date.now()}-${posts.length}`,
+        content: created.content || content,
+        title: created.title,
+        type: created.type || draftType,
+        media: created.attachments?.length > 0 ? {
+          kind: created.attachments[0].contentType?.startsWith('video/') ? 'video' : 'image',
+          url: created.attachments[0].url,
+        } : draftMedia,
+        createdAt: created.createdAt ? new Date(created.createdAt).toLocaleString() : new Date().toLocaleString(),
+      }
+
+      setPosts((currentPosts) => [newPost, ...currentPosts])
+      setDraft('')
+      setDraftMedia(null)
+      setDraftType('post')
+      setIsComposerOpen(false)
+    } catch (err) {
+      console.warn('Backend post failed, adding locally:', err)
+      if (draftMedia) mediaUrls.current.push(draftMedia.url)
+      setPosts((currentPosts) => [
+        {
+          id: `${Date.now()}-${currentPosts.length}`,
+          content,
+          type: draftType,
+          media: draftMedia,
+          createdAt: new Date().toLocaleString(),
+        },
+        ...currentPosts,
+      ])
+      setDraft('')
+      setDraftMedia(null)
+      setDraftType('post')
+      setIsComposerOpen(false)
+    }
   }
 
   function startOpportunityPost() {
@@ -84,17 +158,45 @@ function Home({
     setIsComposerOpen(true)
   }
 
-  function publishArticle(article) {
-    setPosts((currentPosts) => [
-      {
-        id: `${Date.now()}-${currentPosts.length}`,
-        ...article,
+  async function publishArticle(article) {
+    try {
+      let attachments = []
+      if (article.media?.file) {
+        const uploaded = await mediaApi.upload(article.media.file, 'post_attachment')
+        attachments = [uploaded]
+      }
+      const created = await feedApi.createPost({
         type: 'article',
-        createdAt: new Date().toLocaleString(),
-      },
-      ...currentPosts,
-    ])
-    setIsWritingArticle(false)
+        title: article.title,
+        content: article.content,
+        attachments,
+      })
+      const newPost = {
+        id: created.id || `${Date.now()}-${posts.length}`,
+        title: created.title,
+        content: created.content,
+        type: 'article',
+        media: created.attachments?.length > 0 ? {
+          kind: created.attachments[0].contentType?.startsWith('video/') ? 'video' : 'image',
+          url: created.attachments[0].url,
+        } : article.media,
+        createdAt: created.createdAt ? new Date(created.createdAt).toLocaleString() : new Date().toLocaleString(),
+      }
+      setPosts((currentPosts) => [newPost, ...currentPosts])
+    } catch (err) {
+      console.warn('Backend article failed, adding locally:', err)
+      setPosts((currentPosts) => [
+        {
+          id: `${Date.now()}-${currentPosts.length}`,
+          ...article,
+          type: 'article',
+          createdAt: new Date().toLocaleString(),
+        },
+        ...currentPosts,
+      ])
+    } finally {
+      setIsWritingArticle(false)
+    }
   }
 
   const visiblePosts = posts.filter((post) => (
@@ -278,12 +380,12 @@ function Home({
                 <article className="home-card home-post" key={post.id}>
                   <header className="home-post-header">
                     <div className="home-avatar" aria-hidden="true">
-                      {profilePreview
-                        ? <img src={profilePreview} alt="" />
-                        : initials}
+                      {post.authorProfileImage || profilePreview
+                        ? <img src={post.authorProfileImage || profilePreview} alt="" />
+                        : (post.authorName ? post.authorName.charAt(0).toUpperCase() : initials)}
                     </div>
                     <div>
-                      <strong>{name}</strong>
+                      <strong>{post.authorName || name}</strong>
                       {profileDetails.talents.length > 0 && (
                         <span>{profileDetails.talents.join(' · ')}</span>
                       )}

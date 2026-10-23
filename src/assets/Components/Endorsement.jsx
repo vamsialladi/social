@@ -1,6 +1,23 @@
+import { useEffect, useState } from 'react'
 import './Endorsement.css'
+import { notificationApi } from '../../api/client'
 
 function Notifications({ profileDetails, profilePreview, onViewProfile, onManageNotifications }) {
+  const [notifications, setNotifications] = useState([])
+
+  useEffect(() => {
+    async function loadNotifications() {
+      try {
+        const res = await notificationApi.getNotifications()
+        if (res && res.data) {
+          setNotifications(res.data)
+        }
+      } catch (err) {
+        console.warn('Could not load notifications:', err)
+      }
+    }
+    loadNotifications()
+  }, [])
   const name = profileDetails.name.trim() || 'Your name'
   const initials = name === 'Your name' ? '?' : name.charAt(0).toUpperCase()
   const languages = [
@@ -73,8 +90,20 @@ function Notifications({ profileDetails, profilePreview, onViewProfile, onManage
       </aside>
 
       <section className="notifications-content" aria-labelledby="notifications-heading">
-        <h2 id="notifications-heading">Endorsement</h2>
-        <div className="notifications-empty-space" aria-label="No endorsements yet" />
+        <h2 id="notifications-heading">Notifications &amp; Endorsements</h2>
+        {notifications.length > 0 ? (
+          <div className="notifications-list" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '1rem' }}>
+            {notifications.map((n) => (
+              <div key={n.id} style={{ padding: '0.85rem 1rem', background: '#fff', borderRadius: '8px', border: '1px solid #e0e0e0' }}>
+                <p style={{ margin: 0, fontWeight: 600 }}>{n.title || n.type}</p>
+                <p style={{ margin: '0.25rem 0', color: '#555', fontSize: '0.9rem' }}>{n.message || n.content}</p>
+                <small style={{ color: '#888' }}>{n.createdAt ? new Date(n.createdAt).toLocaleString() : ''}</small>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="notifications-empty-space" aria-label="No endorsements yet" />
+        )}
       </section>
     </section>
   )
