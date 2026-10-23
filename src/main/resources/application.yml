@@ -1,0 +1,73 @@
+server:
+  port: 8080
+  servlet:
+    context-path: /
+
+spring:
+  application:
+    name: truehunt-backend
+  profiles:
+    active: dev
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 60MB
+
+app:
+  jwt:
+    secret: "truehunt-super-secret-jwt-key-with-sufficient-length-256-bits-min!"
+    expiration-ms: 86400000 # 24 hours
+  media:
+    upload-dir: "./uploads"
+    max-demo-video-size-bytes: 5242880 # 5 MB per demo video
+    base-url: "http://localhost:8080/api/media"
+  cors:
+    allowed-origins:
+      - "http://localhost:5173"
+      - "http://127.0.0.1:5173"
+      - "http://localhost:3000"
+      - "http://localhost:8080"
+
+logging:
+  level:
+    root: INFO
+    com.truehunt: DEBUG
+    org.springframework.security: INFO
+
+---
+# Dev profile: In-memory H2 database (zero setup required to run)
+spring:
+  config:
+    activate:
+      on-profile: dev
+  datasource:
+    url: jdbc:h2:mem:truehunt;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driverClassName: org.h2.Driver
+    username: sa
+    password: 
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+---
+# MySQL profile: connects to local MySQL80
+spring:
+  config:
+    activate:
+      on-profile: mysql
+  datasource:
+    url: jdbc:mysql://localhost:3306/truehunt_db?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+    driverClassName: com.mysql.cj.jdbc.Driver
+    username: root
+    password: password
+  jpa:
+    database-platform: org.hibernate.dialect.MySQLDialect
+    hibernate:
+      ddl-auto: update
+    show-sql: false
