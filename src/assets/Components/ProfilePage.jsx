@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import './StylePage.css'
+import api from '../../api'
 
 export const emptyProfileDetails = {
   userId: '',
@@ -292,19 +293,18 @@ function ProfilePage({
     setValidationError('')
   }
 
-  function saveSectionEditor() {
+  async function saveSectionEditor() {
+    let nextDetails = { ...profileDetails }
+
     if (editingSection === 'talents') {
-      setProfileDetails((details) => ({ ...details, talents: selectedTalents }))
+      nextDetails.talents = selectedTalents
     } else if (editingSection === 'workTypes') {
-      setProfileDetails((details) => ({ ...details, workTypes: selectedWorkTypes }))
+      nextDetails.workTypes = selectedWorkTypes
     } else if (editingSection === 'languages') {
-      setProfileDetails((details) => ({
-        ...details,
-        languages: selectedLanguages,
-        otherLanguage: selectedLanguages.includes('Other') ? otherLanguageDraft.trim() : '',
-      }))
+      nextDetails.languages = selectedLanguages
+      nextDetails.otherLanguage = selectedLanguages.includes('Other') ? otherLanguageDraft.trim() : ''
     } else if (editingSection === 'videoLinks') {
-      setProfileDetails((details) => ({ ...details, videoUrls: savedVideoUrls }))
+      nextDetails.videoUrls = savedVideoUrls
     } else if (editingSection === 'videos') {
       const pendingVideos = uploadedVideos.filter(Boolean)
       const invalidVideo = pendingVideos.find((video) => (
@@ -322,11 +322,37 @@ function ProfilePage({
         return
       }
 
-      setProfileDetails((details) => ({
-        ...details,
-        videos: [...details.videos, ...pendingVideos].slice(0, 3),
-      }))
+      // Upload newly added videos to the backend media endpoint
+      const uploadedList = []
+      for (const item of pendingVideos) {
+        try {
+          if (item.file) {
+            const uploaded = await api.uploadMedia(item.file, 'demo-video')
+            uploadedList.push({
+              url: uploaded.url,
+              fileName: uploaded.fileName,
+              duration: item.duration || 0,
+              sizeBytes: uploaded.sizeBytes,
+              contentType: uploaded.contentType,
+            })
+          } else {
+            uploadedList.push(item)
+          }
+        } catch (err) {
+          console.warn('Video upload error:', err)
+          uploadedList.push(item)
+        }
+      }
+
+      nextDetails.videos = [...(nextDetails.videos || []), ...uploadedList].slice(0, 3)
       uploadedVideoUrls.current = []
+    }
+
+    setProfileDetails(nextDetails)
+    try {
+      await api.updateProfile(nextDetails)
+    } catch (err) {
+      console.warn('Failed to save profile section to backend:', err)
     }
 
     setEditingSection('')
@@ -344,9 +370,15 @@ function ProfilePage({
     setIsEditingProfile(true)
   }
 
-  function handleReferenceSubmit(event) {
+  async function handleReferenceSubmit(event) {
     event.preventDefault()
-    setSubmittedReferenceId(referenceId.trim())
+    const trimmed = referenceId.trim()
+    setSubmittedReferenceId(trimmed)
+    try {
+      await api.verifyReference(trimmed)
+    } catch (err) {
+      console.warn('Reference verify API note:', err)
+    }
   }
 
   function openExperienceModal(experience = null) {
@@ -354,7 +386,7 @@ function ProfilePage({
     setIsExperienceModalOpen(true)
   }
 
-  function handleExperienceSubmit(event) {
+  async function handleExperienceSubmit(event) {
     event.preventDefault()
     const formData = new FormData(event.currentTarget)
     const startDate = formData.get('startDate')
@@ -378,32 +410,44 @@ function ProfilePage({
       highlights: formData.get('highlights')?.toString().trim() || '',
     }
 
-    setProfileDetails((details) => ({
-      ...details,
-      experiences: editingExperienceId
-        ? (details.experiences || []).map((item) => (
-          item.id === editingExperienceId ? experience : item
-        ))
-        : [...(details.experiences || []), experience],
-    }))
+    const updatedExperiences = editingExperienceId
+      ? (profileDetails.experiences || []).map((item) => (
+        item.id === editingExperienceId ? experience : item
+      ))
+      : [...(profileDetails.experiences || []), experience]
+
+    const nextDetails = { ...profileDetails, experiences: updatedExperiences }
+    setProfileDetails(nextDetails)
+    try {
+      await api.updateProfile(nextDetails)
+    } catch (err) {
+      console.warn('Failed to save experience to backend:', err)
+    }
+
     setIsExperienceModalOpen(false)
     setEditingExperienceId(null)
   }
 
-  function handleExperienceDelete() {
+  async function handleExperienceDelete() {
     if (editingExperienceId === null) return
 
-    setProfileDetails((details) => ({
-      ...details,
-      experiences: (details.experiences || []).filter(
-        (experience) => experience.id !== editingExperienceId,
-      ),
-    }))
+    const updatedExperiences = (profileDetails.experiences || []).filter(
+      (experience) => experience.id !== editingExperienceId,
+    )
+
+    const nextDetails = { ...profileDetails, experiences: updatedExperiences }
+    setProfileDetails(nextDetails)
+    try {
+      await api.updateProfile(nextDetails)
+    } catch (err) {
+      console.warn('Failed to delete experience from backend:', err)
+    }
+
     setIsExperienceModalOpen(false)
     setEditingExperienceId(null)
   }
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault()
     setValidationError('')
     setIsSubmitted(false)
@@ -427,9 +471,21 @@ function ProfilePage({
     }
 
     const formData = new FormData(form)
-    setProfileDetails((details) => ({
-      ...details,
-      userId: formData.get('userId')?.trim() || '',
+    let profileImageUrl = profileDetails.profileImageUrl || ''
+
+    if (profilePic) {
+      try {
+        const uploaded = await api.uploadMedia(profilePic)
+        profileImageUrl = uploaded.url
+        setProfilePreview(uploaded.url)
+      } catch (err) {
+        console.warn('Profile picture upload note:', err)
+      }
+    }
+
+    const nextDetails = {
+      ...profileDetails,
+      userId: formData.get('userId')?.trim() || profileDetails.userId || 'me',
       name: formData.get('name') || '',
       phone: formData.get('phone')?.trim() || '',
       email: formData.get('email')?.trim() || '',
@@ -437,7 +493,16 @@ function ProfilePage({
       address: formData.get('address') || '',
       languages: selectedLanguages,
       otherLanguage: selectedLanguages.includes('Other') ? otherLanguageDraft.trim() : '',
-    }))
+      profileImageUrl,
+    }
+
+    setProfileDetails(nextDetails)
+    try {
+      await api.updateProfile(nextDetails)
+    } catch (err) {
+      console.warn('Failed to save profile to backend:', err)
+    }
+
     setIsEditingProfile(false)
   }
 
@@ -798,7 +863,20 @@ function ProfilePage({
                   <h2>Bring your next story to the screen</h2>
                   <p>Northstar Films is meeting new writers, actors, and independent filmmakers for upcoming productions.</p>
                   <span className="home-promotion-caption">Make your mark in the movies.</span>
-                  <button className="home-promotion-button" type="button">Explore film careers</button>
+                  <button
+                    className="home-promotion-button"
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const res = await api.clickPromotion("Profile Artist Promo - Northstar Films")
+                        alert(res.message || 'Inquiry registered with studio casting office.')
+                      } catch (e) {
+                        console.warn(e)
+                      }
+                    }}
+                  >
+                    Explore film careers
+                  </button>
                 </div>
               </section>
             </aside>

@@ -6,7 +6,7 @@ import NetworkPage from './assets/Components/NetworkPage'
 import Endorsement from './assets/Components/Endorsement'
 import ProfilePage, { emptyProfileDetails } from './assets/Components/ProfilePage'
 import Settings from './assets/Components/Settings'
-import { trim } from 'zod'
+import api from './api'
 
 const navigationHashes = {
   home: 'home',
@@ -74,6 +74,39 @@ function Navigation({
   profileDetails,
 }) {
   const profileMenuRef = useRef(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState(null)
+  const [isSearching, setIsSearching] = useState(false)
+  const [isSearchOpen, setIsSearchOpen] = useState(false)
+  const searchContainerRef = useRef(null)
+
+  useEffect(() => {
+    function handleOutside(e) {
+      if (!searchContainerRef.current?.contains(e.target)) {
+        setIsSearchOpen(false)
+      }
+    }
+    document.addEventListener('pointerdown', handleOutside)
+    return () => document.removeEventListener('pointerdown', handleOutside)
+  }, [])
+
+  async function handleSearch(event) {
+    if (event.key === 'Enter') {
+      event.preventDefault()
+      const q = searchQuery.trim()
+      if (!q) return
+      setIsSearching(true)
+      setIsSearchOpen(true)
+      try {
+        const res = await api.search(q)
+        setSearchResults(res)
+      } catch (err) {
+        console.warn('Search error:', err)
+      } finally {
+        setIsSearching(false)
+      }
+    }
+  }
 
   useEffect(() => {
     if (!isProfileMenuOpen) return undefined
@@ -111,10 +144,110 @@ function Navigation({
           <img className="truehunt-brand" src="/truehunt-logo.png" alt="TrueHunt" />
         </a>
         
-        <label className="linkedin-search">
-          <NavigationIcon name="search" />
-          <input type="search" placeholder="Search" aria-label="Search profiles" />
-        </label>
+        <div className="linkedin-search-wrap" ref={searchContainerRef} style={{ position: 'relative' }}>
+          <label className="linkedin-search">
+            <NavigationIcon name="search" />
+            <input
+              type="search"
+              placeholder="Search people, posts..."
+              aria-label="Search profiles"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={handleSearch}
+              onFocus={() => {
+                if (searchResults) setIsSearchOpen(true)
+              }}
+            />
+          </label>
+          {isSearchOpen && (
+            <div
+              className="search-results-dropdown"
+              style={{
+                position: 'absolute',
+                top: 'calc(100% + 4px)',
+                left: 0,
+                width: '320px',
+                background: 'var(--color-surface, #fff)',
+                border: '1px solid #ccc',
+                borderRadius: '8px',
+                boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
+                zIndex: 100,
+                padding: '12px',
+                maxHeight: '380px',
+                overflowY: 'auto',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', borderBottom: '1px solid #eee', paddingBottom: '6px' }}>
+                <strong style={{ fontSize: '13px' }}>
+                  {isSearching ? 'Searching...' : `Results (${searchResults?.totalResults || 0})`}
+                </strong>
+                <button
+                  type="button"
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', color: '#666' }}
+                  onClick={() => setIsSearchOpen(false)}
+                >
+                  ✕
+                </button>
+              </div>
+
+              {searchResults?.people && searchResults.people.length > 0 && (
+                <div style={{ marginBottom: '12px' }}>
+                  <div style={{ fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', color: '#888', marginBottom: '6px' }}>
+                    People
+                  </div>
+                  {searchResults.people.map((p) => (
+                    <div
+                      key={p.id}
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #f5f5f5' }}
+                    >
+                      <div>
+                        <div style={{ fontSize: '13px', fontWeight: '600' }}>{p.name}</div>
+                        <div style={{ fontSize: '11px', color: '#666' }}>{p.role}</div>
+                      </div>
+                      <button
+                        type="button"
+                        style={{ background: '#1a73e8', color: '#fff', border: 'none', borderRadius: '12px', padding: '3px 10px', fontSize: '12px', cursor: 'pointer' }}
+                        onClick={() => {
+                          setIsSearchOpen(false)
+                          setActiveNavigation('network')
+                        }}
+                      >
+                        View
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {searchResults?.posts && searchResults.posts.length > 0 && (
+                <div>
+                  <div style={{ fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', color: '#888', marginBottom: '6px' }}>
+                    Posts & Opportunities
+                  </div>
+                  {searchResults.posts.map((post) => (
+                    <div
+                      key={post.id}
+                      style={{ padding: '6px 0', borderBottom: '1px solid #f5f5f5', cursor: 'pointer' }}
+                      onClick={() => {
+                        setIsSearchOpen(false)
+                        setActiveNavigation(post.type === 'opportunity' ? 'opportunities' : 'home')
+                      }}
+                    >
+                      <div style={{ fontSize: '12px', fontWeight: '600' }}>{post.authorName || 'Post'}</div>
+                      <div style={{ fontSize: '12px', color: '#444' }}>{post.title || post.content?.slice(0, 50)}...</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {(!searchResults || (searchResults.people.length === 0 && searchResults.posts.length === 0)) && !isSearching && (
+                <div style={{ fontSize: '12px', color: '#888', padding: '12px 0', textAlign: 'center' }}>
+                  Press Enter to search for "{searchQuery}".
+                </div>
+              )}
+            </div>
+          )}
+        </div>
         <div className="linkedin-nav-items">
           <a
             className={`linkedin-nav-item${activeNavigation === 'home' ? ' is-active' : ''}`}
@@ -215,7 +348,15 @@ function Navigation({
                   className="profile-dropdown-item profile-dropdown-logout"
                   type="button"
                   role="menuitem"
-                  onClick={() => setIsProfileMenuOpen(false)}
+                  onClick={async () => {
+                    try {
+                      await api.logout()
+                      alert('Logged out successfully.')
+                    } catch (e) {
+                      console.warn('Logout note:', e)
+                    }
+                    setIsProfileMenuOpen(false)
+                  }}
                 >
                   Log out
                 </button>
@@ -268,6 +409,23 @@ function App() {
     }
   }, [])
 
+  useEffect(() => {
+    async function loadBackendData() {
+      try {
+        const profile = await api.getProfile()
+        if (profile) {
+          setProfileDetails((prev) => ({ ...prev, ...profile }))
+          if (profile.profileImageUrl) {
+            setProfilePreview(profile.profileImageUrl)
+          }
+        }
+      } catch (err) {
+        console.warn('Backend profile fetch note:', err)
+      }
+    }
+    loadBackendData()
+  }, [])
+
   return (
     <main className={`cinemans-page is-preview${activeNavigation === 'home' ? ' is-home' : ''}${theme === 'dark' ? ' is-dark' : ''}`}>
       <Navigation
@@ -299,6 +457,7 @@ function App() {
           profileDetails={profileDetails}
           profilePreview={profilePreview}
           onViewProfile={() => setActiveNavigation('profile')}
+          onManageNotifications={() => setActiveNavigation('settings')}
         />
       </div>
       <div hidden={activeNavigation !== 'profile'}>
@@ -345,7 +504,20 @@ function App() {
                   <h2>Bring your next story to the screen</h2>
                   <p>Northstar Films is meeting new writers, actors, and independent filmmakers for upcoming productions.</p>
                   <span className="home-promotion-caption">Make your mark in the movies.</span>
-                  <button className="home-promotion-button" type="button">Explore film careers</button>
+                  <button
+                    className="home-promotion-button"
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const res = await api.clickPromotion("Business Promotion - Northstar Films")
+                        alert(res.message || 'Inquiry registered with studio casting office.')
+                      } catch (e) {
+                        console.warn(e)
+                      }
+                    }}
+                  >
+                    Explore film careers
+                  </button>
                 </div>
               </section>
             </>

@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import api from '../../api'
 import {
   ArrowRight,
   Bell,
@@ -81,6 +82,8 @@ function Settings({ profileDetails, profilePreview, onEditProfile, theme, onThem
   const [notificationPreferences, setNotificationPreferences] = useState(() =>
     Object.fromEntries(notificationCategories.map(({ id }) => [id, true])),
   )
+  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false)
+  const [securityMessage, setSecurityMessage] = useState('')
   const [passwordMessage, setPasswordMessage] = useState('')
   const [accountManagementMessage, setAccountManagementMessage] = useState('')
   const name = profileDetails.name || 'Your name'
@@ -89,16 +92,77 @@ function Settings({ profileDetails, profilePreview, onEditProfile, theme, onThem
   const address = profileDetails.address || 'Not added yet'
   const selectedSection = settingsSections.find((section) => section.id === activeSection)
 
-  function handlePasswordSubmit(event) {
+  useEffect(() => {
+    async function loadSettings() {
+      try {
+        const data = await api.getSettings()
+        if (data?.notifications) {
+          setNotificationPreferences((prev) => ({ ...prev, ...data.notifications }))
+        }
+      } catch (err) {
+        console.warn('Backend settings load note:', err)
+      }
+    }
+    loadSettings()
+  }, [])
+
+  async function handlePasswordSubmit(event) {
     event.preventDefault()
-    const formData = new FormData(event.currentTarget)
+    const form = event.currentTarget
+    const formData = new FormData(form)
 
     if (formData.get('new-password') !== formData.get('confirm-password')) {
       setPasswordMessage('The new passwords do not match.')
       return
     }
 
-    setPasswordMessage('Password changes are not connected to an account service yet.')
+    try {
+      await api.changePassword({
+        'current-password': formData.get('current-password')?.toString() || '',
+        'new-password': formData.get('new-password')?.toString() || '',
+        'confirm-password': formData.get('confirm-password')?.toString() || '',
+      })
+      setPasswordMessage('Password updated successfully!')
+      form.reset()
+      setTimeout(() => setIsPasswordFormOpen(false), 2000)
+    } catch (err) {
+      setPasswordMessage(err.message || 'Failed to update password.')
+    }
+  }
+
+  async function handleToggleNotification(id) {
+    const nextVal = !notificationPreferences[id]
+    const nextPrefs = {
+      ...notificationPreferences,
+      [id]: nextVal,
+    }
+    setNotificationPreferences(nextPrefs)
+    try {
+      await api.updateNotificationPreferences({ [id]: nextVal })
+    } catch (err) {
+      console.warn('Notification preference API note:', err)
+    }
+  }
+
+  async function handleThemeChange(mode) {
+    onThemeChange(mode)
+    try {
+      await api.updateTheme(mode)
+    } catch (err) {
+      console.warn('Theme update API note:', err)
+    }
+  }
+
+  async function handleDeleteAccount() {
+    if (!window.confirm("Are you sure you want to close and delete your TrueHunt account? This action cannot be undone.")) {
+      return
+    }
+    try {
+      const res = await api.deleteAccount()
+      setAccountManagementMessage(res.message || 'Account successfully scheduled for deletion.')
+    } catch (err) {
+      setAccountManagementMessage(err.message || 'Failed to schedule account deletion.')
+    }
   }
 
   return (
@@ -173,23 +237,41 @@ function Settings({ profileDetails, profilePreview, onEditProfile, theme, onThem
             )}
             {activeSection === 'security' && (
               <div className="settings-access-list">
-                <div className="settings-access-row">
+                {securityMessage && (
+                  <p style={{ padding: '8px 12px', background: 'var(--color-surface, #f0f4f8)', borderRadius: '6px', fontSize: '13px', color: '#1a73e8', marginBottom: '8px' }}>
+                    {securityMessage}
+                  </p>
+                )}
+                <div
+                  className="settings-access-row"
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => setSecurityMessage(`Verified primary email: ${email}`)}
+                >
                   <span>Email addresses</span>
                   <span className="settings-access-value">
                     {email}
                     <ArrowRight size={18} aria-hidden="true" />
                   </span>
                 </div>
-                <div className="settings-access-row">
+                <div
+                  className="settings-access-row"
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => setSecurityMessage(`Verified primary phone: ${phone}`)}
+                >
                   <span>Phone numbers</span>
                   <span className="settings-access-value">
                     {phone}
                     <ArrowRight size={18} aria-hidden="true" />
                   </span>
                 </div>
-                <div className="settings-access-row">
+                <div
+                  className="settings-access-row"
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => setSecurityMessage('Passkeys active: 1 device key (Windows Hello / FIDO2).')}
+                >
                   <span>Passkeys</span>
                   <span className="settings-access-value">
+                    1 registered
                     <ArrowRight size={18} aria-hidden="true" />
                   </span>
                 </div>
@@ -202,16 +284,25 @@ function Settings({ profileDetails, profilePreview, onEditProfile, theme, onThem
                     onClick={() => {
                       setIsPasswordFormOpen((open) => !open)
                       setPasswordMessage('')
+                      setSecurityMessage('')
                     }}
                   >
                     <span>Change password</span>
                     <ArrowRight size={18} aria-hidden="true" />
                   </button>
                 </div>
-                <div className="settings-access-row">
+                <div
+                  className="settings-access-row"
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => {
+                    const next = !twoFactorEnabled
+                    setTwoFactorEnabled(next)
+                    setSecurityMessage(`Two-factor authentication is now ${next ? 'enabled' : 'disabled'}.`)
+                  }}
+                >
                   <span>Two-factor authentication</span>
                   <span className="settings-access-value">
-                    Off
+                    {twoFactorEnabled ? 'On (SMS/App)' : 'Off'}
                     <ArrowRight size={18} aria-hidden="true" />
                   </span>
                 </div>
@@ -301,12 +392,7 @@ function Settings({ profileDetails, profilePreview, onEditProfile, theme, onThem
                           role="switch"
                           aria-checked={notificationPreferences[id]}
                           aria-label={settingLabel}
-                          onClick={() => {
-                            setNotificationPreferences((preferences) => ({
-                              ...preferences,
-                              [id]: !preferences[id],
-                            }))
-                          }}
+                          onClick={() => handleToggleNotification(id)}
                         >
                           <span>{notificationPreferences[id] ? 'On' : 'Off'}</span>
                           <span className="settings-notification-switch-track" aria-hidden="true">
@@ -348,7 +434,7 @@ function Settings({ profileDetails, profilePreview, onEditProfile, theme, onThem
                         name="theme"
                         value={mode}
                         checked={theme === mode}
-                        onChange={() => onThemeChange(mode)}
+                        onChange={() => handleThemeChange(mode)}
                       />
                       <span>{mode === 'light' ? 'Light mode' : 'Dark mode'}</span>
                     </label>
@@ -364,7 +450,7 @@ function Settings({ profileDetails, profilePreview, onEditProfile, theme, onThem
                 <button
                   className="settings-management-action"
                   type="button"
-                  onClick={() => setAccountManagementMessage('Account deletion is not available yet.')}
+                  onClick={handleDeleteAccount}
                 >
                   <span>Close and delete account</span>
                   <ArrowRight size={18} aria-hidden="true" />

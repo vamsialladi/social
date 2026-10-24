@@ -22,3 +22,18 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Java & Maven
+backend/target/
+target/
+*.class
+*.jar
+*.war
+*.ear
+
+# Database and uploads
+*.mv.db
+*.trace.db
+backend/data/
+backend/uploads/
+uploads/

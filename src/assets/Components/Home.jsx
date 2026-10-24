@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import './Home.css'
 import Article from './Article.jsx'
+import api from '../../api'
 
 function ProfileAvatarPlaceholder() {
   return (
@@ -39,6 +40,22 @@ function Home({
     mediaUrls.current.forEach((url) => URL.revokeObjectURL(url))
   }, [])
 
+  useEffect(() => {
+    async function loadPosts() {
+      try {
+        const data = activeNavigation === 'opportunities'
+          ? await api.getOpportunities()
+          : await api.getPosts()
+        if (Array.isArray(data)) {
+          setPosts(data)
+        }
+      } catch (err) {
+        console.warn('Failed to load posts from API:', err)
+      }
+    }
+    loadPosts()
+  }, [activeNavigation])
+
   function selectMedia(event) {
     const file = event.target.files?.[0]
     event.target.value = ''
@@ -58,23 +75,48 @@ function Home({
     setDraftMedia(null)
   }
 
-  function publishPost(event) {
+  async function publishPost(event) {
     event.preventDefault()
     const content = draft.trim()
     if (!content && !draftMedia) return
 
-    if (draftMedia) mediaUrls.current.push(draftMedia.url)
+    let uploadedMedia = null
+    if (draftMedia?.file) {
+      try {
+        const res = await api.uploadMedia(draftMedia.file)
+        uploadedMedia = {
+          url: res.url,
+          fileName: res.fileName,
+          contentType: res.contentType,
+          kind: res.kind,
+        }
+      } catch (err) {
+        console.warn('Failed to upload post media:', err)
+      }
+    }
 
-    setPosts((currentPosts) => [
-      {
-        id: `${Date.now()}-${currentPosts.length}`,
+    try {
+      const created = await api.createPost({
         content,
         type: draftType,
-        media: draftMedia,
-        createdAt: new Date().toLocaleString(),
-      },
-      ...currentPosts,
-    ])
+        media: uploadedMedia,
+      })
+      setPosts((currentPosts) => [created, ...currentPosts])
+    } catch (err) {
+      console.warn('Backend post creation note:', err)
+      if (draftMedia) mediaUrls.current.push(draftMedia.url)
+      setPosts((currentPosts) => [
+        {
+          id: `${Date.now()}-${currentPosts.length}`,
+          content,
+          type: draftType,
+          media: draftMedia,
+          createdAt: new Date().toLocaleString(),
+        },
+        ...currentPosts,
+      ])
+    }
+
     setDraft('')
     setDraftMedia(null)
     setDraftType('post')
@@ -92,17 +134,94 @@ function Home({
     setIsComposerOpen(true)
   }
 
-  function publishArticle(article) {
-    setPosts((currentPosts) => [
-      {
-        id: `${Date.now()}-${currentPosts.length}`,
-        ...article,
+  async function publishArticle(article) {
+    let uploadedMedia = null
+    if (article.media?.file) {
+      try {
+        const res = await api.uploadMedia(article.media.file)
+        uploadedMedia = {
+          url: res.url,
+          fileName: res.fileName,
+          contentType: res.contentType,
+          kind: res.kind,
+        }
+      } catch (err) {
+        console.warn('Failed to upload article media:', err)
+      }
+    }
+
+    try {
+      const created = await api.createPost({
+        title: article.title,
+        content: article.content,
         type: 'article',
-        createdAt: new Date().toLocaleString(),
-      },
-      ...currentPosts,
-    ])
+        media: uploadedMedia,
+      })
+      setPosts((currentPosts) => [created, ...currentPosts])
+    } catch (err) {
+      console.warn('Backend article creation note:', err)
+      setPosts((currentPosts) => [
+        {
+          id: `${Date.now()}-${currentPosts.length}`,
+          ...article,
+          type: 'article',
+          createdAt: new Date().toLocaleString(),
+        },
+        ...currentPosts,
+      ])
+    }
     setIsWritingArticle(false)
+  }
+
+  const [openCommentsPostId, setOpenCommentsPostId] = useState(null)
+  const [commentText, setCommentText] = useState('')
+
+  async function handleLike(postId) {
+    try {
+      const updated = await api.likePost(postId)
+      setPosts((current) => current.map((p) => (String(p.id) === String(postId) ? { ...p, ...updated } : p)))
+    } catch (err) {
+      console.warn('Like error:', err)
+    }
+  }
+
+  async function handleApply(postId) {
+    try {
+      const updated = await api.applyToOpportunity(postId)
+      setPosts((current) => current.map((p) => (String(p.id) === String(postId) ? { ...p, ...updated } : p)))
+    } catch (err) {
+      console.warn('Apply error:', err)
+    }
+  }
+
+  async function handleDelete(postId) {
+    try {
+      await api.deletePost(postId)
+      setPosts((current) => current.filter((p) => String(p.id) !== String(postId)))
+    } catch (err) {
+      console.warn('Delete error:', err)
+    }
+  }
+
+  async function handleCommentSubmit(event, postId) {
+    event.preventDefault()
+    if (!commentText.trim()) return
+    try {
+      const updated = await api.commentOnPost(postId, commentText.trim())
+      setPosts((current) => current.map((p) => (String(p.id) === String(postId) ? { ...p, ...updated } : p)))
+      setCommentText('')
+    } catch (err) {
+      console.warn('Comment error:', err)
+    }
+  }
+
+  async function handlePromoClick(campaign) {
+    try {
+      const res = await api.clickPromotion(campaign)
+      alert(res.message || 'Inquiry registered with Northstar Films casting office.')
+    } catch (err) {
+      console.warn('Promo error:', err)
+    }
   }
 
   const visiblePosts = posts.filter((post) => (
@@ -291,9 +410,9 @@ function Home({
                         : <ProfileAvatarPlaceholder />}
                     </div>
                     <div>
-                      <strong>{name}</strong>
-                      {profileDetails.talents.length > 0 && (
-                        <span>{profileDetails.talents.join(' · ')}</span>
+                      <strong>{post.authorName || name}</strong>
+                      {post.authorHeadline && (
+                        <span>{post.authorHeadline}</span>
                       )}
                       <time>{post.createdAt}</time>
                     </div>
@@ -307,6 +426,107 @@ function Home({
                     )}
                   {post.type === 'article' && <span className="home-post-type">Article</span>}
                   {post.type === 'opportunity' && <span className="home-post-type">Opportunity</span>}
+
+                  {/* Post interactive action buttons wired to backend APIs */}
+                  <div className="home-post-action-bar" style={{ display: 'flex', gap: '8px', marginTop: '12px', borderTop: '1px solid var(--color-border, #eee)', paddingTop: '8px', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      onClick={() => handleLike(post.id)}
+                      style={{
+                        background: post.liked ? '#e8f0fe' : 'transparent',
+                        color: post.liked ? '#1a73e8' : 'inherit',
+                        border: '1px solid #ddd',
+                        padding: '6px 14px',
+                        borderRadius: '20px',
+                        cursor: 'pointer',
+                        fontWeight: '500',
+                        fontSize: '13px'
+                      }}
+                    >
+                      👍 {post.likesCount || 0} {post.liked ? 'Liked' : 'Like'}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setOpenCommentsPostId(openCommentsPostId === post.id ? null : post.id)}
+                      style={{
+                        background: 'transparent',
+                        border: '1px solid #ddd',
+                        padding: '6px 14px',
+                        borderRadius: '20px',
+                        cursor: 'pointer',
+                        fontSize: '13px'
+                      }}
+                    >
+                      💬 Comments ({post.comments?.length || 0})
+                    </button>
+
+                    {post.type === 'opportunity' && (
+                      <button
+                        type="button"
+                        onClick={() => handleApply(post.id)}
+                        style={{
+                          background: post.applied ? '#e6f4ea' : '#1a73e8',
+                          color: post.applied ? '#137333' : '#fff',
+                          border: 'none',
+                          padding: '6px 16px',
+                          borderRadius: '20px',
+                          cursor: 'pointer',
+                          fontWeight: '600',
+                          fontSize: '13px'
+                        }}
+                      >
+                        {post.applied ? '✓ Applied' : '⚡ Apply Now'}
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(post.id)}
+                      style={{
+                        marginLeft: 'auto',
+                        background: 'transparent',
+                        border: 'none',
+                        color: '#d93025',
+                        cursor: 'pointer',
+                        fontSize: '12px'
+                      }}
+                      title="Delete post"
+                    >
+                      🗑️ Delete
+                    </button>
+                  </div>
+
+                  {/* Comments section */}
+                  {openCommentsPostId === post.id && (
+                    <div style={{ marginTop: '12px', background: '#f9f9f9', padding: '12px', borderRadius: '8px' }}>
+                      {post.comments && post.comments.length > 0 && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
+                          {post.comments.map((c) => (
+                            <div key={c.id} style={{ fontSize: '13px', background: '#fff', padding: '8px 12px', borderRadius: '6px' }}>
+                              <strong>{c.authorName}</strong> <small style={{ color: '#888' }}>({c.createdAt})</small>: {c.text}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <form onSubmit={(e) => handleCommentSubmit(e, post.id)} style={{ display: 'flex', gap: '8px' }}>
+                        <input
+                          type="text"
+                          value={commentText}
+                          onChange={(e) => setCommentText(e.target.value)}
+                          placeholder="Write a comment..."
+                          style={{ flex: 1, padding: '8px 12px', borderRadius: '20px', border: '1px solid #ccc', fontSize: '13px' }}
+                        />
+                        <button
+                          type="submit"
+                          disabled={!commentText.trim()}
+                          style={{ background: '#1a73e8', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '20px', cursor: 'pointer', fontSize: '13px' }}
+                        >
+                          Post
+                        </button>
+                      </form>
+                    </div>
+                  )}
                 </article>
               ))}
             </div>
@@ -327,7 +547,13 @@ function Home({
               <h2>Bring your next story to the screen</h2>
               <p>Northstar Films is meeting new writers, actors, and independent filmmakers for upcoming productions.</p>
               <span className="home-promotion-caption">Make your mark in the movies.</span>
-              <button className="home-promotion-button" type="button">Explore film careers</button>
+              <button
+                className="home-promotion-button"
+                type="button"
+                onClick={() => handlePromoClick("Northstar Films Production")}
+              >
+                Explore film careers
+              </button>
             </div>
           </section>
         </aside>

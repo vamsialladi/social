@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import api from '../../api'
 import {
   CalendarDays,
   MessageCircle,
@@ -40,23 +41,52 @@ const suggestedProfiles = [
 function NetworkPage({ onMessage }) {
   const [activeTab, setActiveTab] = useState('grow')
   const [activeSection, setActiveSection] = useState('grow')
+  const [profiles, setProfiles] = useState(suggestedProfiles)
   const [connectedProfiles, setConnectedProfiles] = useState([])
   const [followedProfiles, setFollowedProfiles] = useState([])
 
-  function toggleConnection(profileId) {
-    setConnectedProfiles((profiles) => (
-      profiles.includes(profileId)
-        ? profiles.filter((id) => id !== profileId)
-        : [...profiles, profileId]
+  useEffect(() => {
+    async function loadNetworkData() {
+      try {
+        const data = await api.getNetworkSuggestions()
+        if (Array.isArray(data) && data.length > 0) {
+          setProfiles(data)
+          const connected = data.filter((p) => p.isConnected).map((p) => p.id)
+          const followed = data.filter((p) => p.isFollowing).map((p) => p.id)
+          setConnectedProfiles(connected)
+          setFollowedProfiles(followed)
+        }
+      } catch (err) {
+        console.warn('Network suggestions load error:', err)
+      }
+    }
+    loadNetworkData()
+  }, [])
+
+  async function toggleConnection(profileId) {
+    setConnectedProfiles((current) => (
+      current.includes(profileId)
+        ? current.filter((id) => id !== profileId)
+        : [...current, profileId]
     ))
+    try {
+      await api.toggleConnection(profileId)
+    } catch (err) {
+      console.warn('Backend toggle connection error:', err)
+    }
   }
 
-  function toggleFollow(profileId) {
-    setFollowedProfiles((profiles) => (
-      profiles.includes(profileId)
-        ? profiles.filter((id) => id !== profileId)
-        : [...profiles, profileId]
+  async function toggleFollow(profileId) {
+    setFollowedProfiles((current) => (
+      current.includes(profileId)
+        ? current.filter((id) => id !== profileId)
+        : [...current, profileId]
     ))
+    try {
+      await api.toggleFollow(profileId)
+    } catch (err) {
+      console.warn('Backend toggle follow error:', err)
+    }
   }
 
   function renderProfileCard(profile) {
@@ -105,7 +135,7 @@ function NetworkPage({ onMessage }) {
           <button
             className="network-message-button"
             type="button"
-            onClick={onMessage}
+            onClick={() => onMessage && onMessage(profile)}
           >
             <MessageCircle size={15} aria-hidden="true" />
             Message
@@ -158,7 +188,20 @@ function NetworkPage({ onMessage }) {
               <h2>Bring your next story to the screen</h2>
               <p>Northstar Films is meeting new writers, actors, and independent filmmakers for upcoming productions.</p>
               <span className="home-promotion-caption">Make your mark in the movies.</span>
-              <button className="home-promotion-button" type="button">Explore film careers</button>
+              <button
+                className="home-promotion-button"
+                type="button"
+                onClick={async () => {
+                  try {
+                    const res = await api.clickPromotion("Network Promo - Northstar Films")
+                    alert(res.message || 'Inquiry registered with studio casting office.')
+                  } catch (e) {
+                    console.warn(e)
+                  }
+                }}
+              >
+                Explore film careers
+              </button>
             </div>
           </section>
         </aside>
@@ -176,7 +219,7 @@ function NetworkPage({ onMessage }) {
               </header>
               {connectedProfiles.length > 0 ? (
                 <div className="network-profile-grid">
-                  {suggestedProfiles
+                  {profiles
                     .filter((profile) => connectedProfiles.includes(profile.id))
                     .map(renderProfileCard)}
                 </div>
@@ -229,10 +272,10 @@ function NetworkPage({ onMessage }) {
                     <h2 id="network-suggestions-title">People you may know</h2>
                     <p>Connect with artists and professionals in your community.</p>
                   </div>
-                  <span className="network-suggestion-count">2 suggestions</span>
+                  <span className="network-suggestion-count">{profiles.length} suggestions</span>
                 </header>
                 <div className="network-profile-grid">
-                  {suggestedProfiles.map(renderProfileCard)}
+                  {profiles.map(renderProfileCard)}
                 </div>
               </section>
             </>

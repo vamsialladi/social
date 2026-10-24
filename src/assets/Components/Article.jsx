@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import './Article.css'
+import api from '../../api'
 
 function Article({ profileDetails, profilePreview, hidden, onBack, onPublish }) {
   const [title, setTitle] = useState('')
@@ -197,7 +198,20 @@ function Article({ profileDetails, profilePreview, hidden, onBack, onPublish }) 
           <h2>Bring your next story to the screen</h2>
           <p>Northstar Films is meeting new writers, actors, and independent filmmakers for upcoming productions.</p>
           <span className="home-promotion-caption">Make your mark in the movies.</span>
-          <button className="home-promotion-button" type="button">Explore film careers</button>
+          <button
+            className="home-promotion-button"
+            type="button"
+            onClick={async () => {
+              try {
+                const res = await api.clickPromotion("Northstar Films Article Promo")
+                alert(res.message || 'Inquiry registered with studio casting office.')
+              } catch (e) {
+                console.warn(e)
+              }
+            }}
+          >
+            Explore film careers
+          </button>
         </div>
       </section>
     </main>
