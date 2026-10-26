@@ -465,8 +465,8 @@
 
 .artist-identity {
   position: relative;
-  min-height: 208px;
-  padding: 24px 190px 25px 30px;
+  min-height: auto;
+  padding: 24px 190px 14px 30px;
   border-bottom: 1px solid #e9e7eb;
 }
 

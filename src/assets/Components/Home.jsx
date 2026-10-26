@@ -265,7 +265,7 @@ function Home({
               )}
               {profileDetails.address && <p>{profileDetails.address}</p>}
               {profileDetails.experience && (
-                <p>{profileDetails.experience} years of experience</p>
+                <p>{profileDetails.experience.toLowerCase().includes('year') ? `${profileDetails.experience} experience` : `${profileDetails.experience} years of experience`}</p>
               )}
               {(languages.length > 0 || profileDetails.workTypes.length > 0) && (
                 <div className="home-profile-tags">

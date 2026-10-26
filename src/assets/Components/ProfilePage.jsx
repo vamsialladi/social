@@ -529,7 +529,7 @@ function ProfilePage({
               </p>
               <p className="artist-location">{profileDetails.address || 'Add your location in Edit profile'}</p>
               <p className="artist-experience">
-                {profileDetails.experience ? `${profileDetails.experience} years of experience` : 'Add your experience in Edit profile'}
+                {profileDetails.experience ? (profileDetails.experience.toLowerCase().includes('year') ? `${profileDetails.experience} experience` : `${profileDetails.experience} years of experience`) : 'Add your experience in Edit profile'}
               </p>
               {isSubmitted && <p className="profile-confirmation" role="status">Your profile preview is confirmed.</p>}
             </div>
@@ -592,7 +592,7 @@ function ProfilePage({
                 <div className="insights-grid">
                   <div className="insight-item">
                     <span className="insight-icon" aria-hidden="true">✦</span>
-                    <div><strong>{profileDetails.experience ? `${profileDetails.experience} years` : '—'}</strong><span>Experience</span></div>
+                    <div><strong>{profileDetails.experience ? (profileDetails.experience.toLowerCase().includes('year') ? profileDetails.experience : `${profileDetails.experience} years`) : '—'}</strong><span>Experience</span></div>
                   </div>
                   <div className="insight-item">
                     <span className="insight-icon" aria-hidden="true">◎</span>

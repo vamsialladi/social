@@ -191,6 +191,7 @@
   position: sticky;
   z-index: 20;
   top: 0;
+  bottom: 0;
   box-sizing: border-box;
   width: calc(100% + 2 * clamp(20px, 4vw, 64px));
   height: 58px;
@@ -586,7 +587,7 @@
 
 @media (max-width: 640px) {
   .linkedin-navbar {
-    width: calc(100% + 28px);
+    width: calc(100% + 25px);
     height: 58px;
     margin: -32px -14px 20px;
   }

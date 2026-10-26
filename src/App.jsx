@@ -1,531 +1,74 @@
-import { useEffect, useRef, useState } from 'react'
-import './App.css'
-import Messages from './assets/Components/Messages'
-import Home from './assets/Components/Home'
-import NetworkPage from './assets/Components/NetworkPage'
-import Endorsement from './assets/Components/Endorsement'
-import ProfilePage, { emptyProfileDetails } from './assets/Components/ProfilePage'
-import Settings from './assets/Components/Settings'
-import api from './api'
+import React from 'react';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import MainLayout from './layouts/MainLayout';
+import HomePage from './pages/HomePage';
+import EntertainmentsPage from './pages/EntertainmentsPage';
+import TalentsPage from './pages/TalentsPage';
+import TalentDetailsPage from './pages/TalentDetailsPage';
+import ProfilePage from './pages/ProfilePage';
+import JobsPage from './pages/JobsPage';
+import JobDetailsPage from './pages/JobDetailsPage';
+import InvestorsConnectPage from './pages/InvestorsConnectPage';
+import LcmAppPage from './pages/LcmAppPage';
+import GetSupportPage from './pages/GetSupportPage';
+import SignInPage from './pages/SignInPage';
+import JoinNowPage from './pages/JoinNowPage';
+import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
+import TermsPage from './pages/TermsPage';
+import ProtectProducerLandingPage from './pages/ProtectProducerLandingPage';
+import ProtectCategoryPage from './pages/ProtectCategoryPage';
+import ProjectDashboardPage from './pages/ProjectDashboardPage';
+import ContactUsPage from './pages/ContactUsPage';
+import AboutUsPage from './pages/AboutUsPage';
+import NotFoundPage from './pages/NotFoundPage';
+import ScrollToTop from './components/common/ScrollToTop';
+import { AuthProvider } from './context/AuthContext';
+import { NotificationProvider } from './context/NotificationContext';
+import SocialApp from './assets/Components/SocialApp';
 
-const navigationHashes = {
-  home: 'home',
-  network: 'network',
-  messaging: 'messages',
-  endorsement: 'endorsement',
-  opportunities: 'opportunities',
-  profile: 'profile',
-  settings: 'settings',
-  'account-settings': 'account-settings',
-  business: 'business',
-}
-
-function getNavigationFromHash() {
-  const hash = window.location.hash.slice(1)
-  const navigation = Object.entries(navigationHashes)
-    .find(([, route]) => route === hash)?.[0]
-
-  return navigation || (hash === 'artist-profile' ? 'profile' : 'home')
-}
-
-function NavigationIcon({ name }) {
-  const iconPaths = {
-    search: <><circle cx="11" cy="11" r="7" /><path d="m16 16 4 4" /></>,
-    home: <><path d="m3 10 9-7 9 7" /><path d="M5 9v11h14V9M9 20v-6h6v6" /></>,
-    network: <><circle cx="9" cy="8" r="3" /><circle cx="17" cy="9" r="2.5" /><path d="M3.5 20v-1.5A5.5 5.5 0 0 1 9 13h0a5.5 5.5 0 0 1 5.5 5.5V20zM15 14a4.5 4.5 0 0 1 5.5 4.5V20h-4" /></>,
-    messaging: <><path d="M16 4H8a7 7 0 0 0 0 14h4v4l8.16-5.39A6.78 6.78 0 0 0 23 11a7 7 0 0 0-7-7m-8 8.25A1.25 1.25 0 1 1 9.25 11 1.25 1.25 0 0 1 8 12.25m4 0A1.25 1.25 0 1 1 13.25 11 1.25 1.25 0 0 1 12 12.25m4 0A1.25 1.25 0 1 1 17.25 11 1.25 1.25 0 0 1 16 12.25"/><path d="M7.5 11.5h.01M12 11.5h.01M16.5 11.5h.01" /></>,
-    endorsement: <path d="M21 19v1H3v-1l2-2v-6c0-3.1 2.03-5.83 5-6.71V4a2 2 0 0 1 2-2a2 2 0 0 1 2 2v.29c2.97.88 5 3.61 5 6.71v6zm-7 2a2 2 0 0 1-2 2a2 2 0 0 1-2-2" />,
-    opportunities: <><rect x="3" y="7" width="18" height="13" rx="2" /><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 12h18M10 12v2h4v-2" /></>,
-    business: <><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></>,
-    
-  }
-
+export default function App() {
   return (
-    <svg
-      className="linkedin-nav-icon"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      {iconPaths[name]}
-    </svg>
-  )
+    <BrowserRouter>
+      <ScrollToTop />
+      <NotificationProvider>
+        <AuthProvider>
+          <Routes>
+            <Route path="/" element={<MainLayout />}>
+              <Route index element={<HomePage />} />
+              <Route path="entertainments" element={<EntertainmentsPage />} />
+              <Route path="talents" element={<TalentsPage />} />
+              <Route path="talents/:id" element={<ProfilePage />} />
+              <Route path="profile" element={<ProfilePage />} />
+              <Route path="profile/:id" element={<ProfilePage />} />
+              <Route path="jobs" element={<JobsPage />} />
+              <Route path="jobs/:id" element={<JobDetailsPage />} />
+              <Route path="investors-connect" element={<InvestorsConnectPage />} />
+              
+              {/* Protect Producer Module Routes */}
+              <Route path="protect-producer" element={<ProtectProducerLandingPage />} />
+              <Route path="protect-producer/:category" element={<ProtectCategoryPage />} />
+              <Route path="protect-producer/:category/projects/:projectId" element={<ProjectDashboardPage />} />
+              <Route path="protect-producer/:category/projects/:projectId/:stage" element={<ProjectDashboardPage />} />
+
+              <Route path="lcm-app" element={<LcmAppPage />} />
+              <Route path="get-support" element={<GetSupportPage />} />
+              <Route path="contact-us" element={<ContactUsPage />} />
+              <Route path="contact" element={<ContactUsPage />} />
+              <Route path="about-us" element={<AboutUsPage />} />
+              <Route path="about" element={<AboutUsPage />} />
+              <Route path="sign-in" element={<SignInPage />} />
+              <Route path="join-now" element={<JoinNowPage />} />
+              <Route path="privacy-policy" element={<PrivacyPolicyPage />} />
+              <Route path="terms-and-conditions" element={<TermsPage />} />
+              <Route path="*" element={<NotFoundPage />} />
+            </Route>
+
+            {/* Existing Social Frontend Platform (Isolated & Fully Functional) */}
+            <Route path="social" element={<SocialApp />} />
+            <Route path="social/*" element={<SocialApp />} />
+          </Routes>
+        </AuthProvider>
+      </NotificationProvider>
+    </BrowserRouter>
+  );
 }
-
-function ProfileAvatarPlaceholder() {
-  return (
-    <svg viewBox="0 0 100 100" aria-hidden="true">
-      <circle cx="50" cy="35" r="21" />
-      <path d="M10 96c2-23 18-39 40-39s38 16 40 39H10Z" />
-    </svg>
-  )
-}
-
-function Navigation({
-  activeNavigation,
-  setActiveNavigation,
-  isProfileMenuOpen,
-  setIsProfileMenuOpen,
-  profilePreview,
-  profileDetails,
-}) {
-  const profileMenuRef = useRef(null)
-  const [searchQuery, setSearchQuery] = useState('')
-  const [searchResults, setSearchResults] = useState(null)
-  const [isSearching, setIsSearching] = useState(false)
-  const [isSearchOpen, setIsSearchOpen] = useState(false)
-  const searchContainerRef = useRef(null)
-
-  useEffect(() => {
-    function handleOutside(e) {
-      if (!searchContainerRef.current?.contains(e.target)) {
-        setIsSearchOpen(false)
-      }
-    }
-    document.addEventListener('pointerdown', handleOutside)
-    return () => document.removeEventListener('pointerdown', handleOutside)
-  }, [])
-
-  async function handleSearch(event) {
-    if (event.key === 'Enter') {
-      event.preventDefault()
-      const q = searchQuery.trim()
-      if (!q) return
-      setIsSearching(true)
-      setIsSearchOpen(true)
-      try {
-        const res = await api.search(q)
-        setSearchResults(res)
-      } catch (err) {
-        console.warn('Search error:', err)
-      } finally {
-        setIsSearching(false)
-      }
-    }
-  }
-
-  useEffect(() => {
-    if (!isProfileMenuOpen) return undefined
-
-    function handlePointerDown(event) {
-      if (!profileMenuRef.current?.contains(event.target)) {
-        setIsProfileMenuOpen(false)
-      }
-    }
-
-    function handleKeyDown(event) {
-      if (event.key === 'Escape') setIsProfileMenuOpen(false)
-    }
-
-    document.addEventListener('pointerdown', handlePointerDown)
-    document.addEventListener('keydown', handleKeyDown)
-
-    return () => {
-      document.removeEventListener('pointerdown', handlePointerDown)
-      document.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [isProfileMenuOpen, setIsProfileMenuOpen])
-
-  return (
-    <nav className="linkedin-navbar" aria-label="Profile navigation">
-      <div className="linkedin-navbar-inner">
-        <a
-          href="#home"
-          aria-label="TrueHunt home"
-          onClick={(event) => {
-            event.preventDefault()
-            setActiveNavigation('home')
-          }}
-        >
-          <img className="truehunt-brand" src="/truehunt-logo.png" alt="TrueHunt" />
-        </a>
-        
-        <div className="linkedin-search-wrap" ref={searchContainerRef} style={{ position: 'relative' }}>
-          <label className="linkedin-search">
-            <NavigationIcon name="search" />
-            <input
-              type="search"
-              placeholder="Search people, posts..."
-              aria-label="Search profiles"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyDown={handleSearch}
-              onFocus={() => {
-                if (searchResults) setIsSearchOpen(true)
-              }}
-            />
-          </label>
-          {isSearchOpen && (
-            <div
-              className="search-results-dropdown"
-              style={{
-                position: 'absolute',
-                top: 'calc(100% + 4px)',
-                left: 0,
-                width: '320px',
-                background: 'var(--color-surface, #fff)',
-                border: '1px solid #ccc',
-                borderRadius: '8px',
-                boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
-                zIndex: 100,
-                padding: '12px',
-                maxHeight: '380px',
-                overflowY: 'auto',
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', borderBottom: '1px solid #eee', paddingBottom: '6px' }}>
-                <strong style={{ fontSize: '13px' }}>
-                  {isSearching ? 'Searching...' : `Results (${searchResults?.totalResults || 0})`}
-                </strong>
-                <button
-                  type="button"
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', color: '#666' }}
-                  onClick={() => setIsSearchOpen(false)}
-                >
-                  ✕
-                </button>
-              </div>
-
-              {searchResults?.people && searchResults.people.length > 0 && (
-                <div style={{ marginBottom: '12px' }}>
-                  <div style={{ fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', color: '#888', marginBottom: '6px' }}>
-                    People
-                  </div>
-                  {searchResults.people.map((p) => (
-                    <div
-                      key={p.id}
-                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #f5f5f5' }}
-                    >
-                      <div>
-                        <div style={{ fontSize: '13px', fontWeight: '600' }}>{p.name}</div>
-                        <div style={{ fontSize: '11px', color: '#666' }}>{p.role}</div>
-                      </div>
-                      <button
-                        type="button"
-                        style={{ background: '#1a73e8', color: '#fff', border: 'none', borderRadius: '12px', padding: '3px 10px', fontSize: '12px', cursor: 'pointer' }}
-                        onClick={() => {
-                          setIsSearchOpen(false)
-                          setActiveNavigation('network')
-                        }}
-                      >
-                        View
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {searchResults?.posts && searchResults.posts.length > 0 && (
-                <div>
-                  <div style={{ fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', color: '#888', marginBottom: '6px' }}>
-                    Posts & Opportunities
-                  </div>
-                  {searchResults.posts.map((post) => (
-                    <div
-                      key={post.id}
-                      style={{ padding: '6px 0', borderBottom: '1px solid #f5f5f5', cursor: 'pointer' }}
-                      onClick={() => {
-                        setIsSearchOpen(false)
-                        setActiveNavigation(post.type === 'opportunity' ? 'opportunities' : 'home')
-                      }}
-                    >
-                      <div style={{ fontSize: '12px', fontWeight: '600' }}>{post.authorName || 'Post'}</div>
-                      <div style={{ fontSize: '12px', color: '#444' }}>{post.title || post.content?.slice(0, 50)}...</div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {(!searchResults || (searchResults.people.length === 0 && searchResults.posts.length === 0)) && !isSearching && (
-                <div style={{ fontSize: '12px', color: '#888', padding: '12px 0', textAlign: 'center' }}>
-                  Press Enter to search for "{searchQuery}".
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-        <div className="linkedin-nav-items">
-          <a
-            className={`linkedin-nav-item${activeNavigation === 'home' ? ' is-active' : ''}`}
-            href="#home"
-            onClick={(event) => {
-              event.preventDefault()
-              setActiveNavigation('home')
-            }}
-          >
-            <NavigationIcon name="home" /><small>Home</small>
-          </a>
-          <a
-            className={`linkedin-nav-item${activeNavigation === 'network' ? ' is-active' : ''}`}
-            href="#network"
-            onClick={(event) => {
-              event.preventDefault()
-              setActiveNavigation('network')
-            }}
-          >
-            <NavigationIcon name="network" /><small>Network</small>
-          </a>
-          <a
-            className={`linkedin-nav-item${activeNavigation === 'messaging' ? ' is-active' : ''}`}
-            href="#messages"
-            onClick={(event) => {
-              event.preventDefault()
-              setActiveNavigation('messaging')
-            }}
-          >
-            <NavigationIcon name="messaging" /><small>Messaging</small>
-          </a>
-          <button
-            className={`linkedin-nav-item${activeNavigation === 'endorsement' ? ' is-active' : ''}`}
-            type="button"
-            onClick={() => setActiveNavigation('endorsement')}
-            aria-current={activeNavigation === 'endorsement' ? 'page' : undefined}
-          >
-            <NavigationIcon name="endorsement" /><small>Endorsement</small>
-          </button>
-          <button
-            className={`linkedin-nav-item${activeNavigation === 'opportunities' ? ' is-active' : ''}`}
-            type="button"
-            onClick={() => setActiveNavigation('opportunities')}
-            aria-current={activeNavigation === 'opportunities' ? 'page' : undefined}
-          >
-            <NavigationIcon name="opportunities" /><small>Opportunities</small>
-          </button>
-          <div className={`linkedin-profile-menu${isProfileMenuOpen ? ' is-open' : ''}`} ref={profileMenuRef}>
-            <button
-              className={`linkedin-nav-item linkedin-me${['profile', 'settings', 'account-settings'].includes(activeNavigation) ? ' is-active' : ''}`}
-              type="button"
-              onClick={() => setIsProfileMenuOpen((open) => !open)}
-              aria-expanded={isProfileMenuOpen}
-              aria-haspopup="menu"
-            >
-              <span className="linkedin-mini-avatar" aria-hidden="true">
-                {profilePreview
-                  ? <img src={profilePreview} alt="" />
-                  : <ProfileAvatarPlaceholder />}
-              </span>
-              <small>Me⌄</small>
-            </button>
-            {isProfileMenuOpen && (
-              <div className="linkedin-profile-dropdown" role="menu">
-                <a
-                  className="profile-dropdown-person"
-                  href="#profile"
-                  role="menuitem"
-                  onClick={(event) => {
-                    event.preventDefault()
-                    setActiveNavigation('profile')
-                    setIsProfileMenuOpen(false)
-                  }}
-                >
-                  <span className="linkedin-mini-avatar" aria-hidden="true">
-                    {profilePreview
-                      ? <img src={profilePreview} alt="" />
-                      : <ProfileAvatarPlaceholder />}
-                  </span>
-                  <span>
-                    <strong>{profileDetails.name || 'Your name'}</strong>
-                    <small>My profile</small>
-                  </span>
-                </a>
-                <div className="profile-dropdown-divider" />
-                <button
-                  className="profile-dropdown-item"
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    setActiveNavigation('settings')
-                    setIsProfileMenuOpen(false)
-                  }}
-                >
-                  Settings
-                </button>
-                <button
-                  className="profile-dropdown-item profile-dropdown-logout"
-                  type="button"
-                  role="menuitem"
-                  onClick={async () => {
-                    try {
-                      await api.logout()
-                      alert('Logged out successfully.')
-                    } catch (e) {
-                      console.warn('Logout note:', e)
-                    }
-                    setIsProfileMenuOpen(false)
-                  }}
-                >
-                  Log out
-                </button>
-              </div>
-            )}
-          </div>
-          <span className="linkedin-nav-divider" aria-hidden="true" />
-          <button
-            className={`linkedin-nav-item linkedin-business${activeNavigation === 'business' ? ' is-active' : ''}`}
-            type="button"
-            onClick={() => setActiveNavigation('business')}
-            aria-current={activeNavigation === 'business' ? 'page' : undefined}
-          >
-            <NavigationIcon name="business" /><small>For Business</small>
-          </button>
-        </div>
-      </div>
-    </nav>
-  )
-}
-
-function App() {
-  const [activeNavigation, setActiveNavigationState] = useState(getNavigationFromHash)
-  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false)
-  const [theme, setTheme] = useState('light')
-  const [profileDetails, setProfileDetails] = useState(emptyProfileDetails)
-  const [profilePreview, setProfilePreview] = useState('')
-
-  function setActiveNavigation(navigation) {
-    const hash = navigationHashes[navigation]
-    if (!hash) return
-
-    const nextUrl = `#${hash}`
-    if (window.location.hash !== nextUrl) {
-      window.history.pushState({ navigation }, '', nextUrl)
-    }
-    setActiveNavigationState(navigation)
-  }
-
-  useEffect(() => {
-    function restoreNavigation() {
-      setActiveNavigationState(getNavigationFromHash())
-    }
-
-    window.addEventListener('popstate', restoreNavigation)
-    window.addEventListener('hashchange', restoreNavigation)
-    return () => {
-      window.removeEventListener('popstate', restoreNavigation)
-      window.removeEventListener('hashchange', restoreNavigation)
-    }
-  }, [])
-
-  useEffect(() => {
-    async function loadBackendData() {
-      try {
-        const profile = await api.getProfile()
-        if (profile) {
-          setProfileDetails((prev) => ({ ...prev, ...profile }))
-          if (profile.profileImageUrl) {
-            setProfilePreview(profile.profileImageUrl)
-          }
-        }
-      } catch (err) {
-        console.warn('Backend profile fetch note:', err)
-      }
-    }
-    loadBackendData()
-  }, [])
-
-  return (
-    <main className={`cinemans-page is-preview${activeNavigation === 'home' ? ' is-home' : ''}${theme === 'dark' ? ' is-dark' : ''}`}>
-      <Navigation
-        activeNavigation={activeNavigation}
-        setActiveNavigation={setActiveNavigation}
-        isProfileMenuOpen={isProfileMenuOpen}
-        setIsProfileMenuOpen={setIsProfileMenuOpen}
-        profilePreview={profilePreview}
-        profileDetails={profileDetails}
-      />
-
-      <Home
-        profileDetails={profileDetails}
-        profilePreview={profilePreview}
-        activeNavigation={activeNavigation}
-        setActiveNavigation={setActiveNavigation}
-        hidden={!['home', 'opportunities'].includes(activeNavigation)}
-        onViewProfile={() => setActiveNavigation('profile')}
-      />
-
-      <div hidden={activeNavigation !== 'network'}>
-        <NetworkPage onMessage={() => setActiveNavigation('messaging')} />
-      </div>
-      <div hidden={activeNavigation !== 'messaging'}>
-        <Messages />
-      </div>
-      <div hidden={activeNavigation !== 'endorsement'}>
-        <Endorsement
-          profileDetails={profileDetails}
-          profilePreview={profilePreview}
-          onViewProfile={() => setActiveNavigation('profile')}
-          onManageNotifications={() => setActiveNavigation('settings')}
-        />
-      </div>
-      <div hidden={activeNavigation !== 'profile'}>
-        <ProfilePage
-          profileDetails={profileDetails}
-          setProfileDetails={setProfileDetails}
-          profilePreview={profilePreview}
-          setProfilePreview={setProfilePreview}
-        />
-      </div>
-
-      {activeNavigation === 'settings' && (
-        <Settings
-          profileDetails={profileDetails}
-          profilePreview={profilePreview}
-          onEditProfile={() => setActiveNavigation('profile')}
-          theme={theme}
-          onThemeChange={setTheme}
-        />
-      )}
-
-      {['account-settings', 'business'].includes(activeNavigation) && (
-        <section className="navigation-placeholder">
-          <h1>
-            {activeNavigation === 'business' ? 'For Business' : 'Account settings'}
-          </h1>
-          <p>
-            {activeNavigation === 'business'
-              ? 'Business tools will appear here.'
-              : 'Account settings will appear here.'}
-          </p>
-          {activeNavigation === 'business' && (
-            <>
-              <button className="secondary-button" type="button" onClick={() => setActiveNavigation('profile')}>
-                Return to profile
-              </button>
-              <section className="home-promotion-card" aria-label="Sponsored movie industry promotion">
-                <div className="home-promotion-art">
-                  <span className="home-promotion-label">PROMOTED</span>
-                  <span className="home-promotion-art-title">THE NEXT<br />BIG PICTURE</span>
-                  <span className="home-promotion-studio">NORTHSTAR FILMS</span>
-                </div>
-                <div className="home-promotion-content">
-                  <h2>Bring your next story to the screen</h2>
-                  <p>Northstar Films is meeting new writers, actors, and independent filmmakers for upcoming productions.</p>
-                  <span className="home-promotion-caption">Make your mark in the movies.</span>
-                  <button
-                    className="home-promotion-button"
-                    type="button"
-                    onClick={async () => {
-                      try {
-                        const res = await api.clickPromotion("Business Promotion - Northstar Films")
-                        alert(res.message || 'Inquiry registered with studio casting office.')
-                      } catch (e) {
-                        console.warn(e)
-                      }
-                    }}
-                  >
-                    Explore film careers
-                  </button>
-                </div>
-              </section>
-            </>
-          )}
-        </section>
-      )}
-    </main>
-  )
-}
-
-export default App
