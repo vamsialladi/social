@@ -1,0 +1,527 @@
+/* TrueHunt Professional Navbar Stylesheet
+   Spacious, Balanced, Premium, Film-Industry Navigation
+*/
+
+/* --- Outer Sticky Header --- */
+.truehunt-navbar {
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  background-color: var(--color-white, #FFFFFF);
+  border-bottom: 1px solid var(--color-border-subtle, #EDF2F7);
+  box-shadow: none;
+  transition: all 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  width: 100%;
+}
+
+.truehunt-navbar.is-scrolled {
+  border-bottom-color: var(--color-border, #E2E8F0);
+  box-shadow: 0 4px 18px rgba(10, 25, 47, 0.05), 0 1px 3px rgba(10, 25, 47, 0.03);
+}
+
+/* --- Inner Container: Balanced Three-Section Layout --- */
+.navbar-container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  max-width: 1680px;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
+/* ==========================================================================
+   1. Left Section: Logo
+   ========================================================================== */
+.navbar-logo-section {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+/* ==========================================================================
+   2. Center Section: Navigation Links
+   ========================================================================== */
+.navbar-nav-section {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.nav-item-link {
+  display: inline-flex;
+  align-items: center;
+  border-radius: var(--radius-sm, 8px);
+  color: var(--color-navy, #0A192F);
+  text-decoration: none;
+  white-space: nowrap; /* Prevent multi-line wrapping */
+  line-height: 1;
+  position: relative;
+  transition: color 180ms ease, background-color 180ms ease, transform 180ms ease;
+  user-select: none;
+}
+
+.nav-item-icon {
+  flex-shrink: 0;
+  transition: transform 180ms ease, color 180ms ease;
+}
+
+.nav-item-label {
+  white-space: nowrap;
+  letter-spacing: -0.01em;
+}
+
+/* Hover State */
+.nav-item-link:hover {
+  color: var(--color-maroon, #801823);
+  background-color: var(--color-maroon-light, #FFF5F5);
+}
+
+.nav-item-link:hover .nav-item-icon {
+  color: var(--color-maroon, #801823);
+  transform: translateY(-0.5px);
+}
+
+/* Active State */
+.nav-item-link.is-active {
+  color: var(--color-maroon, #801823);
+  font-weight: 600;
+  background-color: var(--color-maroon-light, #FFF5F5);
+}
+
+.nav-item-link.is-active .nav-item-icon {
+  color: var(--color-maroon, #801823);
+}
+
+/* Subtle Active Underline Accent */
+.nav-item-link.is-active::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 10px;
+  right: 10px;
+  height: 2px;
+  background-color: var(--color-maroon, #801823);
+  border-radius: 2px;
+}
+
+/* Focus Visible for Accessibility */
+.nav-item-link:focus-visible {
+  outline: 2px solid var(--color-maroon, #801823);
+  outline-offset: 2px;
+}
+
+/* ==========================================================================
+   3. Right Section: Authentication
+   ========================================================================== */
+.navbar-auth-section {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex: 0 0 auto;
+}
+
+/* Sign In Button */
+.btn-nav-sign-in {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  color: var(--color-navy, #0A192F);
+  text-decoration: none;
+  border-radius: var(--radius-sm, 8px);
+  line-height: 1;
+  white-space: nowrap;
+  transition: color 180ms ease, background-color 180ms ease;
+}
+
+.btn-nav-sign-in:hover {
+  color: var(--color-maroon, #801823);
+  background-color: var(--color-maroon-light, #FFF5F5);
+}
+
+.btn-nav-sign-in:focus-visible {
+  outline: 2px solid var(--color-navy, #0A192F);
+  outline-offset: 2px;
+}
+
+/* Join Now Button */
+.btn-nav-join-now {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  color: #FFFFFF;
+  background-color: var(--color-maroon, #801823);
+  border-radius: var(--radius-full, 9999px);
+  text-decoration: none;
+  line-height: 1;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(128, 24, 35, 0.2);
+  transition: background-color 180ms ease, transform 180ms ease, box-shadow 180ms ease;
+  border: 1px solid transparent;
+}
+
+.btn-nav-join-now:hover {
+  background-color: var(--color-maroon-hover, #69121B);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(128, 24, 35, 0.28);
+}
+
+.btn-nav-join-now:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 4px rgba(128, 24, 35, 0.2);
+}
+
+.btn-nav-join-now:focus-visible {
+  outline: 2px solid var(--color-maroon, #801823);
+  outline-offset: 2px;
+}
+
+/* Authenticated User Status */
+.navbar-user-profile {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.user-badge {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  background-color: var(--color-bg-subtle, #F1F5F9);
+  padding: 6px 14px;
+  border-radius: var(--radius-full, 9999px);
+  border: 1px solid var(--color-border-subtle, #EDF2F7);
+}
+
+.user-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background-color: var(--color-navy, #0A192F);
+  color: #FFFFFF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.user-name-text {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--color-navy, #0A192F);
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.btn-nav-logout {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: none;
+  color: var(--color-maroon, #801823);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm, 8px);
+  transition: background-color 180ms ease;
+}
+
+.btn-nav-logout:hover {
+  background-color: var(--color-maroon-light, #FFF5F5);
+}
+
+/* ==========================================================================
+   4. Mobile Hamburger Button (Hidden on Desktop)
+   ========================================================================== */
+.navbar-mobile-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 8px;
+  border-radius: var(--radius-sm, 8px);
+  color: var(--color-navy, #0A192F);
+  background-color: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background-color 180ms ease, color 180ms ease;
+  flex-shrink: 0;
+}
+
+.navbar-mobile-toggle:hover {
+  background-color: var(--color-bg-subtle, #F1F5F9);
+  color: var(--color-maroon, #801823);
+}
+
+.navbar-mobile-toggle:focus-visible {
+  outline: 2px solid var(--color-maroon, #801823);
+  outline-offset: 2px;
+}
+
+/* ==========================================================================
+   5. Mobile Drawer & Backdrop
+   ========================================================================== */
+.navbar-drawer-backdrop {
+  position: fixed;
+  top: 72px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(10, 25, 47, 0.45);
+  backdrop-filter: blur(2px);
+  z-index: 998;
+  animation: fadeInBackdrop 200ms ease-out;
+}
+
+.navbar-mobile-drawer {
+  position: fixed;
+  top: 72px;
+  left: 0;
+  right: 0;
+  max-height: calc(100vh - 72px);
+  background-color: var(--color-white, #FFFFFF);
+  border-top: 1px solid var(--color-border, #E2E8F0);
+  box-shadow: 0 12px 32px rgba(10, 25, 47, 0.12);
+  z-index: 999;
+  overflow-y: auto;
+  padding: 16px 20px 32px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  animation: slideDownDrawer 240ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.mobile-nav-link {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm, 8px);
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--color-navy, #0A192F);
+  text-decoration: none;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.mobile-nav-link:hover {
+  color: var(--color-maroon, #801823);
+  background-color: var(--color-maroon-light, #FFF5F5);
+}
+
+.mobile-nav-link.is-active {
+  color: var(--color-maroon, #801823);
+  font-weight: 600;
+  background-color: var(--color-maroon-light, #FFF5F5);
+}
+
+.mobile-nav-divider {
+  height: 1px;
+  background-color: var(--color-border-subtle, #EDF2F7);
+  margin: 12px 0;
+}
+
+.mobile-auth-container {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.mobile-btn-sign-in {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 12px;
+  border-radius: var(--radius-sm, 8px);
+  border: 1.5px solid var(--color-navy, #0A192F);
+  color: var(--color-navy, #0A192F);
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background-color 150ms ease;
+}
+
+.mobile-btn-sign-in:hover {
+  background-color: var(--color-bg-subtle, #F1F5F9);
+}
+
+.mobile-btn-join-now {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 13px;
+  border-radius: var(--radius-full, 9999px);
+  background-color: var(--color-maroon, #801823);
+  color: #FFFFFF;
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: none;
+  box-shadow: 0 2px 8px rgba(128, 24, 35, 0.2);
+  transition: background-color 150ms ease;
+}
+
+.mobile-btn-join-now:hover {
+  background-color: var(--color-maroon-hover, #69121B);
+}
+
+/* Animations */
+@keyframes fadeInBackdrop {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideDownDrawer {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ==========================================================================
+   6. Calibrated Responsive Viewport Tiers
+   ========================================================================== */
+
+/* Tier 1: Large Desktop (>= 1440px) */
+@media (min-width: 1440px) {
+  .navbar-container {
+    height: 88px;
+    padding: 0 44px;
+  }
+  .navbar-logo-section {
+    min-width: 150px;
+  }
+  .navbar-nav-section {
+    margin: 0 32px;
+    gap: 22px;
+  }
+  .nav-item-link {
+    padding: 8px 10px;
+    font-size: 14.5px;
+    font-weight: 500;
+    gap: 8px;
+  }
+  .nav-item-icon {
+    width: 18px;
+    height: 18px;
+  }
+  .navbar-auth-section {
+    gap: 20px;
+    min-width: 180px;
+  }
+  .btn-nav-sign-in {
+    padding: 10px 14px;
+    font-size: 14.5px;
+  }
+  .btn-nav-join-now {
+    padding: 10px 22px;
+    font-size: 14px;
+  }
+}
+
+/* Tier 2: Standard Desktop & Laptop (1300px to 1439px, e.g. 1366px) */
+@media (min-width: 1300px) and (max-width: 1439px) {
+  .navbar-container {
+    height: 86px;
+    padding: 0 28px;
+  }
+  .navbar-logo-section {
+    min-width: 135px;
+  }
+  .navbar-nav-section {
+    margin: 0 20px;
+    gap: 16px;
+  }
+  .nav-item-link {
+    padding: 7px 8px;
+    font-size: 13.5px;
+    font-weight: 500;
+    gap: 7px;
+  }
+  .nav-item-icon {
+    width: 17px;
+    height: 17px;
+  }
+  .navbar-auth-section {
+    gap: 16px;
+    min-width: 165px;
+  }
+  .btn-nav-sign-in {
+    padding: 8px 10px;
+    font-size: 13.5px;
+  }
+  .btn-nav-join-now {
+    padding: 9px 18px;
+    font-size: 13.5px;
+  }
+}
+
+/* Tier 3: Compact Laptop (1180px to 1299px, e.g. 1280px) */
+@media (min-width: 1180px) and (max-width: 1299px) {
+  .navbar-container {
+    height: 84px;
+    padding: 0 18px;
+  }
+  .navbar-logo-section {
+    min-width: 125px;
+  }
+  .navbar-nav-section {
+    margin: 0 14px;
+    gap: 10px;
+  }
+  .nav-item-link {
+    padding: 6px 6px;
+    font-size: 12.8px;
+    font-weight: 500;
+    gap: 6px;
+  }
+  .nav-item-icon {
+    width: 15px;
+    height: 15px;
+  }
+  .navbar-auth-section {
+    gap: 12px;
+    min-width: 150px;
+  }
+  .btn-nav-sign-in {
+    padding: 7px 8px;
+    font-size: 12.8px;
+  }
+  .btn-nav-join-now {
+    padding: 8px 15px;
+    font-size: 12.8px;
+  }
+}
+
+/* Tier 4: Tablet & Mobile Breakpoint (< 1180px) */
+@media (max-width: 1179px) {
+  .navbar-container {
+    height: 72px;
+    padding: 0 20px;
+  }
+  .navbar-nav-section {
+    display: none !important;
+  }
+  .navbar-auth-section {
+    display: none !important;
+  }
+  .navbar-mobile-toggle {
+    display: flex !important;
+  }
+}
