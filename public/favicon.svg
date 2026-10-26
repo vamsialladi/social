@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <rect x="2" y="2" width="44" height="44" rx="10" fill="#FFFFFF" stroke="#0A192F" stroke-width="3" />
+  <!-- Curling film strip accent -->
+  <path d="M8 32 C12 24, 18 20, 24 22 C30 24, 34 18, 38 12" fill="none" stroke="#2563EB" stroke-width="2" stroke-linecap="round" stroke-dasharray="2 3" opacity="0.8" />
+  <!-- TH Monogram in Deep Navy -->
+  <!-- T bar and stem -->
+  <path d="M10 13 H24 M17 13 V35" stroke="#0A192F" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" />
+  <!-- H stem and crossbar -->
+  <path d="M26 15 V35 M36 15 V35 M26 25 H36" stroke="#0A192F" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" />
+  <!-- Brown right-pointing arrow -->
+  <path d="M22 25 L32 25 M28 21 L33 25 L28 29" stroke="#8B5A2B" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+</svg>
