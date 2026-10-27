@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Users, Building2, CheckCircle2, XCircle, AlertCircle, RefreshCw, Eye, EyeOff, Copy } from 'lucide-react';
+import { CheckCircle2, XCircle, AlertCircle, RefreshCw, Eye, EyeOff, Copy } from 'lucide-react';
 import TrueHuntLogo from '../components/common/TrueHuntLogo';
+import AuthPageLayout, { RoleSelectionCards } from '../components/common/AuthPageLayout';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import { FILM_CRAFTS } from '../services/mockData';
@@ -184,23 +185,14 @@ export default function JoinNowPage() {
         setErrorMsg(res.message || 'Registration failed');
       }
     } catch (err) {
-      setErrorMsg('An error occurred during registration.');
+      setErrorMsg(err.message || 'An error occurred during registration.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div 
-      style={{
-        minHeight: '90vh',
-        backgroundColor: 'var(--color-bg-page)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '48px 20px'
-      }}
-    >
+    <AuthPageLayout>
       <div 
         className="card"
         style={{
@@ -337,63 +329,8 @@ export default function JoinNowPage() {
         )}
 
         {/* Role Selection Tabs */}
-        <div hidden={Boolean(generatedId)} style={{ marginBottom: '24px' }}>
-          <label className="form-label" style={{ marginBottom: '8px', display: 'block' }}>
-            I am joining TrueHunt as:
-          </label>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-            
-            <button
-              type="button"
-              id="role-social"
-              onClick={() => setSelectedRole('TALENT')}
-              style={{
-                padding: '14px 10px',
-                borderRadius: 'var(--radius-sm)',
-                border: selectedRole === 'TALENT' ? '2px solid var(--color-maroon)' : '1px solid var(--color-border)',
-                backgroundColor: selectedRole === 'TALENT' ? 'var(--color-maroon-light)' : 'var(--color-white)',
-                color: selectedRole === 'TALENT' ? 'var(--color-maroon)' : 'var(--color-navy)',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: '6px',
-                fontSize: '13px',
-                fontWeight: 600,
-                cursor: 'pointer',
-                transition: 'all 0.15s ease'
-              }}
-            >
-              <Users size={22} />
-              <span>Social</span>
-              <span style={{ fontSize: '11px', color: 'var(--color-text-muted)', fontWeight: 400 }}>Artists & Creators</span>
-            </button>
-
-            <button
-              type="button"
-              id="role-producer"
-              onClick={() => setSelectedRole('STUDIO')}
-              style={{
-                padding: '14px 10px',
-                borderRadius: 'var(--radius-sm)',
-                border: selectedRole === 'STUDIO' ? '2px solid var(--color-maroon)' : '1px solid var(--color-border)',
-                backgroundColor: selectedRole === 'STUDIO' ? 'var(--color-maroon-light)' : 'var(--color-white)',
-                color: selectedRole === 'STUDIO' ? 'var(--color-maroon)' : 'var(--color-navy)',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: '6px',
-                fontSize: '13px',
-                fontWeight: 600,
-                cursor: 'pointer',
-                transition: 'all 0.15s ease'
-              }}
-            >
-              <Building2 size={22} />
-              <span>Producer</span>
-              <span style={{ fontSize: '11px', color: 'var(--color-text-muted)', fontWeight: 400 }}>Studios & Production</span>
-            </button>
-
-          </div>
+        <div hidden={Boolean(generatedId)}>
+          <RoleSelectionCards selectedRole={selectedRole} onSelect={setSelectedRole} />
         </div>
 
         {errorMsg && !generatedId && (
@@ -768,6 +705,6 @@ export default function JoinNowPage() {
         </div>
 
       </div>
-    </div>
+    </AuthPageLayout>
   );
 }

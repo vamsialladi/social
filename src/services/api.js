@@ -14,6 +14,41 @@ import {
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api';
 
+async function requestAuth(endpoint, payload) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000);
+  let response;
+
+  try {
+    response = await fetch(`${BASE_URL}${endpoint}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: controller.signal
+    });
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      throw new Error('The authentication request timed out. Please try again.', { cause: error });
+    }
+    throw new Error('Unable to connect to the authentication service. Please try again.', { cause: error });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+
+  let result;
+  try {
+    result = await response.json();
+  } catch {
+    throw new Error('The authentication service returned an invalid response.');
+  }
+
+  if (!response.ok) {
+    throw new Error(result?.error?.message || 'Authentication request failed. Please try again.');
+  }
+
+  return { data: result?.data ?? result, success: true };
+}
+
 /**
  * Universal safe fetch wrapper that parses JSON and provides consistent error reporting
  */
@@ -200,20 +235,8 @@ export const api = {
 
   // Authentication
   auth: {
-    login: async (email, password) => {
-      const res = await fetchWithFallback('/auth/login', {
-        method: 'POST',
-        body: JSON.stringify({ email, password })
-      }, {
-        token: `demo-jwt-${Date.now()}`,
-        user: {
-          id: 'user-demo-1',
-          name: email.split('@')[0],
-          email,
-          role: 'TALENT'
-        }
-      });
-      return res;
+    login: async (email, password, role) => {
+      return requestAuth('/auth/login', { email, password, role });
     },
 
     sendOtp: async (email) => {
@@ -229,29 +252,7 @@ export const api = {
     },
 
     register: async (userData) => {
-      const fallback = {
-        token: `demo-jwt-${Date.now()}`,
-        userId: 'me',
-        user: {
-          id: `user-${Date.now()}`,
-          name: userData.fullName || userData.name || 'Cinema Professional',
-          email: userData.email,
-          role: userData.role || 'TALENT'
-        }
-      };
-      const res = await fetchWithFallback('/auth/register', {
-        method: 'POST',
-        body: JSON.stringify(userData)
-      }, fallback);
-
-      let payload = res.data;
-      if (payload && payload.data) {
-        payload = payload.data;
-      }
-      if (!payload || !payload.token) {
-        payload = { ...fallback, ...(payload || {}) };
-      }
-      return { data: payload, success: true };
+      return requestAuth('/auth/register', userData);
     },
 
     getMe: async () => {
@@ -837,4 +838,3 @@ function saveLocalProjects(projects) {
     localStorage.setItem('truehunt_protect_projects', JSON.stringify(projects));
   }
 }
-

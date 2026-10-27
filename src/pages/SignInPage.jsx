@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Mail, Lock, ArrowRight, CheckCircle2, AlertCircle } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 import TrueHuntLogo from '../components/common/TrueHuntLogo';
+import AuthPageLayout, { RoleSelectionCards } from '../components/common/AuthPageLayout';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 
 export default function SignInPage() {
+  const [selectedRole, setSelectedRole] = useState('TALENT');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -20,15 +22,15 @@ export default function SignInPage() {
     setLoading(true);
 
     try {
-      const res = await login(email, password);
+      const res = await login(email, password, selectedRole);
       if (res.success) {
         showNotification(`Welcome back, ${res.user.name}!`, 'success');
-        navigate('/talents');
+        navigate(res.user.role === 'STUDIO' ? '/protect-producer' : '/social');
       } else {
         setErrorMsg(res.message || 'Invalid credentials');
       }
     } catch (err) {
-      setErrorMsg('Login failed. Please verify credentials.');
+      setErrorMsg(err.message || 'Login failed. Please verify credentials.');
     } finally {
       setLoading(false);
     }
@@ -45,16 +47,7 @@ export default function SignInPage() {
   };
 
   return (
-    <div
-      style={{
-        minHeight: '88vh',
-        backgroundColor: 'var(--color-bg-page)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '40px 20px'
-      }}
-    >
+    <AuthPageLayout>
       <div
         className="card"
         style={{
@@ -80,36 +73,27 @@ export default function SignInPage() {
           </p>
         </div>
 
-        {errorMsg && (
-          <div
-            style={{
-              padding: '12px 14px',
-              backgroundColor: '#FEF2F2',
-              border: '1px solid #FCA5A5',
-              borderRadius: 'var(--radius-sm)',
-              color: '#991B1B',
-              fontSize: '13px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              marginBottom: '20px'
-            }}
-          >
-            <AlertCircle size={16} />
-            <span>{errorMsg}</span>
-          </div>
-        )}
+        <RoleSelectionCards
+          selectedRole={selectedRole}
+          onSelect={setSelectedRole}
+          label="I am signing in as:"
+        />
 
         <form onSubmit={handleSubmit}>
           <div className="form-group">
-            <label className="form-label">Professional Email</label>
+            <label className="form-label" htmlFor="sign-in-email">Professional Email</label>
             <div style={{ position: 'relative' }}>
               <input
+                id="sign-in-email"
                 type="email"
                 className="form-control"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  setErrorMsg('');
+                }}
                 placeholder="name@cinema.com"
+                autoComplete="username"
                 required
               />
             </div>
@@ -117,19 +101,44 @@ export default function SignInPage() {
 
           <div className="form-group">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <label className="form-label">Password</label>
+              <label className="form-label" htmlFor="sign-in-password">Password</label>
               <span style={{ fontSize: '12px', color: 'var(--color-maroon)', cursor: 'pointer' }}>
                 Forgot Password?
               </span>
             </div>
             <input
+              id="sign-in-password"
               type="password"
               className="form-control"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                setErrorMsg('');
+              }}
               placeholder="••••••••••••"
+              autoComplete="current-password"
               required
             />
+            {errorMsg && (
+              <div
+                role="alert"
+                style={{
+                  padding: '10px 12px',
+                  marginTop: '8px',
+                  backgroundColor: '#FEF2F2',
+                  border: '1px solid #FCA5A5',
+                  borderRadius: 'var(--radius-sm)',
+                  color: '#991B1B',
+                  fontSize: '13px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}
+              >
+                <AlertCircle size={16} />
+                <span>{errorMsg}</span>
+              </div>
+            )}
           </div>
 
           <button
@@ -176,6 +185,6 @@ export default function SignInPage() {
         </div>
 
       </div>
-    </div>
+    </AuthPageLayout>
   );
 }

@@ -23,54 +23,28 @@ export function AuthProvider({ children }) {
     setLoading(false);
   }, []);
 
-  const login = async (email, password) => {
-    const res = await api.auth.login(email, password);
-    if (res.data && res.data.token) {
-      localStorage.setItem('truehunt_token', res.data.token);
-      const userData = res.data.user || {
-        id: 'u-1',
-        name: email.split('@')[0],
-        email,
-        role: 'TALENT'
-      };
-      localStorage.setItem('truehunt_user', JSON.stringify(userData));
-      setUser(userData);
-      return { success: true, user: userData };
+  const login = async (email, password, role) => {
+    const res = await api.auth.login(email, password, role);
+    if (!res.data?.token || !res.data?.user) {
+      throw new Error('The authentication service returned an invalid sign-in response.');
     }
-    return { success: false, message: 'Invalid credentials' };
+
+    localStorage.setItem('truehunt_token', res.data.token);
+    localStorage.setItem('truehunt_user', JSON.stringify(res.data.user));
+    setUser(res.data.user);
+    return { success: true, user: res.data.user };
   };
 
   const register = async (formData) => {
-    try {
-      const res = await api.auth.register(formData);
-      const authData = res.data?.data || res.data;
-      if (authData) {
-        const token = authData.token || `truehunt-session-${Date.now()}`;
-        localStorage.setItem('truehunt_token', token);
-        const userData = authData.user || {
-          id: authData.userId || `u-${Date.now()}`,
-          name: formData.fullName || formData.name || 'Cinema Professional',
-          email: formData.email,
-          role: formData.role || 'TALENT'
-        };
-        localStorage.setItem('truehunt_user', JSON.stringify(userData));
-        setUser(userData);
-        return { success: true, user: userData };
-      }
-    } catch (e) {
-      console.warn('AuthContext register note:', e);
+    const res = await api.auth.register(formData);
+    if (!res.data?.token || !res.data?.user) {
+      throw new Error('The authentication service returned an invalid registration response.');
     }
-    // Fallback guaranteed success
-    const fallbackUser = {
-      id: `u-${Date.now()}`,
-      name: formData.fullName || formData.name || 'Cinema Professional',
-      email: formData.email,
-      role: formData.role || 'TALENT'
-    };
-    localStorage.setItem('truehunt_token', `truehunt-token-${Date.now()}`);
-    localStorage.setItem('truehunt_user', JSON.stringify(fallbackUser));
-    setUser(fallbackUser);
-    return { success: true, user: fallbackUser };
+
+    localStorage.setItem('truehunt_token', res.data.token);
+    localStorage.setItem('truehunt_user', JSON.stringify(res.data.user));
+    setUser(res.data.user);
+    return { success: true, user: res.data.user };
   };
 
   const logout = useCallback(() => {
