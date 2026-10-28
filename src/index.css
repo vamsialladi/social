@@ -460,6 +460,18 @@ img {
 }
 
 /* Responsive adjustments */
+@media (max-width: 1024px) {
+  .container,
+  .container-narrow {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+
+  .hero-grid {
+    gap: 36px;
+  }
+}
+
 @media (max-width: 768px) {
   .section-padding {
     padding-top: 40px;
@@ -468,6 +480,43 @@ img {
 
   .section-title {
     font-size: 26px;
+  }
+
+  .container,
+  .container-narrow {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  body {
+    font-size: 14px;
+  }
+}
+
+@media (max-width: 560px) {
+  .page-shell {
+    min-width: 0;
+  }
+
+  .hero-search-form {
+    flex-wrap: wrap;
+    padding: 12px;
+    gap: 10px;
+  }
+
+  .hero-search-input {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .hero-search-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .hero-role-pill {
+    flex: 1 1 calc(50% - 8px);
+    text-align: center;
   }
 }
 
@@ -879,7 +928,7 @@ img {
 }
 
 /* Responsive Media Queries */
-@media (max-width: 991px) {
+@media (max-width: 1024px) {
   .hero-grid {
     grid-template-columns: 1fr;
     gap: 40px;

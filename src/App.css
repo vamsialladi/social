@@ -625,6 +625,14 @@
   .linkedin-nav-divider {
     display: none;
   }
+
+  .linkedin-profile-dropdown {
+    position: fixed;
+    top: 72px;
+    right: 12px;
+    max-height: calc(100dvh - 84px);
+    overflow-y: auto;
+  }
 }
 
 .cinemans-page.is-dark {

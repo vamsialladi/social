@@ -275,20 +275,29 @@ function Navigation({
                 aria-modal="true"
                 aria-labelledby="social-talent-search-title"
                 onSubmit={handleSearchSubmit}
-                className="social-talent-search"
+                className={`social-talent-search${hasSearched ? ' has-results' : ''}`}
               >
-                <header className="social-talent-search-heading">
-                  <div>
-                    <span className="social-talent-search-eyebrow">TALENT DIRECTORY</span>
-                    <h2 id="social-talent-search-title">Find creative professionals</h2>
-                    <p>Search talent profiles by role, craft, skill, or location.</p>
-                  </div>
-                  <button className="social-talent-search-close" type="button" onClick={() => setIsSearchOpen(false)} aria-label="Close search">
-                    ×
-                  </button>
-                </header>
-                <div className="social-talent-search-layout">
-                  <aside className="social-talent-filters" aria-label="Candidate filters">
+                  <header className="social-talent-search-topbar">
+                    <a
+                      className="social-talent-search-brand"
+                      href="/social#home"
+                      aria-label="TrueHunt home"
+                      onClick={(event) => {
+                        event.preventDefault()
+                        setIsSearchOpen(false)
+                        setActiveNavigation('home')
+                      }}
+                    >
+                      <img src="/truehunt-logo.png" alt="TrueHunt" />
+                    </a>
+                    <button className="social-talent-search-close" type="button" onClick={() => setIsSearchOpen(false)} aria-label="Close search">
+                      ×
+                    </button>
+                  </header>
+                  <h2 className="social-talent-search-title" id="social-talent-search-title">Find cinema professionals</h2>
+                  <div className={`social-talent-search-layout${hasSearched ? ' has-results' : ''}`}>
+                    {hasSearched && (
+                    <aside className="social-talent-filters" aria-label="Candidate filters">
                     <div className="social-talent-filter-heading">
                       <h3>Filters</h3>
                       <button
@@ -318,31 +327,6 @@ function Navigation({
                             onChange={() => setCinemaTypeDraft(filter.value)}
                           />
                           <span>{filter.label}</span>
-                        </label>
-                      ))}
-                    </fieldset>
-                    <fieldset className="social-talent-filter-group">
-                      <legend>Film craft</legend>
-                      <label className="social-talent-filter-option">
-                        <input
-                          type="radio"
-                          name="talent-category"
-                          value="All"
-                          checked={talentCategoryDraft === 'All'}
-                          onChange={() => setTalentCategoryDraft('All')}
-                        />
-                        <span>All crafts</span>
-                      </label>
-                      {FILM_CRAFTS.map((craft) => (
-                        <label className="social-talent-filter-option" key={craft.id}>
-                          <input
-                            type="radio"
-                            name="talent-category"
-                            value={craft.title}
-                            checked={talentCategoryDraft === craft.title}
-                            onChange={() => setTalentCategoryDraft(craft.title)}
-                          />
-                          <span>{craft.title}</span>
                         </label>
                       ))}
                     </fieldset>
@@ -377,11 +361,26 @@ function Navigation({
                       ))}
                     </fieldset>
                   </aside>
+                  )}
                   <main className="social-talent-search-main">
                     <div className="social-talent-search-fields">
                       <div className="social-talent-search-field">
+                        <label htmlFor="social-search-category">Film craft</label>
+                        <select
+                          id="social-search-category"
+                          aria-label="Film craft"
+                          value={talentCategoryDraft}
+                          onChange={(event) => setTalentCategoryDraft(event.target.value)}
+                        >
+                          <option value="All">All crafts</option>
+                          {FILM_CRAFTS.map((craft) => (
+                            <option key={craft.id} value={craft.title}>{craft.title}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="social-talent-search-field">
                         <label htmlFor="social-search-keyword">Role, name, or skill</label>
-                        <input ref={searchQueryInputRef} id="social-search-keyword" type="search" placeholder="e.g. lead actor, cinematographer, editor" value={searchQueryDraft} onChange={(event) => setSearchQueryDraft(event.target.value)} />
+                        <input ref={searchQueryInputRef} id="social-search-keyword" type="search" placeholder="e.g. cinematographer, editor" value={searchQueryDraft} onChange={(event) => setSearchQueryDraft(event.target.value)} />
                       </div>
                       <div className="social-talent-search-field">
                         <label htmlFor="social-search-location">Location</label>
@@ -389,7 +388,7 @@ function Navigation({
                       </div>
                       <button type="submit" className="social-talent-search-submit" disabled={isSearching}>
                         <NavigationIcon name="search" />
-                        {isSearching ? 'Searching profiles…' : 'Search profiles'}
+                        {isSearching ? 'Searching…' : 'Search'}
                       </button>
                     </div>
                     {searchError && <p className="social-talent-search-error" role="alert">{searchError}</p>}
@@ -440,12 +439,6 @@ function Navigation({
                       <div className="social-talent-search-empty" role="status">
                         <strong>No matching profiles yet</strong>
                         <span>Try a different cinema type, craft, keyword, or location.</span>
-                      </div>
-                    )}
-                    {!isSearching && !hasSearched && (
-                      <div className="social-talent-search-empty">
-                        <strong>Search the talent directory</strong>
-                        <span>Choose filters and search to see matching professional profiles.</span>
                       </div>
                     )}
                   </main>
@@ -514,7 +507,7 @@ function Navigation({
                   ? <img src={profilePreview} alt="" />
                   : <ProfileAvatarPlaceholder />}
               </span>
-              <small>Me⌄</small>
+              <small>Profile</small>
             </button>
             {isProfileMenuOpen && (
               <div className="linkedin-profile-dropdown" role="menu">

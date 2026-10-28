@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ChevronDown,
+  ChevronLeft,
   MoreHorizontal,
   Paperclip,
   Search,
@@ -29,6 +30,12 @@ const initialMessages = [
       { id: 'akshay-1', content: 'Hi Chandrabose, thanks for your interest in this opportunity.', direction: 'incoming' },
       { id: 'akshay-2', content: 'Thanks for reaching out. Could you share more details?', direction: 'outgoing' },
       { id: 'akshay-3', content: 'Absolutely! I would be happy to tell you more.', direction: 'incoming' },
+      { id: 'akshay-4', content: 'Great! I am looking forward to learning more about the role.', direction: 'outgoing' },
+      { id: 'akshay-5', content: 'The Chapter Support Associate role involves supporting our local chapters and helping them grow.', direction: 'incoming' },
+      { id: 'akshay-6', content: 'That sounds interesting. What are the key responsibilities?', direction: 'outgoing' },
+      { id: 'akshay-7', content: 'The key responsibilities include coordinating events, managing communications, and assisting with chapter development.', direction: 'incoming' },
+      { id: 'akshay-8', content: 'Thank you for the information. I am excited about this opportunity.', direction: 'outgoing' },
+      { id: 'akshay-9', content: 'We are excited to have you on board! We will be in touch with the next steps.', direction: 'incoming' },
     ],
   },
   {
@@ -73,13 +80,41 @@ const initialMessages = [
     description: 'I loved your recent work. Would love to collaborate.',
     thread: [{ id: 4, content: 'I loved your recent work. Would love to collaborate.', direction: 'incoming' }],
   },
+  {
+    id: 5,
+    name: 'Aditya Singh',
+    initials: 'AS',
+    color: 'orange',
+    preview: 'Your insights on the recent project were invaluable.',
+    date: 'Sep 29',
+    category: 'Starred',
+    unread: false,
+    sponsored: false,
+    subject: 'Appreciation for your insights',
+    description: 'Your insights on the recent project were invaluable.',
+    thread: [{ id: 5, content: 'Your insights on the recent project were invaluable.', direction: 'incoming' }],
+  },
+  {
+    id: 6,
+    name: 'Ananya Verma',
+    initials: 'AV',
+    color: 'teal',
+    preview: 'Looking forward to our meeting next week.',
+    date: 'Sep 25',
+    category: 'Unread',
+    unread: true,
+    sponsored: false,
+    subject: 'Meeting next week',
+    description: 'Looking forward to our meeting next week.',
+    thread: [{ id: 6, content: 'Looking forward to our meeting next week.', direction: 'incoming' }],
+  },
 ]
 
 const categories = ['Opportunities', 'Unread', 'Connections', 'InMail', 'Starred']
 const mailboxOptions = ['Focused', 'Other', 'Archived', 'Spam']
 const emojis = ['😀', '😂', '😍', '😊', '👍', '🎉', '❤️', '🙏']
 
-function Messages({ opportunityHref, onViewOpportunity }) {
+function Messages() {
   const [messages, setMessages] = useState(initialMessages)
   const [selectedId, setSelectedId] = useState(initialMessages[0].id)
   const [activeCategory, setActiveCategory] = useState('')
@@ -92,6 +127,8 @@ function Messages({ opportunityHref, onViewOpportunity }) {
   const [replyText, setReplyText] = useState('')
   const [replyAttachment, setReplyAttachment] = useState(null)
   const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false)
+  const [isMobileDetailOpen, setIsMobileDetailOpen] = useState(false)
+  const [isMobileChatPopoverOpen, setIsMobileChatPopoverOpen] = useState(false)
   const replyInputRef = useRef(null)
   const attachmentInputRef = useRef(null)
   const emojiPickerRef = useRef(null)
@@ -125,6 +162,34 @@ function Messages({ opportunityHref, onViewOpportunity }) {
   }, [activeCategory, messages, search])
 
   const selectedMessage = messages.find((message) => message.id === selectedId)
+
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth > 740) {
+        setIsMobileDetailOpen(false)
+        setIsMobileChatPopoverOpen(false)
+      }
+    }
+
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
+  function handleSelectMessage(id) {
+    if (window.innerWidth <= 740) {
+      if (selectedId === id && isMobileDetailOpen) {
+        setIsMobileChatPopoverOpen((current) => !current)
+        return
+      }
+
+      setSelectedId(id)
+      setIsMobileDetailOpen(true)
+      setIsMobileChatPopoverOpen(false)
+      return
+    }
+
+    setSelectedId(id)
+  }
 
   function toggleStar(id) {
     setMessages((currentMessages) => currentMessages.map((message) => (
@@ -238,7 +303,7 @@ function Messages({ opportunityHref, onViewOpportunity }) {
           </div>
         </header>
 
-        <nav className="messages-filters" aria-label="Message filters">
+        <nav className={`messages-filters${isMobileDetailOpen ? ' is-detail-open' : ''}`} aria-label="Message filters">
           <div className="mailbox-filter">
             <button
               className="mailbox-trigger"
@@ -280,14 +345,14 @@ function Messages({ opportunityHref, onViewOpportunity }) {
           ))}
         </nav>
 
-        <div className="messages-content">
+        <div className={`messages-content${isMobileDetailOpen ? ' is-detail-open' : ''}`}>
           <aside className="messages-list" aria-label="Conversation list">
             {visibleMessages.length ? visibleMessages.map((message) => (
               <button
                 className={`message-preview${selectedId === message.id ? ' is-active' : ''}${message.unread ? ' is-unread' : ''}`}
                 type="button"
                 key={message.id}
-                onClick={() => setSelectedId(message.id)}
+                onClick={() => handleSelectMessage(message.id)}
               >
                 <span className={`message-avatar avatar-${message.color}`} aria-hidden="true">
                   {message.initials}
@@ -309,6 +374,31 @@ function Messages({ opportunityHref, onViewOpportunity }) {
             {selectedMessage ? (
               <>
                 <header className="message-detail-header">
+                  <button
+                    type="button"
+                    className="message-back-button"
+                    aria-label="Back to message list"
+                    onClick={() => {
+                      setIsMobileDetailOpen(false)
+                      setIsMobileChatPopoverOpen(false)
+                    }}
+                  >
+                    <ChevronLeft size={18} strokeWidth={2.5} />
+                    <span>Messages</span>
+                  </button>
+                  {isMobileChatPopoverOpen && (
+                    <div className="mobile-chat-popover" role="dialog" aria-label="Conversation actions">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsMobileChatPopoverOpen(false)
+                          setIsMobileDetailOpen(false)
+                        }}
+                      >
+                        Close chat
+                      </button>
+                    </div>
+                  )}
                   <div className="message-contact">
                     <span className={`message-avatar avatar-${selectedMessage.color}`} aria-hidden="true">
                       {selectedMessage.initials}
@@ -336,27 +426,16 @@ function Messages({ opportunityHref, onViewOpportunity }) {
                   </div>
                 </header>
 
-                {selectedMessage.sponsored && (
-                  <article className="message-sponsored">
-                    <div className="sponsored-meta">
-                      <span>Sponsored</span>
-                      <time>{selectedMessage.date}</time>
-                    </div>
-                    <div className="sponsored-content">
-                      <h3>{selectedMessage.subject}</h3>
-                      <p>{selectedMessage.description}</p>
-                      <a
-                        href={opportunityHref}
-                        onClick={(event) => {
-                          event.preventDefault()
-                          onViewOpportunity()
-                        }}
-                      >
-                        View role
-                      </a>
-                    </div>
-                  </article>
-                )}
+                <article className="message-sponsored">
+                  <div className="sponsored-meta">
+                    <span>Sponsored</span>
+                    <time>{selectedMessage.date}</time>
+                  </div>
+                  <div className="sponsored-content">
+                    <h3>{initialMessages[0].subject}</h3>
+                    <p>{initialMessages[0].description}</p>
+                  </div>
+                </article>
 
                 {(!selectedMessage.sponsored || selectedMessage.thread?.length > 0) && (
                   <article className="message-conversation">
