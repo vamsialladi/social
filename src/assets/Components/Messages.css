@@ -3,8 +3,11 @@
   --messages-muted: #686868;
   --messages-line: #e4e4e4;
   width: 100%;
+  max-width: 100%;
   min-height: calc(100vh - 76px);
   box-sizing: border-box;
+  overflow-x: hidden;
+  overflow-x: clip;
   padding: 0 clamp(16px, 3vw, 36px) 36px;
   background: #f3f2ef;
   color: var(--messages-ink);
@@ -15,6 +18,8 @@
 .messages-layout {
   display: grid;
   width: min(100%, 1480px);
+  max-width: 100%;
+  min-width: 0;
   grid-template-columns: minmax(0, 2.3fr) minmax(280px, 0.95fr);
   align-items: start;
   gap: 28px;
@@ -134,10 +139,12 @@
   position: relative;
   z-index: 2;
   display: flex;
+  flex-wrap: wrap;
+  min-width: 0;
   min-height: 64px;
   align-items: center;
   gap: 8px;
-  padding: 0 20px;
+  padding: 10px 20px;
   border-bottom: 1px solid var(--messages-line);
 }
 
@@ -148,18 +155,18 @@
 
 .mailbox-trigger {
   display: flex;
-  min-width: 152px;
-  height: 44px;
+  min-width: 120px;
+  height: 40px;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 0 18px;
+  padding: 0 12px;
   border: 0;
   border-radius: 24px;
   background: #007a53;
   color: #fff;
   font: inherit;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 700;
   cursor: pointer;
 }
@@ -202,14 +209,15 @@
 }
 
 .messages-filter-chip {
-  min-height: 44px;
-  padding: 0 18px;
+  min-height: 40px;
+  padding: 0 12px;
   border: 1px solid #b9b9b9;
   border-radius: 24px;
   background: #fff;
   color: #262626;
   font: inherit;
-  font-size: 18px;
+  font-size: 15px;
+  white-space: nowrap;
   cursor: pointer;
 }
 
@@ -221,11 +229,13 @@
 
 .messages-content {
   display: grid;
+  min-width: 0;
   min-height: 600px;
   grid-template-columns: minmax(300px, 40%) minmax(0, 1fr);
 }
 
 .messages-list {
+  min-width: 0;
   min-height: 600px;
   overflow-y: auto;
   border-right: 1px solid var(--messages-line);
@@ -769,7 +779,7 @@
   .messages-filters {
     min-height: 58px;
     gap: 6px;
-    overflow-x: auto;
+    overflow-x: visible;
     padding: 0 10px;
   }
 
@@ -782,9 +792,7 @@
 
   .messages-filter-chip {
     min-height: 38px;
-    padding: 0 12px;
     font-size: 14px;
-    white-space: nowrap;
   }
 
   .messages-content {
@@ -797,16 +805,6 @@
     max-height: 210px;
     border-right: 0;
     border-bottom: 1px solid var(--messages-line);
-  }
-
-  @media (min-width: 741px) and (max-width: 1050px) {
-    .messages-layout {
-      grid-template-columns: minmax(0, 1fr);
-    }
-
-    .messages-sidebar {
-      display: none;
-    }
   }
 
   .message-preview {
@@ -830,6 +828,16 @@
 
   .message-contact h2 {
     font-size: 15px;
+  }
+}
+
+@media (min-width: 741px) and (max-width: 1050px) {
+  .messages-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .messages-sidebar {
+    display: none;
   }
 }
 

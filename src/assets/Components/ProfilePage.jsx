@@ -8,6 +8,11 @@ export const emptyProfileDetails = {
   phone: '',
   email: '',
   experience: '',
+  dateOfBirth: '',
+  height: '',
+  weight: '',
+  gender: '',
+  skinTone: '',
   address: '',
   languages: [],
   otherLanguage: '',
@@ -20,6 +25,67 @@ export const emptyProfileDetails = {
 
 const MAX_VIDEO_SIZE = 5 * 1024 * 1024
 const MAX_VIDEO_DURATION = 3 * 60
+
+function getAgeGroup(dateOfBirth) {
+  if (!dateOfBirth) return ''
+
+  const [year, month, day] = dateOfBirth.split('-').map(Number)
+  const birthDate = new Date(year, month - 1, day)
+  const today = new Date()
+
+  if (
+    !year
+    || birthDate.getFullYear() !== year
+    || birthDate.getMonth() !== month - 1
+    || birthDate.getDate() !== day
+    || birthDate > today
+  ) {
+    return ''
+  }
+
+  let age = today.getFullYear() - year
+  if (
+    today.getMonth() < month - 1
+    || (today.getMonth() === month - 1 && today.getDate() < day)
+  ) {
+    age -= 1
+  }
+
+  if (age <= 12) return 'Child'
+  if (age <= 20) return 'Teenager'
+  if (age <= 50) return 'Adult'
+  return 'Senior'
+}
+
+function getTodayDateString() {
+  const today = new Date()
+  const month = String(today.getMonth() + 1).padStart(2, '0')
+  const day = String(today.getDate()).padStart(2, '0')
+  return `${today.getFullYear()}-${month}-${day}`
+}
+
+function getProfileCompletion(profileDetails, hasProfileImage) {
+  const hasValue = (value) => String(value ?? '').trim().length > 0
+  const completedFields = [
+    hasProfileImage,
+    hasValue(profileDetails.name),
+    hasValue(profileDetails.phone),
+    hasValue(profileDetails.email),
+    hasValue(profileDetails.experience),
+    hasValue(profileDetails.dateOfBirth),
+    hasValue(profileDetails.height),
+    hasValue(profileDetails.weight),
+    hasValue(profileDetails.gender),
+    hasValue(profileDetails.skinTone),
+    hasValue(profileDetails.address),
+    (profileDetails.languages || []).length > 0,
+    (profileDetails.talents || []).length > 0,
+    (profileDetails.workTypes || []).length > 0,
+    (profileDetails.experiences || []).length > 0,
+  ]
+
+  return Math.round((completedFields.filter(Boolean).length / completedFields.length) * 100)
+}
 
 const languages = [
   'English',
@@ -101,6 +167,8 @@ function ProfilePage({
   setProfilePreview,
 }) {
   const [profilePic, setProfilePic] = useState(null)
+  const [isProfileImageRemoved, setIsProfileImageRemoved] = useState(false)
+  const profilePictureInput = useRef(null)
   const [selectedLanguages, setSelectedLanguages] = useState([])
   const [otherLanguageDraft, setOtherLanguageDraft] = useState('')
   const [selectedTalents, setSelectedTalents] = useState([])
@@ -114,6 +182,7 @@ function ProfilePage({
   const [isSubmitted, setIsSubmitted] = useState(false)
   const [profileFormKey, setProfileFormKey] = useState(0)
   const [isEditingProfile, setIsEditingProfile] = useState(false)
+  const [dateOfBirthDraft, setDateOfBirthDraft] = useState('')
   const [isExperienceModalOpen, setIsExperienceModalOpen] = useState(false)
   const [editingExperienceId, setEditingExperienceId] = useState(null)
   const [isContactModalOpen, setIsContactModalOpen] = useState(false)
@@ -134,9 +203,20 @@ function ProfilePage({
     return () => document.removeEventListener('keydown', handleExperienceModalKeyDown)
   }, [isExperienceModalOpen])
 
+  const displayedProfileImage = isProfileImageRemoved
+    ? ''
+    : profilePreview || profileDetails.profileImageUrl || ''
+  const profileCompletion = getProfileCompletion(profileDetails, Boolean(displayedProfileImage))
+
+  useEffect(() => {
+    if (profileDetails.profileImageUrl && !profilePreview && !isProfileImageRemoved) {
+      setProfilePreview(profileDetails.profileImageUrl)
+    }
+  }, [profileDetails.profileImageUrl, profilePreview, isProfileImageRemoved, setProfilePreview])
+
   useEffect(() => {
     return () => {
-      if (profilePreview) URL.revokeObjectURL(profilePreview)
+      if (profilePreview && profilePreview.startsWith('blob:')) URL.revokeObjectURL(profilePreview)
     }
   }, [profilePreview])
 
@@ -151,8 +231,28 @@ function ProfilePage({
 
   function handleProfileChange(event) {
     const file = event.target.files?.[0] ?? null
+    if (!file) return
+
     setProfilePic(file)
-    setProfilePreview(file ? URL.createObjectURL(file) : '')
+    setIsProfileImageRemoved(false)
+    setProfilePreview(URL.createObjectURL(file))
+  }
+
+  function removeProfileImage(event) {
+    event.preventDefault()
+    event.stopPropagation()
+    setProfilePic(null)
+    setProfilePreview('')
+    setIsProfileImageRemoved(true)
+    if (profilePictureInput.current) profilePictureInput.current.value = ''
+  }
+
+  function closeProfileEditor() {
+    if (profilePreview?.startsWith('blob:')) URL.revokeObjectURL(profilePreview)
+    setProfilePic(null)
+    setProfilePreview(profileDetails.profileImageUrl || '')
+    setIsProfileImageRemoved(false)
+    setIsEditingProfile(false)
   }
 
   function handleVideoChange(event, index) {
@@ -366,6 +466,8 @@ function ProfilePage({
     setSavedVideoUrls(profileDetails.videoUrls)
     setVideoUrlInput('')
     setVideoUrlError('')
+    setDateOfBirthDraft(profileDetails.dateOfBirth || '')
+    setProfilePreview(profileDetails.profileImageUrl || profilePreview)
     setProfileFormKey((key) => key + 1)
     setIsEditingProfile(true)
   }
@@ -471,7 +573,7 @@ function ProfilePage({
     }
 
     const formData = new FormData(form)
-    let profileImageUrl = profileDetails.profileImageUrl || ''
+    let profileImageUrl = isProfileImageRemoved ? '' : profileDetails.profileImageUrl || ''
 
     if (profilePic) {
       try {
@@ -490,6 +592,11 @@ function ProfilePage({
       phone: formData.get('phone')?.trim() || '',
       email: formData.get('email')?.trim() || '',
       experience: formData.get('experience') || '',
+      dateOfBirth: formData.get('dateOfBirth') || '',
+      height: formData.get('height') || '',
+      weight: formData.get('weight') || '',
+      gender: formData.get('gender') || '',
+      skinTone: formData.get('skinTone') || '',
       address: formData.get('address') || '',
       languages: selectedLanguages,
       otherLanguage: selectedLanguages.includes('Other') ? otherLanguageDraft.trim() : '',
@@ -497,6 +604,7 @@ function ProfilePage({
     }
 
     setProfileDetails(nextDetails)
+    setIsProfileImageRemoved(false)
     try {
       await api.updateProfile(nextDetails)
     } catch (err) {
@@ -510,32 +618,46 @@ function ProfilePage({
     <div className="profile-page-content">
         <section className="artist-profile" id="artist-profile" aria-labelledby="preview-title">
           <div className="artist-cover has-default-banner" />
-
           <div className="artist-identity">
-            {profilePreview
-              ? <img className="artist-avatar" src={profilePreview} alt={`${profileDetails.name || 'Artist'}'s profile`} />
-              : (
-                <div className="artist-avatar avatar-fallback" aria-hidden="true">
-                  <svg className="profile-avatar-placeholder" viewBox="0 0 100 100" focusable="false">
-                    <circle cx="50" cy="35" r="21" />
-                    <path d="M10 96c2-23 18-39 40-39s38 16 40 39H10Z" />
-                  </svg>
-                </div>
-              )}
+            <div
+              className={`artist-avatar-progress${isOwner ? '' : ' is-readonly'}`}
+              style={{ '--profile-completion': `${profileCompletion}%` }}
+              role={isOwner ? 'img' : undefined}
+              aria-label={isOwner ? `Profile ${profileCompletion}% complete` : undefined}
+            >
+              {displayedProfileImage
+                ? <img className="artist-avatar" src={displayedProfileImage} alt={`${profileDetails.name || 'Artist'}'s profile`} />
+                : (
+                  <div className="artist-avatar avatar-fallback" aria-hidden="true">
+                    <svg className="profile-avatar-placeholder" viewBox="0 0 100 100" focusable="false">
+                      <circle cx="50" cy="35" r="21" />
+                      <path d="M10 96c2-23 18-39 40-39s38 16 40 39H10Z" />
+                    </svg>
+                  </div>
+                )}
+              {isOwner && <span className="artist-avatar-progress-label">{profileCompletion}%</span>}
+            </div>
             <div className="artist-identity-content">
               <h2 id="preview-title">{profileDetails.name || 'Your name'}</h2>
               <p className="artist-headline">
-                {profileDetails.talents.length > 0 ? profileDetails.talents.join(' · ') : 'Add your talents in Edit profile'}
+                {profileDetails.talents.length > 0
+                  ? profileDetails.talents.join(' · ')
+                  : 'Add your talents in Edit profile'}
               </p>
-              <p className="artist-location">{profileDetails.address || 'Add your location in Edit profile'}</p>
+              <p className="artist-location">
+                {profileDetails.address || 'Add your location in Edit profile'}
+              </p>
               <p className="artist-experience">
-                {profileDetails.experience ? (profileDetails.experience.toLowerCase().includes('year') ? `${profileDetails.experience} experience` : `${profileDetails.experience} years of experience`) : 'Add your experience in Edit profile'}
+                {profileDetails.experience
+                  ? (profileDetails.experience.toLowerCase().includes('year')
+                    ? profileDetails.experience
+                    : `${profileDetails.experience} years of experience`)
+                  : 'Add your experience in Edit profile'}
               </p>
-              {isSubmitted && <p className="profile-confirmation" role="status">Your profile preview is confirmed.</p>}
             </div>
             <div className="identity-actions">
               <button
-                className="identity-contact-button contact-button"
+                className="identity-contact-button"
                 type="button"
                 onClick={() => {
                   setReferenceId('')
@@ -556,7 +678,6 @@ function ProfilePage({
               )}
             </div>
           </div>
-
           <div className="artist-content">
             <div className="artist-main">
               <section className="artist-section">
@@ -680,24 +801,27 @@ function ProfilePage({
                   Demo videos
                 </PreviewSectionHeading>
                 {profileDetails.videos.length > 0 ? <div className="demo-video-list">
-                  {profileDetails.videos.map((video, index) => (
-                    <div className="demo-video-item" key={`${video}-${index}`}>
-                      <video
-                        controls
-                        playsInline
-                        preload="metadata"
-                        src={video.url}
-                        aria-label={`Play demo video ${index + 1}: ${video.file.name}`}
-                      />
-                      <div><strong>Demo video {index + 1}</strong><span>{video.file.name}</span></div>
-                    </div>
-                  ))}
+                  {profileDetails.videos.map((video, index) => {
+                    const videoName = video.file?.name || video.fileName || `Demo video ${index + 1}`
+                    return (
+                      <div className="demo-video-item" key={`${video.url || videoName}-${index}`}>
+                        <video
+                          controls
+                          playsInline
+                          preload="metadata"
+                          src={video.url}
+                          aria-label={`Play demo video ${index + 1}: ${videoName}`}
+                        />
+                        <div><strong>Demo video {index + 1}</strong><span>{videoName}</span></div>
+                      </div>
+                    )
+                  })}
                 </div> : <p className="profile-empty-hint">Select Edit to add demo videos.</p>}
                 {editingSection === 'videos' && (
                   <div className="preview-inline-editor">
                     {profileDetails.videos.map((video, index) => (
                       <div className="inline-video-existing" key={`${video.url}-${index}`}>
-                        <span>{video.file.name}</span>
+                        <span>{video.file?.name || video.fileName || `Demo video ${index + 1}`}</span>
                         <button
                           className="delete-video-url-button"
                           type="button"
@@ -888,7 +1012,7 @@ function ProfilePage({
           className="profile-modal-backdrop"
           type="button"
           aria-label="Close profile editor"
-          onClick={() => setIsEditingProfile(false)}
+          onClick={closeProfileEditor}
         />
       )}
       {isExperienceModalOpen && (
@@ -1037,7 +1161,9 @@ function ProfilePage({
             <div className="reference-modal-heading">
               <div>
                 <span className="eyebrow">CONTACT ARTIST</span>
-                <h2 id="reference-modal-title">Enter your reference code</h2>
+                <h2 id="reference-modal-title">
+                  {isOwner ? 'Your contact details' : 'Enter your reference code'}
+                </h2>
               </div>
               <button
                 className="profile-modal-close"
@@ -1048,9 +1174,11 @@ function ProfilePage({
                 ×
               </button>
             </div>
-            {submittedReferenceId ? (
+            {isOwner || submittedReferenceId ? (
               <div className="reference-modal-success" role="status">
-                <p>Reference ID submitted: <strong>{submittedReferenceId}</strong></p>
+                {submittedReferenceId && (
+                  <p>Reference ID submitted: <strong>{submittedReferenceId}</strong></p>
+                )}
                 <p>Contact details for {profileDetails.name || 'this artist'}:</p>
                 <dl className="reference-contact-details">
                   <div>
@@ -1125,7 +1253,7 @@ function ProfilePage({
             <button
               className="profile-modal-close"
               type="button"
-              onClick={() => setIsEditingProfile(false)}
+              onClick={closeProfileEditor}
               aria-label="Close profile editor"
             >
               ×
@@ -1144,20 +1272,60 @@ function ProfilePage({
           <div className="profile-fields">
             <div className="photo-field">
               <label htmlFor="profile-pic">Profile picture</label>
-              <label className="photo-upload" htmlFor="profile-pic">
-                {profilePreview ? (
-                  <img src={profilePreview} alt="Profile preview" />
-                ) : (
-                  <span className="photo-placeholder" aria-hidden="true">+</span>
+              <div style={{ position: 'relative' }}>
+                <label className="photo-upload" htmlFor="profile-pic">
+                  {displayedProfileImage ? (
+                    <img src={displayedProfileImage} alt="Profile preview" />
+                  ) : (
+                    <svg
+                      className="profile-avatar-placeholder"
+                      viewBox="0 0 100 100"
+                      aria-hidden="true"
+                      style={{ width: '58px', height: '58px', borderRadius: '50%' }}
+                    >
+                      <circle cx="50" cy="50" r="50" style={{ fill: '#e5e7e8' }} />
+                      <circle cx="50" cy="35" r="21" />
+                      <path d="M10 100c2-24 18-42 40-42s38 18 40 42H10Z" />
+                    </svg>
+                  )}
+                  <span className="photo-upload-text">{profilePic ? 'Change photo' : 'Upload photo'}</span>
+                  <input
+                    ref={profilePictureInput}
+                    id="profile-pic"
+                    type="file"
+                    accept="image/*"
+                    onChange={handleProfileChange}
+                  />
+                </label>
+                {displayedProfileImage && (
+                  <button
+                    className="profile-image-remove-button"
+                    type="button"
+                    onClick={removeProfileImage}
+                    aria-label="Remove profile picture"
+                    title="Remove profile picture"
+                    style={{
+                      position: 'absolute',
+                      top: '22px',
+                      left: 'calc(50% + 16px)',
+                      display: 'grid',
+                      width: '24px',
+                      height: '24px',
+                      placeItems: 'center',
+                      padding: 0,
+                      border: '2px solid #fff',
+                      borderRadius: '50%',
+                      background: '#b42318',
+                      color: '#fff',
+                      fontSize: '17px',
+                      lineHeight: 1,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    ×
+                  </button>
                 )}
-                <span className="photo-upload-text">{profilePic ? 'Change photo' : 'Upload photo'}</span>
-                <input
-                  id="profile-pic"
-                  type="file"
-                  accept="image/*"
-                  onChange={handleProfileChange}
-                />
-              </label>
+              </div>
               <span className="field-hint">JPG or PNG, preferably a clear headshot</span>
             </div>
 
@@ -1219,6 +1387,73 @@ function ProfilePage({
                   />
                   <span>years</span>
                 </div>
+              </div>
+              <div className="form-field">
+                <label htmlFor="date-of-birth">Date of birth</label>
+                <input
+                  id="date-of-birth"
+                  name="dateOfBirth"
+                  type="date"
+                  max={getTodayDateString()}
+                  value={dateOfBirthDraft}
+                  onChange={(event) => setDateOfBirthDraft(event.target.value)}
+                />
+                {getAgeGroup(dateOfBirthDraft) && (
+                  <span className="field-hint">Age group: {getAgeGroup(dateOfBirthDraft)}</span>
+                )}
+              </div>
+              <div className="form-field">
+                <label htmlFor="candidate-height">Height (cm)</label>
+                <input
+                  id="candidate-height"
+                  name="height"
+                  type="number"
+                  min="0"
+                  step="0.1"
+                  defaultValue={profileDetails.height}
+                  placeholder="e.g. 170"
+                />
+              </div>
+              <div className="form-field">
+                <label htmlFor="candidate-weight">Weight (kg)</label>
+                <input
+                  id="candidate-weight"
+                  name="weight"
+                  type="number"
+                  min="0"
+                  step="0.1"
+                  defaultValue={profileDetails.weight}
+                  placeholder="e.g. 65"
+                />
+              </div>
+              <div className="form-field">
+                <label htmlFor="candidate-gender">Gender</label>
+                <select
+                  id="candidate-gender"
+                  name="gender"
+                  defaultValue={profileDetails.gender}
+                >
+                  <option value="">Select gender</option>
+                  <option value="Female">Female</option>
+                  <option value="Male">Male</option>
+                  <option value="Non-binary">Non-binary</option>
+                  <option value="Other">Other</option>
+                  <option value="Prefer not to say">Prefer not to say</option>
+                </select>
+              </div>
+              <div className="form-field">
+                <label htmlFor="candidate-skin-tone">Skin tone</label>
+                <select
+                  id="candidate-skin-tone"
+                  name="skinTone"
+                  defaultValue={profileDetails.skinTone}
+                >
+                  <option value="">Select skin tone</option>
+                  <option value="White">White</option>
+                  <option value="Brown">Brown</option>
+                  <option value="Light brown">Light brown</option>
+                  <option value="Dark">Dark</option>
+                </select>
               </div>
               <div className="form-field">
                 <label htmlFor="candidate-address">Candidate address</label>

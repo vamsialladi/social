@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { 
   Camera, 
   MapPin, 
@@ -15,6 +15,20 @@ import {
 } from 'lucide-react';
 import { useNotification } from '../../context/NotificationContext';
 
+function ProfileAvatar({ src, alt, style }) {
+  if (src) {
+    return <img src={src} alt={alt} style={style} />;
+  }
+
+  return (
+    <svg viewBox="0 0 100 100" aria-hidden="true" style={style}>
+      <circle cx="50" cy="50" r="50" fill="#e5e7e8" />
+      <circle cx="50" cy="35" r="21" fill="#adb3b6" />
+      <path d="M10 100c2-24 18-42 40-42s38 18 40 42H10Z" fill="#adb3b6" />
+    </svg>
+  );
+}
+
 export default function ProfileHeader({ profile, isOwner, onEditProfile, onConnect, connected }) {
   const { showNotification } = useNotification();
   const [copied, setCopied] = useState(false);
@@ -23,7 +37,7 @@ export default function ProfileHeader({ profile, isOwner, onEditProfile, onConne
   const calculateCompletionScore = () => {
     let score = 0;
     if (profile?.name) score += 15;
-    if (profile?.avatar) score += 15;
+    if (profile?.avatar || profile?.profileImageUrl) score += 15;
     if (profile?.headline) score += 15;
     if (profile?.bio) score += 15;
     if (profile?.experiences?.length > 0) score += 15;
@@ -44,8 +58,6 @@ export default function ProfileHeader({ profile, isOwner, onEditProfile, onConne
   };
 
   const defaultCover = 'https://images.unsplash.com/photo-1485846234645-a62644f84728?auto=format&fit=crop&w=1400&q=80';
-  const defaultAvatar = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80';
-
   return (
     <div 
       className="card"
@@ -129,10 +141,10 @@ export default function ProfileHeader({ profile, isOwner, onEditProfile, onConne
                 position: 'relative'
               }}
             >
-              <img 
-                src={profile?.avatar || defaultAvatar} 
+              <ProfileAvatar
+                src={profile?.avatar || profile?.profileImageUrl}
                 alt={profile?.name || 'Profile'}
-                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover' }}
               />
             </div>
 
@@ -405,4 +417,3 @@ export default function ProfileHeader({ profile, isOwner, onEditProfile, onConne
     </div>
   );
 }
-

@@ -6,8 +6,9 @@ import api from '../../api'
 function ProfileAvatarPlaceholder() {
   return (
     <svg className="home-avatar-placeholder" viewBox="0 0 100 100" aria-hidden="true">
+      <circle cx="50" cy="50" r="50" style={{ fill: '#e5e7e8' }} />
       <circle cx="50" cy="35" r="21" />
-      <path d="M10 96c2-23 18-39 40-39s38 16 40 39H10Z" />
+      <path d="M10 100c2-24 18-42 40-42s38 18 40 42H10Z" />
     </svg>
   )
 }
@@ -229,7 +230,6 @@ function Home({
       ? post.type === 'opportunity'
       : post.type !== 'opportunity'
   ))
-
   return (
     <>
       <section

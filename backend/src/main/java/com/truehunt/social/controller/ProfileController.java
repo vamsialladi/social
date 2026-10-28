@@ -50,6 +50,15 @@ public class ProfileController {
         if (updates.containsKey("phone")) profile.setPhone((String) updates.get("phone"));
         if (updates.containsKey("email")) profile.setEmail((String) updates.get("email"));
         if (updates.containsKey("experience")) profile.setExperience(String.valueOf(updates.get("experience")));
+        if (updates.containsKey("dateOfBirth")) profile.setDateOfBirth((String) updates.get("dateOfBirth"));
+        if (updates.containsKey("height")) {
+            profile.setHeight(updates.get("height") == null ? "" : String.valueOf(updates.get("height")));
+        }
+        if (updates.containsKey("weight")) {
+            profile.setWeight(updates.get("weight") == null ? "" : String.valueOf(updates.get("weight")));
+        }
+        if (updates.containsKey("gender")) profile.setGender((String) updates.get("gender"));
+        if (updates.containsKey("skinTone")) profile.setSkinTone((String) updates.get("skinTone"));
         if (updates.containsKey("address")) profile.setAddress((String) updates.get("address"));
         if (updates.containsKey("otherLanguage")) profile.setOtherLanguage((String) updates.get("otherLanguage"));
         if (updates.containsKey("profileImageUrl")) profile.setProfileImageUrl((String) updates.get("profileImageUrl"));

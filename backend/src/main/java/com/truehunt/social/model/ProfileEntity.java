@@ -23,6 +23,11 @@ public class ProfileEntity {
     private String phone;
     private String email;
     private String experience;
+    private String dateOfBirth;
+    private String height;
+    private String weight;
+    private String gender;
+    private String skinTone;
     private String address;
 
     @Lob
@@ -80,6 +85,21 @@ public class ProfileEntity {
 
     public String getExperience() { return experience; }
     public void setExperience(String experience) { this.experience = experience; }
+
+    public String getDateOfBirth() { return dateOfBirth; }
+    public void setDateOfBirth(String dateOfBirth) { this.dateOfBirth = dateOfBirth; }
+
+    public String getHeight() { return height; }
+    public void setHeight(String height) { this.height = height; }
+
+    public String getWeight() { return weight; }
+    public void setWeight(String weight) { this.weight = weight; }
+
+    public String getGender() { return gender; }
+    public void setGender(String gender) { this.gender = gender; }
+
+    public String getSkinTone() { return skinTone; }
+    public void setSkinTone(String skinTone) { this.skinTone = skinTone; }
 
     public String getAddress() { return address; }
     public void setAddress(String address) { this.address = address; }
@@ -178,6 +198,11 @@ public class ProfileEntity {
         dto.put("phone", phone != null ? phone : "");
         dto.put("email", email != null ? email : "");
         dto.put("experience", experience != null ? experience : "");
+        dto.put("dateOfBirth", dateOfBirth != null ? dateOfBirth : "");
+        dto.put("height", height != null ? height : "");
+        dto.put("weight", weight != null ? weight : "");
+        dto.put("gender", gender != null ? gender : "");
+        dto.put("skinTone", skinTone != null ? skinTone : "");
         dto.put("address", address != null ? address : "");
         dto.put("languages", getLanguages());
         dto.put("otherLanguage", otherLanguage != null ? otherLanguage : "");

@@ -567,6 +567,7 @@ export default function JoinNowPage() {
                   value={experienceYears}
                   onChange={(e) => setExperienceYears(e.target.value)}
                 >
+                  <option value="Fresher">Fresher</option>
                   <option value="1 - 2 Years">1 - 2 Years</option>
                   <option value="3 - 5 Years">3 - 5 Years</option>
                   <option value="6 - 9 Years">6 - 9 Years</option>

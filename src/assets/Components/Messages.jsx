@@ -11,7 +11,6 @@ import {
   X,
 } from 'lucide-react'
 import './Messages.css'
-import api from '../../api'
 
 const initialMessages = [
   {
@@ -80,7 +79,7 @@ const categories = ['Opportunities', 'Unread', 'Connections', 'InMail', 'Starred
 const mailboxOptions = ['Focused', 'Other', 'Archived', 'Spam']
 const emojis = ['😀', '😂', '😍', '😊', '👍', '🎉', '❤️', '🙏']
 
-function Messages() {
+function Messages({ opportunityHref, onViewOpportunity }) {
   const [messages, setMessages] = useState(initialMessages)
   const [selectedId, setSelectedId] = useState(initialMessages[0].id)
   const [activeCategory, setActiveCategory] = useState('')
@@ -93,8 +92,6 @@ function Messages() {
   const [replyText, setReplyText] = useState('')
   const [replyAttachment, setReplyAttachment] = useState(null)
   const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false)
-  const [isHeaderMenuOpen, setIsHeaderMenuOpen] = useState(false)
-  const [isConvMenuOpen, setIsConvMenuOpen] = useState(false)
   const replyInputRef = useRef(null)
   const attachmentInputRef = useRef(null)
   const emojiPickerRef = useRef(null)
@@ -111,23 +108,6 @@ function Messages() {
     document.addEventListener('pointerdown', closeOnOutsideClick)
     return () => document.removeEventListener('pointerdown', closeOnOutsideClick)
   }, [isEmojiPickerOpen])
-
-  useEffect(() => {
-    async function loadConversations() {
-      try {
-        const data = await api.getConversations(mailbox)
-        if (Array.isArray(data) && data.length > 0) {
-          setMessages(data)
-          if (!data.some((m) => m.id === selectedId)) {
-            setSelectedId(data[0].id)
-          }
-        }
-      } catch (err) {
-        console.warn('Backend conversations load error:', err)
-      }
-    }
-    loadConversations()
-  }, [mailbox])
 
   const visibleMessages = useMemo(() => {
     const query = search.trim().toLowerCase()
@@ -146,111 +126,37 @@ function Messages() {
 
   const selectedMessage = messages.find((message) => message.id === selectedId)
 
-  async function toggleStar(id) {
-    try {
-      const updated = await api.starConversation(id)
-      setMessages((currentMessages) => currentMessages.map((message) => (
-        message.id === id ? { ...message, starred: updated.starred } : message
-      )))
-    } catch (err) {
-      console.warn('Backend star note:', err)
-      setMessages((currentMessages) => currentMessages.map((message) => (
-        message.id === id ? { ...message, starred: !message.starred } : message
-      )))
-    }
+  function toggleStar(id) {
+    setMessages((currentMessages) => currentMessages.map((message) => (
+      message.id === id ? { ...message, starred: !message.starred } : message
+    )))
   }
 
-  async function handleSelectConversation(id) {
-    setSelectedId(id)
-    setIsConvMenuOpen(false)
-    const target = messages.find((m) => m.id === id)
-    if (target && target.unread) {
-      setMessages((current) => current.map((m) => (m.id === id ? { ...m, unread: false } : m)))
-      try {
-        await api.markConversationAsRead(id)
-      } catch (err) {
-        console.warn('Backend mark read note:', err)
-      }
-    }
-  }
-
-  async function handleMoveMailbox(targetMailbox) {
-    if (!selectedMessage) return
-    setIsConvMenuOpen(false)
-    try {
-      await api.updateMailbox(selectedMessage.id, targetMailbox)
-      setMessages((current) => current.map((m) => (m.id === selectedMessage.id ? { ...m, mailbox: targetMailbox } : m)))
-      alert(`Conversation moved to ${targetMailbox}.`)
-    } catch (err) {
-      console.warn('Backend mailbox note:', err)
-    }
-  }
-
-  async function handleDeleteSelectedConversation() {
-    if (!selectedMessage) return
-    if (!window.confirm(`Delete conversation with ${selectedMessage.name}?`)) return
-    setIsConvMenuOpen(false)
-    try {
-      await api.deleteConversation(selectedMessage.id)
-      const remaining = messages.filter((m) => m.id !== selectedMessage.id)
-      setMessages(remaining)
-      if (remaining.length > 0) setSelectedId(remaining[0].id)
-    } catch (err) {
-      console.warn('Backend delete conversation note:', err)
-    }
-  }
-
-  async function handleMarkAllAsRead() {
-    setIsHeaderMenuOpen(false)
-    setMessages((current) => current.map((m) => ({ ...m, unread: false })))
-    for (const m of messages) {
-      if (m.unread) {
-        api.markConversationAsRead(m.id).catch(() => {})
-      }
-    }
-  }
-
-  async function sendReply(event) {
+  function sendReply(event) {
     event.preventDefault()
     const content = replyText.trim()
 
     if (!selectedMessage || (!content && !replyAttachment)) return
 
-    let attachmentPayload = null
-    if (replyAttachment) {
-      try {
-        const res = await api.uploadMedia(replyAttachment)
-        attachmentPayload = { name: res.fileName, url: res.url, kind: res.kind }
-      } catch (err) {
-        console.warn('Reply attachment upload error:', err)
-        attachmentPayload = { name: replyAttachment.name }
-      }
-    }
-
-    try {
-      const updated = await api.sendMessage(selectedMessage.id, content, attachmentPayload)
-      setMessages((currentMessages) => currentMessages.map((msg) => (
-        msg.id === selectedMessage.id ? updated : msg
-      )))
-    } catch (err) {
-      console.warn('Backend send reply note:', err)
-      const messageId = Date.now()
-      setMessages((currentMessages) => currentMessages.map((message) => (
-        message.id === selectedMessage.id
-          ? {
-            ...message,
-            thread: [
-              ...(message.thread ?? []),
-              { id: messageId, content, attachment: attachmentPayload, direction: 'outgoing' },
-            ],
-            preview: content || `Attachment: ${replyAttachment.name}`,
-            date: 'Now',
-            unread: false,
-          }
-          : message
-      )))
-    }
-
+    const messageId = Date.now()
+    const attachment = replyAttachment
+    setMessages((currentMessages) => currentMessages.map((message) => (
+      message.id === selectedMessage.id
+        ? {
+          ...message,
+          thread: [
+            ...(message.thread ?? []),
+            ...(!message.thread?.length && !message.sponsored
+              ? [{ id: `${message.id}-initial`, content: message.description, direction: 'incoming' }]
+              : []),
+            { id: messageId, content, attachment, direction: 'outgoing' },
+          ],
+          preview: content || `Attachment: ${attachment.name}`,
+          date: 'Now',
+          unread: false,
+        }
+        : message
+    )))
     setReplyText('')
     setReplyAttachment(null)
     setIsEmojiPickerOpen(false)
@@ -270,38 +176,31 @@ function Messages() {
     })
   }
 
-  async function sendMessage(event) {
+  function sendMessage(event) {
     event.preventDefault()
     const name = recipient.trim()
     const content = messageText.trim()
 
     if (!name || !content) return
 
-    try {
-      const created = await api.createConversation(name, content)
-      setMessages((currentMessages) => [created, ...currentMessages])
-      setSelectedId(created.id)
-    } catch (err) {
-      console.warn('Backend create conversation note:', err)
-      const messageId = Date.now()
-      const newMessage = {
-        id: messageId,
-        name,
-        initials: name.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase(),
-        color: 'purple',
-        preview: content,
-        date: 'Now',
-        category: 'Connections',
-        unread: false,
-        sponsored: false,
-        subject: 'New message',
-        description: content,
-        thread: [{ id: messageId, content, direction: 'outgoing' }],
-      }
-      setMessages((currentMessages) => [newMessage, ...currentMessages])
-      setSelectedId(newMessage.id)
+    const messageId = Date.now()
+    const newMessage = {
+      id: messageId,
+      name,
+      initials: name.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase(),
+      color: 'purple',
+      preview: content,
+      date: 'Now',
+      category: 'Connections',
+      unread: false,
+      sponsored: false,
+      subject: 'New message',
+      description: content,
+      thread: [{ id: messageId, content, direction: 'outgoing' }],
     }
 
+    setMessages((currentMessages) => [newMessage, ...currentMessages])
+    setSelectedId(newMessage.id)
     setActiveCategory('')
     setRecipient('')
     setMessageText('')
@@ -324,50 +223,10 @@ function Messages() {
               onChange={(event) => setSearch(event.target.value)}
             />
           </label>
-          <div className="messages-header-actions" style={{ position: 'relative' }}>
-            <button
-              className="messages-icon-button"
-              type="button"
-              aria-label="More message options"
-              onClick={() => setIsHeaderMenuOpen((open) => !open)}
-            >
+          <div className="messages-header-actions">
+            <button className="messages-icon-button" type="button" aria-label="More message options">
               <MoreHorizontal size={27} strokeWidth={2.8} />
             </button>
-            {isHeaderMenuOpen && (
-              <div
-                style={{
-                  position: 'absolute',
-                  top: '100%',
-                  right: 0,
-                  background: 'var(--color-surface, #fff)',
-                  border: '1px solid #ccc',
-                  borderRadius: '8px',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                  zIndex: 20,
-                  minWidth: '160px',
-                  padding: '6px 0',
-                }}
-              >
-                <button
-                  type="button"
-                  style={{ display: 'block', width: '100%', padding: '8px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontSize: '13px' }}
-                  onClick={handleMarkAllAsRead}
-                >
-                  ✓ Mark all as read
-                </button>
-                <button
-                  type="button"
-                  style={{ display: 'block', width: '100%', padding: '8px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontSize: '13px' }}
-                  onClick={() => {
-                    setActiveCategory('')
-                    setSearch('')
-                    setIsHeaderMenuOpen(false)
-                  }}
-                >
-                  ↺ Reset filters
-                </button>
-              </div>
-            )}
             <button
               className="messages-icon-button"
               type="button"
@@ -428,7 +287,7 @@ function Messages() {
                 className={`message-preview${selectedId === message.id ? ' is-active' : ''}${message.unread ? ' is-unread' : ''}`}
                 type="button"
                 key={message.id}
-                onClick={() => handleSelectConversation(message.id)}
+                onClick={() => setSelectedId(message.id)}
               >
                 <span className={`message-avatar avatar-${message.color}`} aria-hidden="true">
                   {message.initials}
@@ -461,53 +320,10 @@ function Messages() {
                         : selectedMessage.description}</p>
                     </div>
                   </div>
-                  <div className="message-detail-actions" style={{ position: 'relative' }}>
-                    <button
-                      className="messages-icon-button"
-                      type="button"
-                      aria-label="More conversation options"
-                      onClick={() => setIsConvMenuOpen((open) => !open)}
-                    >
+                  <div className="message-detail-actions">
+                    <button className="messages-icon-button" type="button" aria-label="More conversation options">
                       <MoreHorizontal size={26} strokeWidth={2.8} />
                     </button>
-                    {isConvMenuOpen && (
-                      <div
-                        style={{
-                          position: 'absolute',
-                          top: '100%',
-                          right: '35px',
-                          background: 'var(--color-surface, #fff)',
-                          border: '1px solid #ccc',
-                          borderRadius: '8px',
-                          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                          zIndex: 20,
-                          minWidth: '180px',
-                          padding: '6px 0',
-                        }}
-                      >
-                        <button
-                          type="button"
-                          style={{ display: 'block', width: '100%', padding: '8px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontSize: '13px' }}
-                          onClick={() => handleMoveMailbox('Archived')}
-                        >
-                          📦 Move to Archived
-                        </button>
-                        <button
-                          type="button"
-                          style={{ display: 'block', width: '100%', padding: '8px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontSize: '13px' }}
-                          onClick={() => handleMoveMailbox('Spam')}
-                        >
-                          ⚠️ Move to Spam
-                        </button>
-                        <button
-                          type="button"
-                          style={{ display: 'block', width: '100%', padding: '8px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontSize: '13px', color: '#d93025' }}
-                          onClick={handleDeleteSelectedConversation}
-                        >
-                          🗑️ Delete conversation
-                        </button>
-                      </div>
-                    )}
                     <button
                       className={`messages-icon-button star-button${selectedMessage.starred ? ' is-starred' : ''}`}
                       type="button"
@@ -529,7 +345,15 @@ function Messages() {
                     <div className="sponsored-content">
                       <h3>{selectedMessage.subject}</h3>
                       <p>{selectedMessage.description}</p>
-                      <a href="#opportunities">View role</a>
+                      <a
+                        href={opportunityHref}
+                        onClick={(event) => {
+                          event.preventDefault()
+                          onViewOpportunity()
+                        }}
+                      >
+                        View role
+                      </a>
                     </div>
                   </article>
                 )}
@@ -654,26 +478,13 @@ function Messages() {
               <h2>Bring your next story to the screen</h2>
               <p>Northstar Films is meeting new writers, actors, and independent filmmakers for upcoming productions.</p>
               <span className="home-promotion-caption">Make your mark in the movies.</span>
-              <button
-                className="home-promotion-button"
-                type="button"
-                onClick={async () => {
-                  try {
-                    const res = await api.clickPromotion("Messages Promo - Northstar Films")
-                    alert(res.message || 'Inquiry registered with studio casting office.')
-                  } catch (e) {
-                    console.warn(e)
-                  }
-                }}
-              >
-                Explore film careers
-              </button>
+              <button className="home-promotion-button" type="button">Explore film careers</button>
             </div>
           </section>
           <footer className="messages-sidebar-footer">
-            <a href="#about">About</a>
-            <a href="#help">Help Center</a>
-            <a href="#privacy">Privacy &amp; Terms</a>
+            <a href="/" onClick={(event) => event.preventDefault()}>About</a>
+            <a href="/" onClick={(event) => event.preventDefault()}>Help Center</a>
+            <a href="/" onClick={(event) => event.preventDefault()}>Privacy &amp; Terms</a>
             <span>TrueHunt © 2026</span>
           </footer>
         </aside>

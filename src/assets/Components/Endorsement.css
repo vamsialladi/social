@@ -71,6 +71,12 @@
   object-fit: cover;
 }
 
+.notifications-avatar svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
 .notifications-profile-content h1 {
   margin: 10px 0 4px;
   color: #191919;

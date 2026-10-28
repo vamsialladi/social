@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import '../../App.css'
 import Messages from './Messages'
 import Home from './Home'
@@ -6,7 +6,10 @@ import NetworkPage from './NetworkPage'
 import Endorsement from './Endorsement'
 import ProfilePage, { emptyProfileDetails } from './ProfilePage'
 import Settings from './Settings'
+import { useAuth } from '../../context/AuthContext'
 import api from '../../api'
+import { api as directoryApi } from '../../services/api'
+import { FILM_CRAFTS } from '../../services/mockData'
 
 const navigationHashes = {
   home: 'home',
@@ -19,6 +22,32 @@ const navigationHashes = {
   'account-settings': 'account-settings',
   business: 'business',
 }
+
+const cinemaTypeFilters = [
+  { label: 'All cinema types', value: 'All', terms: [] },
+  { label: 'Hero / Lead', value: 'Hero', terms: ['hero', 'lead actor', 'leading actor', 'lead actress', 'leading actress', 'protagonist'] },
+  { label: 'Child artist', value: 'Child Artist', terms: ['child artist', 'child actor', 'child actress', 'child performer'] },
+  { label: 'Side character', value: 'Side Character', terms: ['side character', 'supporting character', 'supporting actor', 'supporting actress', 'character actor'] },
+  { label: 'Mother character', value: 'Mother', terms: ['mother character', 'mother role', 'mother'] },
+  { label: 'Father character', value: 'Father Character', terms: ['father character', 'father role', 'father'] },
+]
+
+const genderFilters = [
+  'All genders',
+  'Female',
+  'Male',
+  'Non-binary',
+  'Other',
+  'Prefer not to say',
+]
+
+const skinToneFilters = [
+  'All skin tones',
+  'White',
+  'Brown',
+  'Light brown',
+  'Dark',
+]
 
 function getNavigationFromHash() {
   const hash = window.location.hash.slice(1)
@@ -73,37 +102,109 @@ function Navigation({
   profileDetails,
 }) {
   const profileMenuRef = useRef(null)
-  const [searchQuery, setSearchQuery] = useState('')
-  const [searchResults, setSearchResults] = useState(null)
-  const [isSearching, setIsSearching] = useState(false)
+  const searchTriggerRef = useRef(null)
+  const searchQueryInputRef = useRef(null)
   const [isSearchOpen, setIsSearchOpen] = useState(false)
-  const searchContainerRef = useRef(null)
+  const [talentCategoryDraft, setTalentCategoryDraft] = useState('All')
+  const [cinemaTypeDraft, setCinemaTypeDraft] = useState('All')
+  const [genderDraft, setGenderDraft] = useState('All genders')
+  const [skinToneDraft, setSkinToneDraft] = useState('All skin tones')
+  const [searchQueryDraft, setSearchQueryDraft] = useState('')
+  const [searchLocationDraft, setSearchLocationDraft] = useState('')
+  const [talentDirectory, setTalentDirectory] = useState([])
+  const [hasSearched, setHasSearched] = useState(false)
+  const [isSearching, setIsSearching] = useState(false)
+  const [searchError, setSearchError] = useState('')
+
+  const searchResults = useMemo(() => {
+    if (!hasSearched) return []
+
+    const keyword = searchQueryDraft.trim().toLowerCase()
+    const location = searchLocationDraft.trim().toLowerCase()
+    const selectedCinemaType = cinemaTypeFilters.find((filter) => filter.value === cinemaTypeDraft)
+
+    return talentDirectory.filter((talent) => {
+      const searchableText = [
+        talent.name,
+        talent.role,
+        talent.headline,
+        talent.category,
+        talent.company,
+        talent.industry,
+        talent.location,
+        talent.bio,
+        ...(talent.skills || []),
+      ].filter(Boolean).join(' ').toLowerCase()
+      const matchesKeyword = !keyword || searchableText.includes(keyword)
+      const matchesLocation = !location || (talent.location || '').toLowerCase().includes(location)
+      const matchesCategory = talentCategoryDraft === 'All'
+        || (talent.category || '').toLowerCase() === talentCategoryDraft.toLowerCase()
+      const matchesCinemaType = !selectedCinemaType?.terms.length
+        || selectedCinemaType.terms.some((term) => searchableText.includes(term))
+      const matchesGender = genderDraft === 'All genders'
+        || (talent.gender || '').toLowerCase() === genderDraft.toLowerCase()
+      const matchesSkinTone = skinToneDraft === 'All skin tones'
+        || (talent.skinTone || '').toLowerCase() === skinToneDraft.toLowerCase()
+
+      return matchesKeyword
+        && matchesLocation
+        && matchesCategory
+        && matchesCinemaType
+        && matchesGender
+        && matchesSkinTone
+    })
+  }, [
+    cinemaTypeDraft,
+    genderDraft,
+    hasSearched,
+    searchLocationDraft,
+    searchQueryDraft,
+    skinToneDraft,
+    talentCategoryDraft,
+    talentDirectory,
+  ])
 
   useEffect(() => {
-    function handleOutside(e) {
-      if (!searchContainerRef.current?.contains(e.target)) {
+    if (!isSearchOpen) return undefined
+
+    searchQueryInputRef.current?.focus()
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+
+    function handleSearchKeyDown(event) {
+      if (event.key === 'Escape') {
         setIsSearchOpen(false)
+        searchTriggerRef.current?.focus()
       }
     }
-    document.addEventListener('pointerdown', handleOutside)
-    return () => document.removeEventListener('pointerdown', handleOutside)
-  }, [])
 
-  async function handleSearch(event) {
-    if (event.key === 'Enter') {
-      event.preventDefault()
-      const q = searchQuery.trim()
-      if (!q) return
-      setIsSearching(true)
-      setIsSearchOpen(true)
-      try {
-        const res = await api.search(q)
-        setSearchResults(res)
-      } catch (err) {
-        console.warn('Search error:', err)
-      } finally {
-        setIsSearching(false)
+    document.addEventListener('keydown', handleSearchKeyDown)
+    return () => {
+      document.removeEventListener('keydown', handleSearchKeyDown)
+      document.body.style.overflow = previousOverflow
+    }
+  }, [isSearchOpen])
+
+  async function handleSearchSubmit(event) {
+    event.preventDefault()
+    setIsSearching(true)
+    setSearchError('')
+
+    try {
+      const talents = await directoryApi.talents.getAll()
+      if (!Array.isArray(talents)) {
+        throw new Error('Talent search returned an invalid response.')
       }
+
+      setTalentDirectory(talents)
+      setHasSearched(true)
+    } catch (err) {
+      console.error('Failed to search talent profiles:', err)
+      setSearchError('Could not search talent profiles. Please try again.')
+      setTalentDirectory([])
+      setHasSearched(false)
+    } finally {
+      setIsSearching(false)
     }
   }
 
@@ -143,107 +244,213 @@ function Navigation({
           <img className="truehunt-brand" src="/truehunt-logo.png" alt="TrueHunt" />
         </a>
         
-        <div className="linkedin-search-wrap" ref={searchContainerRef} style={{ position: 'relative' }}>
+        <div
+          className="linkedin-search-wrap"
+          style={{ position: 'relative' }}
+        >
           <label className="linkedin-search">
             <NavigationIcon name="search" />
             <input
-              type="search"
-              placeholder="Search people, posts..."
-              aria-label="Search profiles"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyDown={handleSearch}
-              onFocus={() => {
-                if (searchResults) setIsSearchOpen(true)
+              ref={searchTriggerRef}
+              type="text"
+              placeholder="Search talent profiles..."
+              aria-label="Search talent profiles"
+              aria-haspopup="dialog"
+              aria-expanded={isSearchOpen}
+              readOnly
+              onClick={() => {
+                setTalentDirectory([])
+                setSearchError('')
+                setHasSearched(false)
+                setIsSearchOpen(true)
               }}
             />
           </label>
           {isSearchOpen && (
             <div
-              className="search-results-dropdown"
-              style={{
-                position: 'absolute',
-                top: 'calc(100% + 4px)',
-                left: 0,
-                width: '320px',
-                background: 'var(--color-surface, #fff)',
-                border: '1px solid #ccc',
-                borderRadius: '8px',
-                boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
-                zIndex: 100,
-                padding: '12px',
-                maxHeight: '380px',
-                overflowY: 'auto',
-              }}
+              className="social-talent-search-overlay"
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', borderBottom: '1px solid #eee', paddingBottom: '6px' }}>
-                <strong style={{ fontSize: '13px' }}>
-                  {isSearching ? 'Searching...' : `Results (${searchResults?.totalResults || 0})`}
-                </strong>
-                <button
-                  type="button"
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', color: '#666' }}
-                  onClick={() => setIsSearchOpen(false)}
-                >
-                  ✕
-                </button>
-              </div>
-
-              {searchResults?.people && searchResults.people.length > 0 && (
-                <div style={{ marginBottom: '12px' }}>
-                  <div style={{ fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', color: '#888', marginBottom: '6px' }}>
-                    People
+              <form
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="social-talent-search-title"
+                onSubmit={handleSearchSubmit}
+                className="social-talent-search"
+              >
+                <header className="social-talent-search-heading">
+                  <div>
+                    <span className="social-talent-search-eyebrow">TALENT DIRECTORY</span>
+                    <h2 id="social-talent-search-title">Find creative professionals</h2>
+                    <p>Search talent profiles by role, craft, skill, or location.</p>
                   </div>
-                  {searchResults.people.map((p) => (
-                    <div
-                      key={p.id}
-                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #f5f5f5' }}
-                    >
-                      <div>
-                        <div style={{ fontSize: '13px', fontWeight: '600' }}>{p.name}</div>
-                        <div style={{ fontSize: '11px', color: '#666' }}>{p.role}</div>
-                      </div>
+                  <button className="social-talent-search-close" type="button" onClick={() => setIsSearchOpen(false)} aria-label="Close search">
+                    ×
+                  </button>
+                </header>
+                <div className="social-talent-search-layout">
+                  <aside className="social-talent-filters" aria-label="Candidate filters">
+                    <div className="social-talent-filter-heading">
+                      <h3>Filters</h3>
                       <button
                         type="button"
-                        style={{ background: '#1a73e8', color: '#fff', border: 'none', borderRadius: '12px', padding: '3px 10px', fontSize: '12px', cursor: 'pointer' }}
                         onClick={() => {
-                          setIsSearchOpen(false)
-                          setActiveNavigation('network')
+                          setTalentCategoryDraft('All')
+                          setCinemaTypeDraft('All')
+                          setGenderDraft('All genders')
+                          setSkinToneDraft('All skin tones')
+                          setSearchQueryDraft('')
+                          setSearchLocationDraft('')
+                          setHasSearched(false)
                         }}
                       >
-                        View
+                        Clear all
                       </button>
                     </div>
-                  ))}
-                </div>
-              )}
-
-              {searchResults?.posts && searchResults.posts.length > 0 && (
-                <div>
-                  <div style={{ fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', color: '#888', marginBottom: '6px' }}>
-                    Posts & Opportunities
-                  </div>
-                  {searchResults.posts.map((post) => (
-                    <div
-                      key={post.id}
-                      style={{ padding: '6px 0', borderBottom: '1px solid #f5f5f5', cursor: 'pointer' }}
-                      onClick={() => {
-                        setIsSearchOpen(false)
-                        setActiveNavigation(post.type === 'opportunity' ? 'opportunities' : 'home')
-                      }}
-                    >
-                      <div style={{ fontSize: '12px', fontWeight: '600' }}>{post.authorName || 'Post'}</div>
-                      <div style={{ fontSize: '12px', color: '#444' }}>{post.title || post.content?.slice(0, 50)}...</div>
+                    <fieldset className="social-talent-filter-group">
+                      <legend>Cinema type</legend>
+                      {cinemaTypeFilters.map((filter) => (
+                        <label className="social-talent-filter-option" key={filter.value}>
+                          <input
+                            type="radio"
+                            name="cinema-type"
+                            value={filter.value}
+                            checked={cinemaTypeDraft === filter.value}
+                            onChange={() => setCinemaTypeDraft(filter.value)}
+                          />
+                          <span>{filter.label}</span>
+                        </label>
+                      ))}
+                    </fieldset>
+                    <fieldset className="social-talent-filter-group">
+                      <legend>Film craft</legend>
+                      <label className="social-talent-filter-option">
+                        <input
+                          type="radio"
+                          name="talent-category"
+                          value="All"
+                          checked={talentCategoryDraft === 'All'}
+                          onChange={() => setTalentCategoryDraft('All')}
+                        />
+                        <span>All crafts</span>
+                      </label>
+                      {FILM_CRAFTS.map((craft) => (
+                        <label className="social-talent-filter-option" key={craft.id}>
+                          <input
+                            type="radio"
+                            name="talent-category"
+                            value={craft.title}
+                            checked={talentCategoryDraft === craft.title}
+                            onChange={() => setTalentCategoryDraft(craft.title)}
+                          />
+                          <span>{craft.title}</span>
+                        </label>
+                      ))}
+                    </fieldset>
+                    <fieldset className="social-talent-filter-group">
+                      <legend>Gender</legend>
+                      {genderFilters.map((gender) => (
+                        <label className="social-talent-filter-option" key={gender}>
+                          <input
+                            type="radio"
+                            name="talent-gender"
+                            value={gender}
+                            checked={genderDraft === gender}
+                            onChange={() => setGenderDraft(gender)}
+                          />
+                          <span>{gender}</span>
+                        </label>
+                      ))}
+                    </fieldset>
+                    <fieldset className="social-talent-filter-group">
+                      <legend>Skin tone</legend>
+                      {skinToneFilters.map((skinTone) => (
+                        <label className="social-talent-filter-option" key={skinTone}>
+                          <input
+                            type="radio"
+                            name="talent-skin-tone"
+                            value={skinTone}
+                            checked={skinToneDraft === skinTone}
+                            onChange={() => setSkinToneDraft(skinTone)}
+                          />
+                          <span>{skinTone}</span>
+                        </label>
+                      ))}
+                    </fieldset>
+                  </aside>
+                  <main className="social-talent-search-main">
+                    <div className="social-talent-search-fields">
+                      <div className="social-talent-search-field">
+                        <label htmlFor="social-search-keyword">Role, name, or skill</label>
+                        <input ref={searchQueryInputRef} id="social-search-keyword" type="search" placeholder="e.g. lead actor, cinematographer, editor" value={searchQueryDraft} onChange={(event) => setSearchQueryDraft(event.target.value)} />
+                      </div>
+                      <div className="social-talent-search-field">
+                        <label htmlFor="social-search-location">Location</label>
+                        <input id="social-search-location" type="text" placeholder="City or region" value={searchLocationDraft} onChange={(event) => setSearchLocationDraft(event.target.value)} />
+                      </div>
+                      <button type="submit" className="social-talent-search-submit" disabled={isSearching}>
+                        <NavigationIcon name="search" />
+                        {isSearching ? 'Searching profiles…' : 'Search profiles'}
+                      </button>
                     </div>
-                  ))}
+                    {searchError && <p className="social-talent-search-error" role="alert">{searchError}</p>}
+                    {isSearching && (
+                      <p className="social-talent-search-status" role="status">Finding matching professionals…</p>
+                    )}
+                    {!isSearching && hasSearched && searchResults.length > 0 && (
+                      <section className="social-talent-results" aria-live="polite">
+                        <div className="social-talent-results-heading">
+                          <div>
+                            <h3>Matching professionals</h3>
+                            <p>Profiles matching your selected filters</p>
+                          </div>
+                          <span>{searchResults.length} {searchResults.length === 1 ? 'profile' : 'profiles'}</span>
+                        </div>
+                        <div className="social-talent-results-list">
+                          {searchResults.map((talent) => (
+                            <article className="social-talent-result-card" key={talent.id}>
+                              {talent.avatar
+                                ? <img className="social-talent-result-avatar" src={talent.avatar} alt="" />
+                                : (
+                                  <span className="social-talent-result-avatar social-talent-result-initials" aria-hidden="true">
+                                    {(talent.name || 'Talent').split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase()}
+                                  </span>
+                                )}
+                              <div className="social-talent-result-content">
+                                <div className="social-talent-result-name-row">
+                                  <h4>{talent.name || 'Creative professional'}</h4>
+                                  {talent.verified && <span className="social-talent-verified">Verified</span>}
+                                </div>
+                                <p className="social-talent-result-role">{talent.role || talent.headline || talent.category}</p>
+                                <p className="social-talent-result-meta">
+                                  {[talent.category, talent.location, talent.experience].filter(Boolean).join(' · ')}
+                                </p>
+                                {talent.bio && <p className="social-talent-result-bio">{talent.bio}</p>}
+                                {talent.skills?.length > 0 && (
+                                  <div className="social-talent-result-skills">
+                                    {talent.skills.slice(0, 3).map((skill) => <span key={skill}>{skill}</span>)}
+                                  </div>
+                                )}
+                              </div>
+                            </article>
+                          ))}
+                        </div>
+                      </section>
+                    )}
+                    {!isSearching && hasSearched && searchResults.length === 0 && !searchError && (
+                      <div className="social-talent-search-empty" role="status">
+                        <strong>No matching profiles yet</strong>
+                        <span>Try a different cinema type, craft, keyword, or location.</span>
+                      </div>
+                    )}
+                    {!isSearching && !hasSearched && (
+                      <div className="social-talent-search-empty">
+                        <strong>Search the talent directory</strong>
+                        <span>Choose filters and search to see matching professional profiles.</span>
+                      </div>
+                    )}
+                  </main>
                 </div>
-              )}
-
-              {(!searchResults || (searchResults.people.length === 0 && searchResults.posts.length === 0)) && !isSearching && (
-                <div style={{ fontSize: '12px', color: '#888', padding: '12px 0', textAlign: 'center' }}>
-                  Press Enter to search for "{searchQuery}".
-                </div>
-              )}
+              </form>
             </div>
           )}
         </div>
@@ -401,6 +608,7 @@ function Navigation({
 }
 
 export default function SocialApp() {
+  const { isAuthenticated } = useAuth()
   const [activeNavigation, setActiveNavigationState] = useState(getNavigationFromHash)
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false)
   const [theme, setTheme] = useState('light')
@@ -520,6 +728,7 @@ export default function SocialApp() {
       </div>
       <div hidden={activeNavigation !== 'profile'}>
         <ProfilePage
+          isOwner={isAuthenticated}
           profileDetails={profileDetails}
           setProfileDetails={(updater) => {
             setProfileDetails((prev) => {

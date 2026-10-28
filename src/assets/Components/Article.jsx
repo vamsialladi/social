@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import './Article.css'
 import api from '../../api'
 
-function Article({ profileDetails, profilePreview, hidden, onBack, onPublish }) {
+function Article({ hidden, onBack, onPublish }) {
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
   const [media, setMedia] = useState(null)
@@ -10,8 +10,6 @@ function Article({ profileDetails, profilePreview, hidden, onBack, onPublish }) 
   const fileInputRef = useRef(null)
   const mediaKindRef = useRef('')
   const mediaRef = useRef(null)
-  const name = profileDetails.name.trim() || 'Your name'
-  const initials = name === 'Your name' ? '?' : name.charAt(0).toUpperCase()
 
   useEffect(() => {
     mediaRef.current = media
@@ -92,18 +90,6 @@ function Article({ profileDetails, profilePreview, hidden, onBack, onPublish }) 
       </header>
 
       <form className="article-editor" onSubmit={publishArticle}>
-        <div className="article-editor-heading">
-          <div className="article-author-avatar" aria-hidden="true">
-            {profilePreview
-              ? <img src={profilePreview} alt="" />
-              : initials}
-          </div>
-          <div>
-            <strong>{name}</strong>
-            <span>Write an article</span>
-          </div>
-        </div>
-
         <section className={`article-cover-area${media ? ' has-media' : ''}`}>
           {media ? (
             <>

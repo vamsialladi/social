@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { 
   ArrowLeft, 
@@ -60,7 +60,10 @@ export default function ProfilePage() {
         data = await api.profile.getById(id);
       }
 
-      setProfile(data);
+      setProfile(data ? {
+        ...data,
+        avatar: data.avatar || data.profileImageUrl || '',
+      } : data);
 
       // Load side recommendations
       const suggs = await api.profile.getSuggestions(data?.id);
@@ -87,11 +90,13 @@ export default function ProfilePage() {
   // Profile Save Handler
   const handleSaveProfile = async (formData) => {
     const res = await api.profile.updateMe(formData);
-    if (res.data) {
-      setProfile(prev => ({ ...prev, ...formData, ...res.data }));
-    } else {
-      setProfile(prev => ({ ...prev, ...formData }));
-    }
+    setProfile(prev => {
+      const updatedProfile = { ...prev, ...formData, ...(res.data || {}) };
+      return {
+        ...updatedProfile,
+        avatar: updatedProfile.avatar || updatedProfile.profileImageUrl || '',
+      };
+    });
   };
 
   // Experience Handlers
@@ -471,4 +476,3 @@ export default function ProfilePage() {
     </div>
   );
 }
-

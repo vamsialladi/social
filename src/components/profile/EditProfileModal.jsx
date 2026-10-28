@@ -1,10 +1,35 @@
-import React, { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { X, Camera, Image as ImageIcon, Loader2 } from 'lucide-react';
 import { useNotification } from '../../context/NotificationContext';
+import { api } from '../../api';
+
+function ProfileAvatar({ src, alt }) {
+  if (src) {
+    return (
+      <img
+        src={src}
+        alt={alt}
+        style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover' }}
+      />
+    );
+  }
+
+  return (
+    <svg viewBox="0 0 100 100" aria-hidden="true" style={{ display: 'block', width: '100%', height: '100%' }}>
+      <circle cx="50" cy="50" r="50" fill="#e5e7e8" />
+      <circle cx="50" cy="35" r="21" fill="#adb3b6" />
+      <path d="M10 100c2-24 18-42 40-42s38 18 40 42H10Z" fill="#adb3b6" />
+    </svg>
+  );
+}
 
 export default function EditProfileModal({ profile, onClose, onSave }) {
   const { showNotification } = useNotification();
   const [loading, setLoading] = useState(false);
+  const [avatarFile, setAvatarFile] = useState(null);
+  const [avatarPreview, setAvatarPreview] = useState(
+    profile?.avatar || profile?.profileImageUrl || '',
+  );
   const [formData, setFormData] = useState({
     name: profile?.name || '',
     headline: profile?.headline || '',
@@ -20,6 +45,12 @@ export default function EditProfileModal({ profile, onClose, onSave }) {
     avatar: profile?.avatar || '',
     coverImage: profile?.coverImage || ''
   });
+
+  useEffect(() => {
+    return () => {
+      if (avatarPreview.startsWith('blob:')) URL.revokeObjectURL(avatarPreview);
+    };
+  }, [avatarPreview]);
 
   const categories = [
     'Acting',
@@ -44,7 +75,12 @@ export default function EditProfileModal({ profile, onClose, onSave }) {
     }
     setLoading(true);
     try {
-      await onSave(formData);
+      const profileData = { ...formData };
+      if (avatarFile) {
+        const uploaded = await api.uploadMedia(avatarFile, 'profile-image');
+        profileData.avatar = uploaded.url;
+      }
+      await onSave(profileData);
       showNotification('Profile updated successfully!', 'success');
       onClose();
     } catch (err) {
@@ -87,6 +123,27 @@ export default function EditProfileModal({ profile, onClose, onSave }) {
 
         <form onSubmit={handleSubmit}>
           {/* Photos URL preview */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '18px' }}>
+            <div style={{ width: '88px', height: '88px', borderRadius: '50%', overflow: 'hidden', backgroundColor: '#E2E8F0', flexShrink: 0 }}>
+              <ProfileAvatar src={avatarPreview} alt="Profile photo preview" />
+            </div>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label" htmlFor="profile-photo-upload" style={{ fontSize: '12px', fontWeight: 600 }}>
+                <Camera size={13} style={{ verticalAlign: 'middle', marginRight: '4px' }} /> Upload profile photo
+              </label>
+              <input
+                id="profile-photo-upload"
+                type="file"
+                accept="image/*"
+                className="form-control"
+                onChange={(event) => {
+                  const file = event.target.files?.[0] || null;
+                  setAvatarFile(file);
+                  setAvatarPreview(file ? URL.createObjectURL(file) : formData.avatar);
+                }}
+              />
+            </div>
+          </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '18px' }}>
             <div className="form-group" style={{ margin: 0 }}>
               <label className="form-label" style={{ fontSize: '12px', fontWeight: 600 }}>
@@ -97,7 +154,12 @@ export default function EditProfileModal({ profile, onClose, onSave }) {
                 className="form-control" 
                 placeholder="https://images.unsplash.com/..." 
                 value={formData.avatar}
-                onChange={(e) => setFormData({ ...formData, avatar: e.target.value })}
+                onChange={(e) => {
+                  const avatar = e.target.value;
+                  setAvatarFile(null);
+                  setFormData({ ...formData, avatar });
+                  setAvatarPreview(avatar);
+                }}
               />
             </div>
             <div className="form-group" style={{ margin: 0 }}>
@@ -277,4 +339,3 @@ export default function EditProfileModal({ profile, onClose, onSave }) {
     </div>
   );
 }
-

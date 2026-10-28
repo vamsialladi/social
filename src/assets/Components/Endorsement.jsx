@@ -5,7 +5,6 @@ import api from '../../api'
 function Notifications({ profileDetails, profilePreview, onViewProfile, onManageNotifications }) {
   const [endorsements, setEndorsements] = useState([])
   const name = profileDetails.name.trim() || 'Your name'
-  const initials = name === 'Your name' ? '?' : name.charAt(0).toUpperCase()
   const languages = [
     ...profileDetails.languages.filter((language) => language !== 'Other'),
     ...(profileDetails.otherLanguage ? [profileDetails.otherLanguage] : []),
@@ -47,7 +46,13 @@ function Notifications({ profileDetails, profilePreview, onViewProfile, onManage
             <div className="notifications-avatar" aria-hidden="true">
               {profilePreview
                 ? <img src={profilePreview} alt="" />
-                : initials}
+                : (
+                  <svg viewBox="0 0 100 100" focusable="false">
+                    <circle cx="50" cy="50" r="50" fill="#e5e7e8" />
+                    <circle cx="50" cy="35" r="21" fill="#adb3b6" />
+                    <path d="M10 100c2-24 18-42 40-42s38 18 40 42H10Z" fill="#adb3b6" />
+                  </svg>
+                )}
             </div>
             <h1>{name}</h1>
             {profileDetails.talents.length > 0 && (
