@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import MainLayout from './layouts/MainLayout';
 import HomePage from './pages/HomePage';
@@ -25,10 +25,33 @@ import ScrollToTop from './components/common/ScrollToTop';
 import { AuthProvider } from './context/AuthContext';
 import { NotificationProvider } from './context/NotificationContext';
 import SocialApp from './assets/Components/SocialApp';
+import CinematicIntro from './components/intro/CinematicIntro';
 
 export default function App() {
+  const [showIntro, setShowIntro] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('intro') === 'true') {
+        return true;
+      }
+      const pathname = window.location.pathname;
+      const isRoot = pathname === '/' || pathname === '';
+      const hasSeen = sessionStorage.getItem('truehunt_intro_seen');
+      return isRoot && !hasSeen;
+    }
+    return false;
+  });
+
+  const handleIntroComplete = () => {
+    try {
+      sessionStorage.setItem('truehunt_intro_seen', 'true');
+    } catch {}
+    setShowIntro(false);
+  };
+
   return (
     <BrowserRouter>
+      {showIntro && <CinematicIntro onComplete={handleIntroComplete} />}
       <ScrollToTop />
       <NotificationProvider>
         <AuthProvider>

@@ -32,15 +32,21 @@ public class UserAccountEntity {
     private String phoneNumber;
     private String role;
     private String craft;
+    private String subCraft;
     private String experienceYears;
     private String companyName;
     private String headquarters;
+    private Boolean acceptedTerms = true;
 
     @Column(nullable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 
     public Long getId() {
         return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
     }
 
     public String getEmail() {
@@ -83,6 +89,14 @@ public class UserAccountEntity {
         this.phoneNumber = phoneNumber;
     }
 
+    public String getPhone() {
+        return phoneNumber;
+    }
+
+    public void setPhone(String phone) {
+        this.phoneNumber = phone;
+    }
+
     public String getRole() {
         return role;
     }
@@ -99,12 +113,36 @@ public class UserAccountEntity {
         this.craft = craft;
     }
 
+    public String getPrimaryCraft() {
+        return craft;
+    }
+
+    public void setPrimaryCraft(String primaryCraft) {
+        this.craft = primaryCraft;
+    }
+
+    public String getSubCraft() {
+        return subCraft;
+    }
+
+    public void setSubCraft(String subCraft) {
+        this.subCraft = subCraft;
+    }
+
     public String getExperienceYears() {
         return experienceYears;
     }
 
     public void setExperienceYears(String experienceYears) {
         this.experienceYears = experienceYears;
+    }
+
+    public String getExperience() {
+        return experienceYears;
+    }
+
+    public void setExperience(String experience) {
+        this.experienceYears = experience;
     }
 
     public String getCompanyName() {
@@ -123,7 +161,19 @@ public class UserAccountEntity {
         this.headquarters = headquarters;
     }
 
+    public Boolean getAcceptedTerms() {
+        return acceptedTerms;
+    }
+
+    public void setAcceptedTerms(Boolean acceptedTerms) {
+        this.acceptedTerms = acceptedTerms;
+    }
+
     public LocalDateTime getCreatedAt() {
         return createdAt;
+    }
+
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
     }
 }

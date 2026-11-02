@@ -283,6 +283,7 @@ export default function Footer() {
             <Link to="/get-support" style={{ color: '#94A3B8' }}>Support</Link>
             <Link to="/contact-us" style={{ color: '#94A3B8' }}>Contact Us</Link>
             <Link to="/about-us" style={{ color: '#94A3B8' }}>About Us</Link>
+            <a href="/?intro=true" style={{ color: '#F59E0B', display: 'flex', alignItems: 'center', gap: '4px', textDecoration: 'none', fontWeight: 600 }}>🎬 Replay Intro</a>
           </div>
         </div>
 

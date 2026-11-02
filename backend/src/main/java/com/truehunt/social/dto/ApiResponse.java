@@ -1,8 +1,11 @@
 package com.truehunt.social.dto;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import java.util.Map;
 
+@JsonInclude(JsonInclude.Include.NON_NULL)
 public class ApiResponse<T> {
+    private boolean success = true;
     private T data;
     private Map<String, Object> meta;
     private ApiError error;
@@ -11,11 +14,13 @@ public class ApiResponse<T> {
 
     public ApiResponse(T data) {
         this.data = data;
+        this.success = true;
     }
 
     public ApiResponse(T data, Map<String, Object> meta) {
         this.data = data;
         this.meta = meta;
+        this.success = true;
     }
 
     public static <T> ApiResponse<T> success(T data) {
@@ -28,14 +33,24 @@ public class ApiResponse<T> {
 
     public static <T> ApiResponse<T> error(String code, String message) {
         ApiResponse<T> resp = new ApiResponse<>();
+        resp.setSuccess(false);
         resp.setError(new ApiError(code, message));
         return resp;
     }
 
     public static <T> ApiResponse<T> error(String code, String message, Map<String, String> fields) {
         ApiResponse<T> resp = new ApiResponse<>();
+        resp.setSuccess(false);
         resp.setError(new ApiError(code, message, fields));
         return resp;
+    }
+
+    public boolean isSuccess() {
+        return success && error == null;
+    }
+
+    public void setSuccess(boolean success) {
+        this.success = success;
     }
 
     public T getData() {
@@ -60,8 +75,12 @@ public class ApiResponse<T> {
 
     public void setError(ApiError error) {
         this.error = error;
+        if (error != null) {
+            this.success = false;
+        }
     }
 
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     public static class ApiError {
         private String code;
         private String message;

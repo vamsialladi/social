@@ -34,11 +34,16 @@ public class PostEntity {
     @Column(columnDefinition = "TEXT")
     private String content;
 
+    private String mediaUrl;
+    private String mediaType;
+
     @Lob
     @Column(columnDefinition = "TEXT")
     private String mediaJson;
 
     private int likesCount = 0;
+    private int commentsCount = 0;
+    private int applicationsCount = 0;
     private boolean likedByMe = false;
     private boolean appliedByMe = false;
 
@@ -74,25 +79,49 @@ public class PostEntity {
     public String getContent() { return content; }
     public void setContent(String content) { this.content = content; }
 
+    public String getMediaUrl() { return mediaUrl; }
+    public void setMediaUrl(String mediaUrl) { this.mediaUrl = mediaUrl; }
+
+    public String getMediaType() { return mediaType; }
+    public void setMediaType(String mediaType) { this.mediaType = mediaType; }
+
     public int getLikesCount() { return likesCount; }
     public void setLikesCount(int likesCount) { this.likesCount = likesCount; }
+
+    public int getCommentsCount() { return commentsCount; }
+    public void setCommentsCount(int commentsCount) { this.commentsCount = commentsCount; }
+
+    public int getApplicationsCount() { return applicationsCount; }
+    public void setApplicationsCount(int applicationsCount) { this.applicationsCount = applicationsCount; }
 
     public boolean isLikedByMe() { return likedByMe; }
     public void setLikedByMe(boolean likedByMe) { this.likedByMe = likedByMe; }
 
+    public boolean isLiked() { return likedByMe; }
+    public void setLiked(boolean liked) { this.likedByMe = liked; }
+
     public boolean isAppliedByMe() { return appliedByMe; }
     public void setAppliedByMe(boolean appliedByMe) { this.appliedByMe = appliedByMe; }
+
+    public boolean isApplied() { return appliedByMe; }
+    public void setApplied(boolean applied) { this.appliedByMe = applied; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 
     public Map<String, Object> getMedia() {
-        if (mediaJson == null || mediaJson.isBlank()) return null;
-        try {
-            return MAPPER.readValue(mediaJson, new TypeReference<Map<String, Object>>() {});
-        } catch (Exception e) {
-            return null;
+        if (mediaJson != null && !mediaJson.isBlank()) {
+            try {
+                return MAPPER.readValue(mediaJson, new TypeReference<Map<String, Object>>() {});
+            } catch (Exception ignored) {}
         }
+        if (mediaUrl != null && !mediaUrl.isBlank()) {
+            Map<String, Object> m = new HashMap<>();
+            m.put("url", mediaUrl);
+            m.put("type", mediaType != null ? mediaType : "image");
+            return m;
+        }
+        return null;
     }
 
     public void setMedia(Map<String, Object> media) {
@@ -107,6 +136,10 @@ public class PostEntity {
         }
     }
 
+    public void setOpportunityDetails(Map<String, Object> details) {
+        setMedia(details);
+    }
+
     public List<Map<String, Object>> getComments() {
         if (commentsJson == null || commentsJson.isBlank()) return new ArrayList<>();
         try {
@@ -119,11 +152,14 @@ public class PostEntity {
     public void setComments(List<Map<String, Object>> comments) {
         if (comments == null) {
             this.commentsJson = "[]";
+            this.commentsCount = 0;
         } else {
             try {
                 this.commentsJson = MAPPER.writeValueAsString(comments);
+                this.commentsCount = comments.size();
             } catch (Exception e) {
                 this.commentsJson = "[]";
+                this.commentsCount = 0;
             }
         }
     }
@@ -150,6 +186,11 @@ public class PostEntity {
 
     public void toggleApply() {
         this.appliedByMe = !this.appliedByMe;
+        if (this.appliedByMe) {
+            this.applicationsCount++;
+        } else {
+            this.applicationsCount = Math.max(0, this.applicationsCount - 1);
+        }
     }
 
     public Map<String, Object> toDto() {
@@ -163,7 +204,11 @@ public class PostEntity {
         dto.put("title", title != null ? title : "");
         dto.put("content", content != null ? content : "");
         dto.put("media", getMedia());
+        dto.put("mediaUrl", mediaUrl);
+        dto.put("mediaType", mediaType);
         dto.put("likesCount", likesCount);
+        dto.put("commentsCount", commentsCount);
+        dto.put("applicationsCount", applicationsCount);
         dto.put("liked", likedByMe);
         dto.put("applied", appliedByMe);
         dto.put("comments", getComments());

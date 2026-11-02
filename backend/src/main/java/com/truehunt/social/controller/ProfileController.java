@@ -1,196 +1,188 @@
 package com.truehunt.social.controller;
 
-import com.truehunt.social.dto.ApiResponse;
-import com.truehunt.social.model.ProfileEntity;
-import com.truehunt.social.model.UserAccountEntity;
-import com.truehunt.social.repository.ProfileRepository;
-import com.truehunt.social.repository.UserAccountRepository;
+import com.truehunt.social.dto.*;
+import com.truehunt.social.service.PostService;
+import com.truehunt.social.service.ProfileService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.LocalDateTime;
-import java.util.*;
+import java.util.List;
+import java.util.Map;
 
 @RestController
-@RequestMapping("/api/profiles")
+@RequestMapping({"/api/profile", "/api/profiles"})
 public class ProfileController {
 
-    private final ProfileRepository profileRepository;
-    private final UserAccountRepository userAccountRepository;
+    private final ProfileService profileService;
+    private final PostService postService;
 
-    public ProfileController(ProfileRepository profileRepository, UserAccountRepository userAccountRepository) {
-        this.profileRepository = profileRepository;
-        this.userAccountRepository = userAccountRepository;
+    public ProfileController(ProfileService profileService, PostService postService) {
+        this.profileService = profileService;
+        this.postService = postService;
     }
 
     @GetMapping("/directory")
     public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getPublicDirectory() {
-        List<Map<String, Object>> profiles = profileRepository.findAll().stream()
-                .filter(profile -> profile.getName() != null && !profile.getName().isBlank())
-                .map(profile -> {
-                    Map<String, Object> directoryProfile = new HashMap<>();
-                    String publicUserId = findAccountByEmail(profile.getEmail())
-                            .map(UserAccountEntity::getPublicUserId)
-                            .filter(id -> id != null && !id.isBlank())
-                            .orElse(profile.getUserId());
-                    directoryProfile.put("id", publicUserId);
-                    directoryProfile.put("userId", publicUserId);
-                    directoryProfile.put("referId", publicUserId);
-                    directoryProfile.put("name", profile.getName());
-                    directoryProfile.put("height", profile.getHeight() != null ? profile.getHeight() : "");
-                    directoryProfile.put("weight", profile.getWeight() != null ? profile.getWeight() : "");
-                    directoryProfile.put("bodyBuild", profile.getBodyBuild() != null ? profile.getBodyBuild() : "");
-                    directoryProfile.put("gender", profile.getGender() != null ? profile.getGender() : "");
-                    directoryProfile.put("skinTone", profile.getSkinTone() != null ? profile.getSkinTone() : "");
-                    directoryProfile.put("experience", profile.getExperience() != null ? profile.getExperience() : "");
-                    directoryProfile.put("avatar", profile.getProfileImageUrl() != null ? profile.getProfileImageUrl() : "");
-
-                    List<String> skills = new ArrayList<>(profile.getTalents());
-                    profile.getWorkTypes().stream()
-                            .filter(workType -> !skills.contains(workType))
-                            .forEach(skills::add);
-                    directoryProfile.put("skills", skills);
-                    directoryProfile.put("category", skills.isEmpty() ? "Film Industry" : skills.get(0));
-                    directoryProfile.put("role", skills.isEmpty() ? "Cinema Professional" : skills.get(0));
-                    directoryProfile.put("location", profile.getExperiences().stream()
-                            .map(experience -> experience.get("location"))
-                            .filter(Objects::nonNull)
-                            .map(String::valueOf)
-                            .filter(location -> !location.isBlank())
-                            .findFirst()
-                            .orElse(""));
-                    return directoryProfile;
-                })
-                .toList();
-        return ResponseEntity.ok(ApiResponse.success(profiles));
+        List<Map<String, Object>> directory = profileService.getPublicDirectory();
+        return ResponseEntity.ok(ApiResponse.success(directory));
     }
 
     @GetMapping("/me")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> getMyProfile(
+    public ResponseEntity<ApiResponse<ProfileDto>> getMyProfile(
             @RequestHeader(value = "X-User-Email", required = false) String userEmail
     ) {
-        ProfileEntity profile = findCurrentProfile(userEmail);
-        return ResponseEntity.ok(ApiResponse.success(profile.toDto()));
-    }
-
-    @GetMapping("/{userId}")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> getProfileById(@PathVariable String userId) {
-        Optional<ProfileEntity> profile = profileRepository.findByUserId(userId);
-        if (profile.isEmpty()) {
-            profile = findAccountByPublicUserId(userId)
-                    .flatMap(account -> profileRepository.findByEmail(account.getEmail()));
-        }
-        return profile.map(p -> ResponseEntity.ok(ApiResponse.success(p.toDto())))
-                .orElseGet(() -> ResponseEntity.status(404).body(ApiResponse.error("NOT_FOUND", "Profile not found")));
+        ProfileDto profile = profileService.getMyProfile(userEmail);
+        return ResponseEntity.ok(ApiResponse.success(profile));
     }
 
     @RequestMapping(value = "/me", method = {RequestMethod.PATCH, RequestMethod.PUT, RequestMethod.POST})
-    public ResponseEntity<ApiResponse<Map<String, Object>>> updateMyProfile(
-            @RequestBody Map<String, Object> updates,
+    public ResponseEntity<ApiResponse<ProfileDto>> updateMyProfile(
+            @RequestBody ProfileUpdateRequest updates,
             @RequestHeader(value = "X-User-Email", required = false) String userEmail
     ) {
-        ProfileEntity profile = findCurrentProfile(userEmail);
-
-        if (updates.containsKey("name")) profile.setName((String) updates.get("name"));
-        if (updates.containsKey("phone")) profile.setPhone((String) updates.get("phone"));
-        if (updates.containsKey("email")) profile.setEmail((String) updates.get("email"));
-        if (updates.containsKey("experience")) profile.setExperience(String.valueOf(updates.get("experience")));
-        if (updates.containsKey("primaryCraft")) profile.setPrimaryCraft((String) updates.get("primaryCraft"));
-        if (updates.containsKey("subCraft")) profile.setSubCraft((String) updates.get("subCraft"));
-        if (updates.containsKey("dateOfBirth")) profile.setDateOfBirth((String) updates.get("dateOfBirth"));
-        if (updates.containsKey("height")) {
-            profile.setHeight(updates.get("height") == null ? "" : String.valueOf(updates.get("height")));
-        }
-        if (updates.containsKey("weight")) {
-            profile.setWeight(updates.get("weight") == null ? "" : String.valueOf(updates.get("weight")));
-        }
-        if (updates.containsKey("bodyBuild")) {
-            profile.setBodyBuild(updates.get("bodyBuild") == null ? "" : String.valueOf(updates.get("bodyBuild")));
-        }
-        if (updates.containsKey("gender")) profile.setGender((String) updates.get("gender"));
-        if (updates.containsKey("skinTone")) profile.setSkinTone((String) updates.get("skinTone"));
-        if (updates.containsKey("address")) profile.setAddress((String) updates.get("address"));
-        if (updates.containsKey("otherLanguage")) profile.setOtherLanguage((String) updates.get("otherLanguage"));
-        if (updates.containsKey("profileImageUrl")) profile.setProfileImageUrl((String) updates.get("profileImageUrl"));
-        if (updates.containsKey("coverImageUrl")) profile.setCoverImageUrl((String) updates.get("coverImageUrl"));
-
-        if (updates.containsKey("languages") && updates.get("languages") instanceof List) {
-            profile.setLanguages((List<String>) updates.get("languages"));
-        }
-        if (updates.containsKey("secondaryCrafts") && updates.get("secondaryCrafts") instanceof List) {
-            profile.setSecondaryCrafts((List<String>) updates.get("secondaryCrafts"));
-        }
-        if (updates.containsKey("secondarySubCrafts") && updates.get("secondarySubCrafts") instanceof List) {
-            profile.setSecondarySubCrafts((List<String>) updates.get("secondarySubCrafts"));
-        }
-        if (updates.containsKey("talents") && updates.get("talents") instanceof List) {
-            profile.setTalents((List<String>) updates.get("talents"));
-        }
-        if (updates.containsKey("workTypes") && updates.get("workTypes") instanceof List) {
-            profile.setWorkTypes((List<String>) updates.get("workTypes"));
-        }
-        if (updates.containsKey("videoUrls") && updates.get("videoUrls") instanceof List) {
-            profile.setVideoUrls((List<String>) updates.get("videoUrls"));
-        }
-        if (updates.containsKey("videos") && updates.get("videos") instanceof List) {
-            profile.setVideos((List<Map<String, Object>>) updates.get("videos"));
-        }
-        if (updates.containsKey("experiences") && updates.get("experiences") instanceof List) {
-            profile.setExperiences((List<Map<String, Object>>) updates.get("experiences"));
-        }
-
-        profile.setUpdatedAt(LocalDateTime.now());
-        ProfileEntity saved = profileRepository.save(profile);
-
-        return ResponseEntity.ok(ApiResponse.success(saved.toDto()));
+        ProfileDto profile = profileService.updateMyProfile(updates, userEmail);
+        return ResponseEntity.ok(ApiResponse.success(profile));
     }
 
-    @PostMapping("/reference-check")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> verifyReference(@RequestBody Map<String, String> req) {
-        String referenceId = req.get("referenceId");
-        Map<String, Object> res = new HashMap<>();
-        res.put("referenceId", referenceId != null ? referenceId.trim() : "");
-        res.put("verified", referenceId != null && !referenceId.trim().isBlank());
-        res.put("message", "Reference verified successfully with TrueHunt Talent Network.");
+    @GetMapping("/{userId}")
+    public ResponseEntity<ApiResponse<ProfileDto>> getProfileById(@PathVariable String userId) {
+        ProfileDto profile = profileService.getProfileById(userId);
+        return ResponseEntity.ok(ApiResponse.success(profile));
+    }
+
+    // Experience endpoints
+    @PostMapping("/experience")
+    public ResponseEntity<ApiResponse<ExperienceDto>> addExperience(
+            @RequestBody ExperienceDto exp,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail
+    ) {
+        ExperienceDto created = profileService.addExperience(exp, userEmail);
+        return ResponseEntity.ok(ApiResponse.success(created));
+    }
+
+    @PutMapping("/experience/{id}")
+    public ResponseEntity<ApiResponse<ExperienceDto>> updateExperience(
+            @PathVariable String id,
+            @RequestBody ExperienceDto exp,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail
+    ) {
+        ExperienceDto updated = profileService.updateExperience(id, exp, userEmail);
+        return ResponseEntity.ok(ApiResponse.success(updated));
+    }
+
+    @DeleteMapping("/experience/{id}")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> deleteExperience(
+            @PathVariable String id,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail
+    ) {
+        Map<String, Object> res = profileService.deleteExperience(id, userEmail);
         return ResponseEntity.ok(ApiResponse.success(res));
     }
 
-    private ProfileEntity findCurrentProfile(String userEmail) {
-        Optional<UserAccountEntity> account = findAccountByEmail(userEmail);
-        if (account.isPresent()) {
-            UserAccountEntity currentAccount = account.get();
-            String publicUserId = currentAccount.getPublicUserId();
-            if (publicUserId != null && !publicUserId.isBlank()) {
-                ProfileEntity profile = profileRepository.findByUserId(publicUserId)
-                        .or(() -> profileRepository.findByEmail(currentAccount.getEmail()))
-                        .orElseGet(ProfileEntity::new);
-                profile.setUserId(publicUserId);
-                if (profile.getName() == null || profile.getName().isBlank()) {
-                    profile.setName(currentAccount.getName());
-                }
-                if (profile.getEmail() == null || profile.getEmail().isBlank()) {
-                    profile.setEmail(currentAccount.getEmail());
-                }
-                return profileRepository.save(profile);
-            }
-        }
-
-        return profileRepository.findByUserId("me").orElseGet(() -> {
-            ProfileEntity profile = new ProfileEntity();
-            profile.setUserId("me");
-            return profileRepository.save(profile);
-        });
+    // Education endpoints
+    @PostMapping("/education")
+    public ResponseEntity<ApiResponse<EducationDto>> addEducation(
+            @RequestBody EducationDto edu,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail
+    ) {
+        EducationDto created = profileService.addEducation(edu, userEmail);
+        return ResponseEntity.ok(ApiResponse.success(created));
     }
 
-    private Optional<UserAccountEntity> findAccountByEmail(String email) {
-        return email == null || email.isBlank()
-                ? Optional.empty()
-                : userAccountRepository.findByEmail(email.trim().toLowerCase(Locale.ROOT));
+    @PutMapping("/education/{id}")
+    public ResponseEntity<ApiResponse<EducationDto>> updateEducation(
+            @PathVariable String id,
+            @RequestBody EducationDto edu,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail
+    ) {
+        EducationDto updated = profileService.updateEducation(id, edu, userEmail);
+        return ResponseEntity.ok(ApiResponse.success(updated));
     }
 
-    private Optional<UserAccountEntity> findAccountByPublicUserId(String publicUserId) {
-        return publicUserId == null || publicUserId.isBlank()
-                ? Optional.empty()
-                : userAccountRepository.findByPublicUserId(publicUserId);
+    @DeleteMapping("/education/{id}")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> deleteEducation(
+            @PathVariable String id,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail
+    ) {
+        Map<String, Object> res = profileService.deleteEducation(id, userEmail);
+        return ResponseEntity.ok(ApiResponse.success(res));
+    }
+
+    // Project endpoints
+    @PostMapping("/project")
+    public ResponseEntity<ApiResponse<ProjectDto>> addProject(
+            @RequestBody ProjectDto project,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail
+    ) {
+        ProjectDto created = profileService.addProject(project, userEmail);
+        return ResponseEntity.ok(ApiResponse.success(created));
+    }
+
+    @PutMapping("/project/{id}")
+    public ResponseEntity<ApiResponse<ProjectDto>> updateProject(
+            @PathVariable String id,
+            @RequestBody ProjectDto project,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail
+    ) {
+        ProjectDto updated = profileService.updateProject(id, project, userEmail);
+        return ResponseEntity.ok(ApiResponse.success(updated));
+    }
+
+    @DeleteMapping("/project/{id}")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> deleteProject(
+            @PathVariable String id,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail
+    ) {
+        Map<String, Object> res = profileService.deleteProject(id, userEmail);
+        return ResponseEntity.ok(ApiResponse.success(res));
+    }
+
+    // Skills endpoints
+    @PostMapping("/skills")
+    public ResponseEntity<ApiResponse<ProfileDto>> addSkill(
+            @RequestBody SkillRequest req,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail
+    ) {
+        ProfileDto updated = profileService.addSkill(req.getSkill(), userEmail);
+        return ResponseEntity.ok(ApiResponse.success(updated));
+    }
+
+    @DeleteMapping("/skills/{skill}")
+    public ResponseEntity<ApiResponse<ProfileDto>> deleteSkill(
+            @PathVariable String skill,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail
+    ) {
+        ProfileDto updated = profileService.deleteSkill(skill, userEmail);
+        return ResponseEntity.ok(ApiResponse.success(updated));
+    }
+
+    // Profile Posts & Suggestions
+    @GetMapping("/{id}/posts")
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getProfilePosts(@PathVariable String id) {
+        List<Map<String, Object>> posts = profileService.getProfilePosts(id);
+        return ResponseEntity.ok(ApiResponse.success(posts));
+    }
+
+    @PostMapping("/posts")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> createProfilePost(
+            @RequestBody CreatePostRequest postReq,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail
+    ) {
+        Map<String, Object> post = postService.createPost(postReq, userEmail);
+        return ResponseEntity.ok(ApiResponse.success(post));
+    }
+
+    @GetMapping("/suggestions")
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getSuggestions(
+            @RequestParam(required = false, defaultValue = "") String currentId
+    ) {
+        List<Map<String, Object>> suggestions = profileService.getSuggestions(currentId);
+        return ResponseEntity.ok(ApiResponse.success(suggestions));
+    }
+
+    @PostMapping("/reference-check")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> verifyReference(@RequestBody ReferenceCheckRequest req) {
+        Map<String, Object> res = profileService.verifyReference(req.getReferenceId());
+        return ResponseEntity.ok(ApiResponse.success(res));
     }
 }

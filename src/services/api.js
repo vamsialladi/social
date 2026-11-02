@@ -148,17 +148,33 @@ export const api = {
       return res.data || fallback;
     },
 
-    search: async (term, craft = '', location = '') => {
+    search: async (term, craft = '', location = '', subCraft = '') => {
+      const qParams = new URLSearchParams();
+      if (term) qParams.set('q', term);
+      if (craft && craft !== 'all') {
+        qParams.set('craft', craft);
+        qParams.set('category', craft);
+      }
+      if (location && location !== 'all') qParams.set('location', location);
+      if (subCraft && subCraft !== 'all') {
+        qParams.set('subCraft', subCraft);
+      }
       const res = await fetchWithFallback(
-        `/talents/search?q=${encodeURIComponent(term)}&category=${encodeURIComponent(craft)}&location=${encodeURIComponent(location)}`,
+        `/talents/search?${qParams.toString()}`,
         { method: 'GET' },
         FEATURED_TALENTS.filter(t => {
-          const matchTerm = !term || t.name.toLowerCase().includes(term.toLowerCase()) ||
-            t.role.toLowerCase().includes(term.toLowerCase()) ||
-            t.skills.some(s => s.toLowerCase().includes(term.toLowerCase()));
-          const matchCraft = !craft || craft === 'all' || t.category.toLowerCase().includes(craft.toLowerCase());
-          const matchLoc = !location || t.location.toLowerCase().includes(location.toLowerCase());
-          return matchTerm && matchCraft && matchLoc;
+          const matchTerm = !term || t.name?.toLowerCase().includes(term.toLowerCase()) ||
+            t.role?.toLowerCase().includes(term.toLowerCase()) ||
+            t.subCraft?.toLowerCase().includes(term.toLowerCase()) ||
+            (Array.isArray(t.skills) && t.skills.some(s => s.toLowerCase().includes(term.toLowerCase())));
+          const matchCraft = !craft || craft === 'all' || 
+            t.primaryCraft?.toLowerCase().includes(craft.toLowerCase()) || 
+            t.category?.toLowerCase().includes(craft.toLowerCase());
+          const matchSubCraft = !subCraft || subCraft === 'all' ||
+            t.subCraft?.toLowerCase().includes(subCraft.toLowerCase()) ||
+            t.role?.toLowerCase().includes(subCraft.toLowerCase());
+          const matchLoc = !location || t.location?.toLowerCase().includes(location.toLowerCase());
+          return matchTerm && matchCraft && matchSubCraft && matchLoc;
         })
       );
       return res.data;

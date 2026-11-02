@@ -10,7 +10,7 @@ import Settings from './Settings'
 import { useAuth } from '../../context/AuthContext'
 import api from '../../api'
 import { api as directoryApi } from '../../services/api'
-import { FILM_CRAFTS } from '../../services/mockData'
+import { FILM_CRAFTS, SUB_CRAFTS_BY_PRIMARY_CRAFT } from '../../services/mockData'
 
 const navigationHashes = {
   home: 'home',
@@ -122,6 +122,7 @@ function Navigation({
   const searchQueryInputRef = useRef(null)
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [talentCategoryDraft, setTalentCategoryDraft] = useState('All')
+  const [subCraftDraft, setSubCraftDraft] = useState('All')
   const [cinemaTypeDraft, setCinemaTypeDraft] = useState([])
   const [genderDraft, setGenderDraft] = useState([])
   const [skinToneDraft, setSkinToneDraft] = useState([])
@@ -139,6 +140,126 @@ function Navigation({
   const [referralSearchMessage, setReferralSearchMessage] = useState('')
   const [isReferralSearching, setIsReferralSearching] = useState(false)
 
+  const subCraftOptions = useMemo(() => {
+    if (!talentCategoryDraft || talentCategoryDraft === 'All') {
+      return []
+    }
+    const catLower = talentCategoryDraft.toLowerCase()
+    const craftKey = Object.keys(SUB_CRAFTS_BY_PRIMARY_CRAFT).find((key) => {
+      const kLower = key.toLowerCase()
+      if (kLower === catLower) return true
+      if ((catLower.includes('act') || catLower.includes('cast')) && (kLower.includes('act') || kLower.includes('cast'))) return true
+      if (catLower.includes('direct') && kLower.includes('direct')) return true
+      if (catLower.includes('cinemat') && kLower.includes('cinemat')) return true
+      if (catLower.includes('edit') && kLower.includes('edit')) return true
+      if (catLower.includes('sound') && kLower.includes('sound')) return true
+      return false
+    })
+    if (craftKey && SUB_CRAFTS_BY_PRIMARY_CRAFT[craftKey]) {
+      return SUB_CRAFTS_BY_PRIMARY_CRAFT[craftKey]
+    }
+    if (catLower.includes('act') || catLower.includes('cast')) {
+      return SUB_CRAFTS_BY_PRIMARY_CRAFT['Cast (Actors)'] || []
+    }
+    return []
+  }, [talentCategoryDraft])
+
+  function matchesCraft(talent, craftQuery) {
+    if (!craftQuery || craftQuery === 'All') return true
+    const q = craftQuery.toLowerCase().replace(/[^a-z0-9]/g, '')
+    const crafts = [
+      talent.category,
+      talent.primaryCraft,
+      talent.craft,
+      talent.role,
+      talent.headline
+    ].filter(Boolean).map((c) => c.toLowerCase().replace(/[^a-z0-9]/g, ''))
+
+    if (crafts.some((c) => c === q || c.includes(q) || q.includes(c))) return true
+
+    // Actor / Cast / Acting equivalence
+    const isActorQuery = q.includes('act') || q.includes('cast')
+    if (isActorQuery) {
+      return crafts.some((c) => c.includes('act') || c.includes('cast'))
+    }
+
+    // Cinematography / DOP / Camera equivalence
+    const isDopQuery = q.includes('cinemat') || q.includes('dop') || q.includes('camera')
+    if (isDopQuery) {
+      return crafts.some((c) => c.includes('cinemat') || c.includes('dop') || c.includes('camera'))
+    }
+
+    // Direction equivalence
+    const isDirQuery = q.includes('direct')
+    if (isDirQuery) {
+      return crafts.some((c) => c.includes('direct'))
+    }
+
+    // Editing equivalence
+    const isEditQuery = q.includes('edit')
+    if (isEditQuery) {
+      return crafts.some((c) => c.includes('edit'))
+    }
+
+    return false
+  }
+
+  function matchesSubCraft(talent, subCraftQuery) {
+    if (!subCraftQuery || subCraftQuery === 'All') return true
+    const q = subCraftQuery.toLowerCase().replace(/[^a-z0-9]/g, '')
+    const subCrafts = [
+      talent.subCraft,
+      talent.subcraft,
+      talent.role,
+      talent.headline,
+      ...(talent.secondarySubCrafts || []),
+      ...(talent.skills || []),
+      ...(talent.experiences || []).map((e) => `${e?.title || ''} ${e?.workedAs || ''}`),
+    ].filter(Boolean).map((s) => s.toLowerCase().replace(/[^a-z0-9]/g, ''))
+
+    return subCrafts.some((s) => s === q || s.includes(q) || q.includes(s))
+  }
+
+  function matchesLocation(talent, locationQuery) {
+    if (!locationQuery || !locationQuery.trim()) return true
+    const q = locationQuery.toLowerCase().trim()
+    const locations = [
+      talent.location,
+      talent.address,
+      talent.city,
+      talent.headquarters,
+      ...(talent.experiences || []).map((e) => e?.location),
+    ].filter(Boolean).map((l) => l.toLowerCase())
+
+    return locations.some((l) => l.includes(q))
+  }
+
+  function matchesKeyword(talent, keywordQuery) {
+    if (!keywordQuery || !keywordQuery.trim()) return true
+    const q = keywordQuery.toLowerCase().trim()
+    const searchable = [
+      talent.name,
+      talent.subCraft,
+      talent.subcraft,
+      talent.primaryCraft,
+      talent.craft,
+      talent.role,
+      talent.headline,
+      talent.category,
+      talent.bio,
+      talent.highlights,
+      talent.company,
+      talent.industry,
+      ...(talent.skills || []),
+      ...(talent.secondaryCrafts || []),
+      ...(talent.secondarySubCrafts || []),
+      ...(talent.credits || []).map((c) => `${c.title || ''} ${c.role || ''}`),
+      ...(talent.experiences || []).map((e) => `${e.title || ''} ${e.company || ''} ${e.workedAs || ''} ${e.description || ''}`),
+    ].filter(Boolean).join(' ').toLowerCase()
+
+    return searchable.includes(q)
+  }
+
   const searchResults = useMemo(() => {
     if (!hasSearched) return []
 
@@ -148,21 +269,27 @@ function Navigation({
     const selectedExperienceRanges = experienceFilters.filter((filter) => experienceDraft.includes(filter.value))
 
     return talentDirectory.filter((talent) => {
+      const craftMatch = matchesCraft(talent, talentCategoryDraft)
+      const subCraftMatch = matchesSubCraft(talent, subCraftDraft)
+      const locationMatch = matchesLocation(talent, location)
+      const keywordMatch = matchesKeyword(talent, keyword)
+
       const searchableText = [
         talent.name,
         talent.role,
         talent.headline,
         talent.category,
+        talent.primaryCraft,
+        talent.subCraft,
+        talent.subcraft,
         talent.company,
         talent.industry,
         talent.location,
+        talent.address,
         talent.bio,
         ...(talent.skills || []),
       ].filter(Boolean).join(' ').toLowerCase()
-      const matchesKeyword = !keyword || searchableText.includes(keyword)
-      const matchesLocation = !location || (talent.location || '').toLowerCase().includes(location)
-      const matchesCategory = talentCategoryDraft === 'All'
-        || (talent.category || '').toLowerCase() === talentCategoryDraft.toLowerCase()
+
       const matchesCinemaType = selectedCinemaTypes.length === 0
         || selectedCinemaTypes.some((filter) => filter.terms.some((term) => searchableText.includes(term)))
       const matchesGender = genderDraft.length === 0
@@ -191,9 +318,10 @@ function Navigation({
         || (Number.isFinite(experienceYears)
           && selectedExperienceRanges.some((range) => experienceYears >= range.min && experienceYears <= range.max))
 
-      return matchesKeyword
-        && matchesLocation
-        && matchesCategory
+      return craftMatch
+        && subCraftMatch
+        && locationMatch
+        && keywordMatch
         && matchesCinemaType
         && matchesGender
         && matchesSkinTone
@@ -211,6 +339,7 @@ function Navigation({
     heightRangeDraft,
     searchLocationDraft,
     searchQueryDraft,
+    subCraftDraft,
     skinToneDraft,
     talentCategoryDraft,
     talentDirectory,
@@ -238,40 +367,50 @@ function Navigation({
     }
   }, [isSearchOpen])
 
-  async function handleSearchSubmit(event) {
-    event.preventDefault()
-    setIsSearching(true)
-    setSearchError('')
-
+  async function loadTalentDirectory() {
     try {
       const [talents, profiles] = await Promise.all([
         directoryApi.talents.getAll(),
         directoryApi.profile.getDirectory(),
       ])
-      if (!Array.isArray(talents) || !Array.isArray(profiles)) {
-        throw new Error('Talent search returned an invalid response.')
+      const directory = [...(Array.isArray(talents) ? talents : [])]
+      if (Array.isArray(profiles)) {
+        profiles.forEach((profile) => {
+          const existingIndex = directory.findIndex((talent) => (
+            talent.id === profile.id
+            || (talent.name && profile.name && talent.name.trim().toLowerCase() === profile.name.trim().toLowerCase())
+          ))
+          if (existingIndex === -1) {
+            directory.push(profile)
+          } else {
+            directory[existingIndex] = { ...directory[existingIndex], ...profile }
+          }
+        })
       }
-
-      const directory = [...talents]
-      profiles.forEach((profile) => {
-        const existingIndex = directory.findIndex((talent) => (
-          talent.id === profile.id
-          || talent.name?.trim().toLowerCase() === profile.name?.trim().toLowerCase()
-        ))
-
-        if (existingIndex === -1) {
-          directory.push(profile)
-        } else {
-          directory[existingIndex] = { ...directory[existingIndex], ...profile }
-        }
-      })
-
       setTalentDirectory(directory)
+      return directory
+    } catch (err) {
+      console.warn('Failed to fetch talent directory:', err)
+      return []
+    }
+  }
+
+  async function handleSearchSubmit(event) {
+    if (event) event.preventDefault()
+    setIsSearching(true)
+    setSearchError('')
+
+    try {
+      let directory = talentDirectory
+      if (!directory || directory.length === 0) {
+        directory = await loadTalentDirectory()
+      } else {
+        loadTalentDirectory().catch(() => {})
+      }
       setHasSearched(true)
     } catch (err) {
       console.error('Failed to search talent profiles:', err)
       setSearchError('Could not search talent profiles. Please try again.')
-      setTalentDirectory([])
       setHasSearched(false)
     } finally {
       setIsSearching(false)
@@ -415,6 +554,7 @@ function Navigation({
                         type="button"
                         onClick={() => {
                           setTalentCategoryDraft('All')
+                          setSubCraftDraft('All')
                           setCinemaTypeDraft([])
                           setGenderDraft([])
                           setSkinToneDraft([])
@@ -593,21 +733,54 @@ function Navigation({
                           id="social-search-category"
                           aria-label="Film craft"
                           value={talentCategoryDraft}
-                          onChange={(event) => setTalentCategoryDraft(event.target.value)}
+                          onChange={(event) => {
+                            setTalentCategoryDraft(event.target.value)
+                            setSubCraftDraft('All')
+                          }}
                         >
                           <option value="All">All crafts</option>
-                          {FILM_CRAFTS.map((craft) => (
+                          <option value="Cast (Actors)">Cast (Actors)</option>
+                          {FILM_CRAFTS.filter((c) => c.title !== 'Cast (Actors)').map((craft) => (
                             <option key={craft.id} value={craft.title}>{craft.title}</option>
                           ))}
                         </select>
                       </div>
+                      {subCraftOptions.length > 0 && (
+                        <div className="social-talent-search-field">
+                          <label htmlFor="social-search-subcraft">Sub-craft</label>
+                          <select
+                            id="social-search-subcraft"
+                            aria-label="Sub craft"
+                            value={subCraftDraft}
+                            onChange={(event) => setSubCraftDraft(event.target.value)}
+                          >
+                            <option value="All">All sub-crafts</option>
+                            {subCraftOptions.map((sub) => (
+                              <option key={sub} value={sub}>{sub}</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
                       <div className="social-talent-search-field">
-                        <label htmlFor="social-search-keyword">Role, name, or skill</label>
-                        <input ref={searchQueryInputRef} id="social-search-keyword" type="search" placeholder="e.g. cinematographer, editor" value={searchQueryDraft} onChange={(event) => setSearchQueryDraft(event.target.value)} />
+                        <label htmlFor="social-search-keyword">Role, sub-craft, or name</label>
+                        <input
+                          ref={searchQueryInputRef}
+                          id="social-search-keyword"
+                          type="search"
+                          placeholder={talentCategoryDraft.toLowerCase().includes('act') || talentCategoryDraft.toLowerCase().includes('cast') ? 'e.g. Lead Actor, Villain, name' : 'e.g. sub-craft, name, skill'}
+                          value={searchQueryDraft}
+                          onChange={(event) => setSearchQueryDraft(event.target.value)}
+                        />
                       </div>
                       <div className="social-talent-search-field">
                         <label htmlFor="social-search-location">Location</label>
-                        <input id="social-search-location" type="text" placeholder="City or region" value={searchLocationDraft} onChange={(event) => setSearchLocationDraft(event.target.value)} />
+                        <input
+                          id="social-search-location"
+                          type="text"
+                          placeholder="e.g. Hyderabad, Mumbai"
+                          value={searchLocationDraft}
+                          onChange={(event) => setSearchLocationDraft(event.target.value)}
+                        />
                       </div>
                       <button type="submit" className="social-talent-search-submit" disabled={isSearching}>
                         <NavigationIcon name="search" />
@@ -640,11 +813,16 @@ function Navigation({
                               <div className="social-talent-result-content">
                                 <div className="social-talent-result-name-row">
                                   <h4>{talent.name || 'Creative professional'}</h4>
+                                  {(talent.subCraft || talent.subcraft) && (
+                                    <span className="social-talent-subcraft-badge">
+                                      {talent.subCraft || talent.subcraft}
+                                    </span>
+                                  )}
                                   {talent.verified && <span className="social-talent-verified">Verified</span>}
                                 </div>
                                 <p className="social-talent-result-role">{talent.role || talent.headline || talent.category}</p>
                                 <p className="social-talent-result-meta">
-                                  {[talent.category, talent.location, talent.experience].filter(Boolean).join(' · ')}
+                                  {[talent.category || talent.primaryCraft, talent.subCraft || talent.subcraft, talent.location || talent.address, talent.experience].filter(Boolean).join(' · ')}
                                 </p>
                                 {talent.bio && <p className="social-talent-result-bio">{talent.bio}</p>}
                                 {talent.skills?.length > 0 && (

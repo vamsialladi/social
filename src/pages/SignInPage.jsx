@@ -38,9 +38,11 @@ export default function SignInPage() {
 
   const fillDemoAccount = (role) => {
     if (role === 'talent') {
+      setSelectedRole('TALENT');
       setEmail('aarav.varma@truehunt.in');
       setPassword('TrueHunt2026!');
     } else {
+      setSelectedRole('STUDIO');
       setEmail('mythri.studios@truehunt.in');
       setPassword('TrueHunt2026!');
     }
@@ -143,9 +145,10 @@ export default function SignInPage() {
 
           <button
             type="submit"
+            id="sign-in-submit-btn"
             disabled={loading}
             className="btn btn-maroon btn-lg"
-            style={{ width: '100%', marginTop: '10px' }}
+            style={{ width: '100%', marginTop: '10px', fontSize: '16px', fontWeight: 700 }}
           >
             {loading ? 'Authenticating...' : 'Sign In'}
           </button>

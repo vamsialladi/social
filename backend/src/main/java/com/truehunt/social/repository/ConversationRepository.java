@@ -10,4 +10,5 @@ import java.util.List;
 public interface ConversationRepository extends JpaRepository<ConversationEntity, Long> {
     List<ConversationEntity> findAllByOrderByUpdatedAtDesc();
     List<ConversationEntity> findAllByMailboxOrderByUpdatedAtDesc(String mailbox);
+    List<ConversationEntity> findAllByMailboxIgnoreCaseOrderByUpdatedAtDesc(String mailbox);
 }

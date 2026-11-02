@@ -1,68 +1,52 @@
 package com.truehunt.social.controller;
 
 import com.truehunt.social.dto.ApiResponse;
+import com.truehunt.social.dto.PasswordChangeRequest;
+import com.truehunt.social.service.SettingsService;
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.*;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/settings")
 public class SettingsController {
 
-    private Map<String, Boolean> notificationPrefs = new HashMap<>(Map.of(
-            "connections", true,
-            "network-catch-up", true,
-            "posting", true,
-            "messaging", true,
-            "news", true,
-            "profile", true,
-            "verifications", true
-    ));
+    private final SettingsService settingsService;
 
-    private String currentTheme = "light";
+    public SettingsController(SettingsService settingsService) {
+        this.settingsService = settingsService;
+    }
 
     @GetMapping
     public ResponseEntity<ApiResponse<Map<String, Object>>> getSettings() {
-        Map<String, Object> settings = new HashMap<>();
-        settings.put("theme", currentTheme);
-        settings.put("notifications", notificationPrefs);
-        return ResponseEntity.ok(ApiResponse.success(settings));
+        return ResponseEntity.ok(ApiResponse.success(settingsService.getSettings()));
     }
 
     @PatchMapping("/theme")
     public ResponseEntity<ApiResponse<Map<String, Object>>> updateTheme(@RequestBody Map<String, String> req) {
         String theme = req.get("theme");
-        if (theme != null) {
-            currentTheme = theme;
-        }
-        return getSettings();
+        return ResponseEntity.ok(ApiResponse.success(settingsService.updateTheme(theme)));
     }
 
     @PatchMapping("/notifications")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> updateNotificationPreferences(@RequestBody Map<String, Boolean> req) {
-        notificationPrefs.putAll(req);
-        return getSettings();
+    public ResponseEntity<ApiResponse<Map<String, Object>>> updateNotificationPreferences(@RequestBody Map<String, Object> prefs) {
+        return ResponseEntity.ok(ApiResponse.success(settingsService.updateNotificationPreferences(prefs)));
     }
 
     @PostMapping("/change-password")
-    public ResponseEntity<ApiResponse<String>> changePassword(@RequestBody Map<String, String> req) {
-        String currentPassword = req.get("current-password");
-        String newPassword = req.get("new-password");
-        String confirmPassword = req.get("confirm-password");
-
-        if (newPassword == null || !newPassword.equals(confirmPassword)) {
-            return ResponseEntity.badRequest().body(ApiResponse.error("MISMATCH", "New passwords do not match"));
-        }
-
-        return ResponseEntity.ok(ApiResponse.success("Password updated successfully"));
+    public ResponseEntity<ApiResponse<Map<String, Object>>> changePassword(
+            @Valid @RequestBody PasswordChangeRequest req,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(settingsService.changePassword(req, userEmail)));
     }
 
     @PostMapping("/delete-account")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> deleteAccount() {
-        Map<String, Object> res = new HashMap<>();
-        res.put("status", "SCHEDULED");
-        res.put("message", "Your account closure request has been submitted to TrueHunt Administration.");
-        return ResponseEntity.ok(ApiResponse.success(res));
+    public ResponseEntity<ApiResponse<Map<String, Object>>> deleteAccount(
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(settingsService.deleteAccount(userEmail)));
     }
 }

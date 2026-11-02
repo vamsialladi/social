@@ -38,3 +38,6 @@ target/
 backend/data/
 backend/uploads/
 uploads/
+
+data/
+scratch/

@@ -105,6 +105,12 @@ export const SUB_CRAFTS_BY_PRIMARY_CRAFT = {
     'Drone Camera Operator', 'Underwater Camera Operator', 'Remote Head Operator', 'Motion Control Camera Operator',
     'Video Assist Operator', 'Digital Imaging Technician (DIT)', 'Camera Loader', 'Specialty Camera Operator',
   ],
+  'Acting': [
+    'Lead Actor', 'Lead Actress', 'Supporting Actor', 'Supporting Actress', 'Character Actor', 'Co-Lead Actor',
+    'Antagonist / Villain', 'Comedian', 'Child Actor', 'Junior Artist / Background Actor', 'Featured Extra',
+    'Dancer / Performer', 'Voice Actor', 'Theatre Actor', 'Stunt Performer', 'Stand-In', 'Body Double',
+    'Photo Double', 'Cameo Performer', 'Model / Actor',
+  ],
   'Cast (Actors)': [
     'Lead Actor', 'Lead Actress', 'Supporting Actor', 'Supporting Actress', 'Character Actor', 'Co-Lead Actor',
     'Antagonist / Villain', 'Comedian', 'Child Actor', 'Junior Artist / Background Actor', 'Featured Extra',
@@ -241,6 +247,8 @@ export const FEATURED_TALENTS = [
     name: 'Aarav Varma',
     role: 'Cinematographer (DoP)',
     category: 'Cinematography',
+    primaryCraft: 'Cinematography',
+    subCraft: 'Director of Photography (DoP)',
     location: 'Mumbai, India',
     experience: '8 Years',
     avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
@@ -372,6 +380,8 @@ export const FEATURED_TALENTS = [
     name: 'Meera Nambiar',
     role: 'Lead Actress & Theatre Artist',
     category: 'Acting',
+    primaryCraft: 'Cast (Actors)',
+    subCraft: 'Lead Actress',
     location: 'Kochi & Bengaluru, India',
     experience: '5 Years',
     avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=400&q=80',
@@ -461,6 +471,82 @@ export const FEATURED_TALENTS = [
     availability: 'Available Immediately',
     verified: false,
     connectionsCount: 310
+  },
+  {
+    id: 't-7',
+    name: 'Arjun Varma',
+    role: 'Lead Actor',
+    category: 'Acting',
+    primaryCraft: 'Cast (Actors)',
+    subCraft: 'Lead Actor',
+    location: 'Hyderabad, Telangana, India',
+    experience: '7 Years',
+    avatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=400&q=80',
+    coverImage: 'https://images.unsplash.com/photo-1478760329108-5c3ed9d495a0?auto=format&fit=crop&w=1200&q=80',
+    bio: 'Dynamic lead actor specializing in intense romantic dramas, action thrillers, and commercial feature films in Telugu and Pan-India cinema.',
+    skills: ['Lead Actor', 'Method Acting', 'Action Stunts', 'Telugu & Hindi Diction', 'Horse Riding'],
+    credits: [
+      { title: 'The Deccan Roar', role: 'Lead Protagonist (Vikram)', year: '2025', format: 'Pan-India Theatrical Feature' }
+    ],
+    availability: 'Booking for 2026/2027 Schedules',
+    verified: true,
+    connectionsCount: 780,
+    followersCount: 8900
+  },
+  {
+    id: 't-8',
+    name: 'Rohan Vats',
+    role: 'Character Actor & Antagonist',
+    category: 'Acting',
+    primaryCraft: 'Cast (Actors)',
+    subCraft: 'Character Actor',
+    location: 'Mumbai, Maharashtra, India',
+    experience: '10 Years',
+    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=400&q=80',
+    coverImage: 'https://images.unsplash.com/photo-1460723237483-7a6dc9d0b212?auto=format&fit=crop&w=1200&q=80',
+    bio: 'Versatile character actor and antagonist with extensive theatre and feature film background across Hindi and regional cinema.',
+    skills: ['Character Actor', 'Antagonist / Villain', 'Improvisation', 'Voice Modulation', 'Fight Choreography'],
+    credits: [
+      { title: 'Underworld Odyssey', role: 'Primary Antagonist', year: '2025', format: 'Theatrical Release' }
+    ],
+    availability: 'Available Immediately',
+    verified: true,
+    connectionsCount: 590,
+    followersCount: 4300
+  },
+  {
+    id: 't-9',
+    name: 'Pooja Krishnan',
+    role: 'Supporting Actress & Dubbing Artist',
+    category: 'Acting',
+    primaryCraft: 'Cast (Actors)',
+    subCraft: 'Supporting Actress',
+    location: 'Chennai, Tamil Nadu, India',
+    experience: '4 Years',
+    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
+    bio: 'Supporting actress and voice artist fluent in Tamil, Telugu, and Malayalam. Experienced in family dramas and streaming series.',
+    skills: ['Supporting Actress', 'Voice Actor', 'Dubbing', 'Expressive Delivery', 'Classical Dance'],
+    availability: 'Open for Auditions',
+    verified: true,
+    connectionsCount: 340,
+    followersCount: 2100
+  },
+  {
+    id: 't-10',
+    name: 'Deva Raj',
+    role: 'Comedian & Character Artist',
+    category: 'Acting',
+    primaryCraft: 'Cast (Actors)',
+    subCraft: 'Comedian',
+    location: 'Hyderabad, Telangana, India',
+    experience: '8 Years',
+    avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=400&q=80',
+    bio: 'Comic performer and situational humor specialist with over 20 feature film credits in Telugu cinema.',
+    skills: ['Comedian', 'Comic Timing', 'Dialect Mimicry', 'Character Artist'],
+    availability: 'Available from Nov 2026',
+    verified: true,
+    connectionsCount: 480,
+    followersCount: 3500
   }
 ];
 

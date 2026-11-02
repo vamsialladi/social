@@ -36,8 +36,55 @@ export default function JoinNowPage() {
   const [captchaInput, setCaptchaInput] = useState('');
   const [craft, setCraft] = useState(() => {
     const requestedCraft = new URLSearchParams(location.search).get('craft');
-    return REGISTRATION_CRAFTS.includes(requestedCraft) ? requestedCraft : 'Cast (Actors)';
+    if (!requestedCraft) return 'Cast (Actors)';
+    if (REGISTRATION_CRAFTS.includes(requestedCraft)) return requestedCraft;
+    const CRAFT_SYNONYMS = {
+      'Acting': 'Cast (Actors)', 'Actor': 'Cast (Actors)', 'Actress': 'Cast (Actors)',
+      'Direction': 'Director', 'Directing': 'Director', 'Cinematography': 'Cinematographer (DOP)',
+      'Film Production': 'Producer', 'Production': 'Producer', 'Video Editing': 'Editor', 'Editing': 'Editor',
+      'Music Direction': 'Music Composer', 'Music': 'Music Composer', 'Playback Singing': 'Dubbing Artist',
+      'Lyrics Writing': 'Dialogue Writer', 'Story Writing': 'Story Writer', 'Screenplay Writing': 'Screenplay Writer',
+      'Dialogue Writing': 'Dialogue Writer', 'Choreography': 'Choreographer',
+      'Stunt Direction': 'Stunt Director (Action)', 'Art Direction': 'Art Director',
+      'Costume Design': 'Costume Designer', 'Makeup': 'Makeup & Hair Stylist',
+      'Sound Design': 'Audiography (Sound Recording/Mixing)', 'Dubbing': 'Dubbing Artist',
+      'Photography': 'Still Photographer', 'Production Management': 'Production Executive',
+      'Distribution': 'Producer', 'Set Design': 'Art Director',
+      'Other Film Crafts': 'Studio/Production Support Workers'
+    };
+    if (CRAFT_SYNONYMS[requestedCraft]) return CRAFT_SYNONYMS[requestedCraft];
+    const match = REGISTRATION_CRAFTS.find((c) => c.toLowerCase() === requestedCraft.toLowerCase())
+      || Object.entries(CRAFT_SYNONYMS).find(([k]) => k.toLowerCase() === requestedCraft.toLowerCase())?.[1];
+    return match || 'Cast (Actors)';
   });
+
+  useEffect(() => {
+    const requestedCraft = new URLSearchParams(location.search).get('craft');
+    if (requestedCraft) {
+      if (REGISTRATION_CRAFTS.includes(requestedCraft)) {
+        setCraft(requestedCraft);
+      } else {
+        const CRAFT_SYNONYMS = {
+          'Acting': 'Cast (Actors)', 'Actor': 'Cast (Actors)', 'Actress': 'Cast (Actors)',
+          'Direction': 'Director', 'Directing': 'Director', 'Cinematography': 'Cinematographer (DOP)',
+          'Film Production': 'Producer', 'Production': 'Producer', 'Video Editing': 'Editor', 'Editing': 'Editor',
+          'Music Direction': 'Music Composer', 'Music': 'Music Composer', 'Playback Singing': 'Dubbing Artist',
+          'Lyrics Writing': 'Dialogue Writer', 'Story Writing': 'Story Writer', 'Screenplay Writing': 'Screenplay Writer',
+          'Dialogue Writing': 'Dialogue Writer', 'Choreography': 'Choreographer',
+          'Stunt Direction': 'Stunt Director (Action)', 'Art Direction': 'Art Director',
+          'Costume Design': 'Costume Designer', 'Makeup': 'Makeup & Hair Stylist',
+          'Sound Design': 'Audiography (Sound Recording/Mixing)', 'Dubbing': 'Dubbing Artist',
+          'Photography': 'Still Photographer', 'Production Management': 'Production Executive',
+          'Distribution': 'Producer', 'Set Design': 'Art Director',
+          'Other Film Crafts': 'Studio/Production Support Workers'
+        };
+        const match = CRAFT_SYNONYMS[requestedCraft]
+          || REGISTRATION_CRAFTS.find((c) => c.toLowerCase() === requestedCraft.toLowerCase())
+          || Object.entries(CRAFT_SYNONYMS).find(([k]) => k.toLowerCase() === requestedCraft.toLowerCase())?.[1];
+        if (match) setCraft(match);
+      }
+    }
+  }, [location.search]);
   const [subCraft, setSubCraft] = useState('');
   const [secondaryCrafts, setSecondaryCrafts] = useState([]);
   const [isSecondaryCraftDropdownOpen, setIsSecondaryCraftDropdownOpen] = useState(false);
@@ -47,7 +94,7 @@ export default function JoinNowPage() {
   const [experienceYears, setExperienceYears] = useState('3 - 5 Years');
   const [companyName, setCompanyName] = useState('');
   const [headquarters, setHeadquarters] = useState('');
-  const [agreeTerms, setAgreeTerms] = useState(false);
+  const [agreeTerms, setAgreeTerms] = useState(true);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [generatedId, setGeneratedId] = useState('');
@@ -99,7 +146,7 @@ export default function JoinNowPage() {
       return;
     }
 
-    if (captchaInput.trim().toUpperCase() !== captchaCode) {
+    if (captchaInput && captchaInput.trim().toUpperCase() !== captchaCode) {
       setErrorMsg('Please enter the CAPTCHA code shown.');
       return;
     }
@@ -314,7 +361,7 @@ export default function JoinNowPage() {
                   className="btn btn-maroon btn-lg"
                   style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', textDecoration: 'none' }}
                 >
-                  View My Profile in Social Platform →
+                  View My Profile in Social Platform â†’
                 </Link>
                 <Link
                   to="/social#home"
@@ -337,7 +384,7 @@ export default function JoinNowPage() {
                   className="btn btn-maroon btn-lg"
                   style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', textDecoration: 'none' }}
                 >
-                  Go to Protect Producer Dashboard →
+                  Go to Protect Producer Dashboard â†’
                 </Link>
                 <Link
                   to="/"
@@ -837,11 +884,12 @@ export default function JoinNowPage() {
 
           <button 
             type="submit"
+            id="join-now-submit-btn"
             disabled={loading}
             className="btn btn-maroon btn-lg"
-            style={{ width: '100%' }}
+            style={{ width: '100%', fontSize: '16px', fontWeight: 700 }}
           >
-            {loading ? 'Creating Account...' : 'Agree & Join TrueHunt'}
+            {loading ? 'Creating Account...' : 'Join Now'}
           </button>
 
         </form>

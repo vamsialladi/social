@@ -25,6 +25,7 @@ public class ConversationEntity {
     private String category = "Connections";
     private boolean unread = false;
     private boolean sponsored = false;
+    private boolean starred = false;
     private String subject;
 
     @Lob
@@ -67,6 +68,9 @@ public class ConversationEntity {
 
     public boolean isSponsored() { return sponsored; }
     public void setSponsored(boolean sponsored) { this.sponsored = sponsored; }
+
+    public boolean isStarred() { return starred; }
+    public void setStarred(boolean starred) { this.starred = starred; }
 
     public String getSubject() { return subject; }
     public void setSubject(String subject) { this.subject = subject; }
@@ -129,6 +133,7 @@ public class ConversationEntity {
         dto.put("category", category != null ? category : "Connections");
         dto.put("unread", unread);
         dto.put("sponsored", sponsored);
+        dto.put("starred", starred);
         dto.put("subject", subject != null ? subject : "");
         dto.put("description", description != null ? description : "");
         dto.put("mailbox", mailbox != null ? mailbox : "Focused");

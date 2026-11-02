@@ -132,42 +132,92 @@ export default function Navbar() {
 
         {/* Right: Auth CTA Buttons */}
         <div
-          style={{ display: 'none', alignItems: 'center', gap: '12px', flexShrink: 0 }}
+          style={{ display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}
           className="desktop-auth-actions"
         >
-          <Link
-            to="/sign-in"
-            className="btn btn-sm btn-ghost"
-            style={{
-              fontWeight: 600,
-              color: 'var(--color-navy)',
-              fontSize: '15px',
-              padding: '8px 12px',
-              textDecoration: 'none'
-            }}
-          >
-            Sign In
-          </Link>
-          <Link
-            to="/join-now"
-            className="btn btn-sm btn-maroon"
-            style={{
-              borderRadius: 'var(--radius-full)',
-              padding: '9px 24px',
-              fontWeight: 600,
-              fontSize: '14.5px',
-              backgroundColor: '#801823',
-              color: '#ffffff',
-              boxShadow: '0 2px 8px rgba(128, 24, 35, 0.25)',
-              textDecoration: 'none',
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              letterSpacing: '0.2px'
-            }}
-          >
-            Join Now
-          </Link>
+          {isAuthenticated && user ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <Link
+                to={user.role === 'STUDIO' ? '/protect-producer' : '/social'}
+                className="btn btn-sm btn-outline-navy"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  fontWeight: 600,
+                  fontSize: '14px',
+                  padding: '7px 14px',
+                  textDecoration: 'none'
+                }}
+              >
+                <User size={15} />
+                <span>{user.name || 'Dashboard'}</span>
+              </Link>
+              <button
+                type="button"
+                onClick={logout}
+                className="btn btn-sm btn-ghost"
+                title="Sign Out"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: '7px 10px',
+                  color: 'var(--color-text-muted)',
+                  fontSize: '13px'
+                }}
+              >
+                <LogOut size={15} />
+                <span>Sign Out</span>
+              </button>
+            </div>
+          ) : (
+            <>
+              <Link
+                to="/sign-in"
+                className="btn btn-sm btn-ghost"
+                onClick={() => {
+                  if (location.pathname === '/sign-in') {
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }
+                }}
+                style={{
+                  fontWeight: 600,
+                  color: 'var(--color-navy)',
+                  fontSize: '15px',
+                  padding: '8px 12px',
+                  textDecoration: 'none'
+                }}
+              >
+                Sign In
+              </Link>
+              <Link
+                to="/join-now"
+                className="btn btn-sm btn-maroon"
+                onClick={() => {
+                  if (location.pathname === '/join-now') {
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }
+                }}
+                style={{
+                  borderRadius: 'var(--radius-full)',
+                  padding: '9px 24px',
+                  fontWeight: 600,
+                  fontSize: '14.5px',
+                  backgroundColor: '#801823',
+                  color: '#ffffff',
+                  boxShadow: '0 2px 8px rgba(128, 24, 35, 0.25)',
+                  textDecoration: 'none',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  letterSpacing: '0.2px'
+                }}
+              >
+                Join Now
+              </Link>
+            </>
+          )}
         </div>
 
         {/* Mobile Hamburger Toggle Button */}
@@ -262,19 +312,60 @@ export default function Navbar() {
           <div style={{ height: '1px', backgroundColor: 'var(--color-border)', margin: '12px 0' }} />
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <Link to="/sign-in" className="btn btn-outline-navy" style={{ width: '100%', textAlign: 'center', textDecoration: 'none' }}>
-              Sign In
-            </Link>
-            <Link to="/join-now" className="btn btn-maroon" style={{ width: '100%', textAlign: 'center', textDecoration: 'none', backgroundColor: '#801823', color: '#ffffff' }}>
-              Join Now
-            </Link>
+            {isAuthenticated && user ? (
+              <>
+                <Link
+                  to={user.role === 'STUDIO' ? '/protect-producer' : '/social'}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="btn btn-outline-navy"
+                  style={{ width: '100%', textAlign: 'center', textDecoration: 'none' }}
+                >
+                  My Dashboard ({user.name})
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    logout();
+                  }}
+                  className="btn btn-ghost"
+                  style={{ width: '100%', textAlign: 'center' }}
+                >
+                  Sign Out
+                </button>
+              </>
+            ) : (
+              <>
+                <Link
+                  to="/sign-in"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="btn btn-outline-navy"
+                  style={{ width: '100%', textAlign: 'center', textDecoration: 'none' }}
+                >
+                  Sign In
+                </Link>
+                <Link 
+                  to="/join-now" 
+                  className="btn btn-maroon" 
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    if (location.pathname === '/join-now') {
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }
+                  }}
+                  style={{ width: '100%', textAlign: 'center', textDecoration: 'none', backgroundColor: '#801823', color: '#ffffff' }}
+                >
+                  Join Now
+                </Link>
+              </>
+            )}
           </div>
         </div>
       )}
 
       {/* Embedded CSS for responsive navbar queries */}
       <style>{`
-        @media (min-width: 1140px) {
+        @media (min-width: 992px) {
           .desktop-nav {
             display: flex !important;
           }
@@ -285,10 +376,10 @@ export default function Navbar() {
             display: none !important;
           }
         }
-        @media (min-width: 1140px) and (max-width: 1260px) {
+        @media (min-width: 992px) and (max-width: 1260px) {
           .nav-link-desktop {
-            padding: 7px 8px !important;
-            font-size: 13.5px !important;
+            padding: 7px 6px !important;
+            font-size: 13px !important;
             gap: 4px !important;
           }
           .desktop-nav {

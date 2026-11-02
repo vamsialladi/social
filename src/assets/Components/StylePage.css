@@ -3214,3 +3214,35 @@
   font-size: 18px;
   font-weight: 400;
 }
+
+
+/* Enhanced Sub-craft search & badges */
+.social-talent-search-fields {
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)) auto !important;
+  max-width: 960px !important;
+}
+
+.social-talent-search-field:not(:last-of-type)::after {
+  position: absolute;
+  top: 9px;
+  right: 0;
+  bottom: 9px;
+  width: 1px;
+  background: #e5e3e9;
+  content: '';
+}
+
+.social-talent-subcraft-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: rgba(128, 0, 32, 0.08);
+  color: #800020;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  border: 1px solid rgba(128, 0, 32, 0.2);
+  margin-left: 8px;
+  vertical-align: middle;
+}
