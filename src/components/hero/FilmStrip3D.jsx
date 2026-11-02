@@ -2,21 +2,20 @@ import React, { useMemo } from 'react';
 
 /**
  * ============================================================================
- * FilmStrip3D – 3D Curved Golden Cinematic Film Strip Revolving Around Globe
+ * FilmStrip3D – 3D Curved Golden Cinematic Film Strip with Circular Craft Images
  * ============================================================================
  * Features:
  * - 3D Elliptical geometry revolving around the central Earth globe
  * - Golden metallic ribbon body with continuous film sprocket perforations
+ * - Circular shaped craft images orbiting in 3D perspective space
  * - Distinct Front Arc (in front of globe) & Back Arc (behind globe)
- * - 24 film frame cards with realistic perspective scaling, depth & rotation
- * - Interactive click on any orbiting frame to focus that craft
+ * - Clickable circular frames to navigate directly to any craft
  */
 export default function FilmStrip3D({
   crafts = [],
   currentIndex = 0,
   rotationOffset = 0,
   onSelectCraft,
-  isPaused = false,
   width = 960,
   height = 540
 }) {
@@ -41,10 +40,10 @@ export default function FilmStrip3D({
     );
   };
 
-  // Calculates 3D perspective positions for all 24 frames
+  // Calculates 3D perspective positions for all 24 circular frames
   const framesData = useMemo(() => {
     return crafts.map((craft, i) => {
-      // Angle for frame i with continuous rotation offset
+      // Angle for frame i with user-driven rotation offset
       const t = (i / N) * 2 * Math.PI + rotationOffset;
       const sn = Math.sin(t);
       const cs = Math.cos(t);
@@ -71,7 +70,7 @@ export default function FilmStrip3D({
 
       // Depth perception: sn > 0 is front, sn < 0 is back
       const isFront = sn > -0.05;
-      const depthScale = 0.62 + 0.38 * ((sn + 1) / 2);
+      const depthScale = 0.65 + 0.35 * ((sn + 1) / 2);
       
       // Calculate angular distance to the front center
       const angleDiff = Math.abs(((t - Math.PI / 2) % (2 * Math.PI) + 3 * Math.PI) % (2 * Math.PI) - Math.PI);
@@ -83,8 +82,8 @@ export default function FilmStrip3D({
         index: i,
         x,
         y,
-        rotAngle: rotAngle * 0.45,
-        scale: depthScale * (isCenter ? 1.35 : isFrontThree ? 1.15 : 0.85),
+        rotAngle: rotAngle * 0.4,
+        scale: depthScale * (isCenter ? 1.3 : isFrontThree ? 1.12 : 0.85),
         zIndex: isFront ? 30 + Math.round(sn * 20) + (isCenter ? 15 : 0) : 2 + Math.round((sn + 1) * 3),
         opacity: isFront ? 1 : 0.55,
         isFront,
@@ -135,7 +134,7 @@ export default function FilmStrip3D({
         </g>
       </svg>
 
-      {/* 2. Orbiting 24 Craft Miniature Film Frames */}
+      {/* 2. Orbiting 24 Craft Circular Film Frames */}
       <div
         className="filmstrip-frames-layer"
         style={{
@@ -161,44 +160,39 @@ export default function FilmStrip3D({
                 opacity,
                 pointerEvents: 'auto',
                 cursor: 'pointer',
-                transition: 'transform 0.15s ease-out, opacity 0.15s ease-out'
+                transition: 'transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.35s ease'
               }}
               className={`filmstrip-frame-slot ${isCenter ? 'frame-center-active' : ''}`}
             >
+              {/* Circular Shaped Miniature Frame */}
               <div
                 style={{
-                  width: '54px',
-                  height: '58px',
-                  borderRadius: '6px',
+                  width: '52px',
+                  height: '52px',
+                  borderRadius: '50%',
                   backgroundColor: '#0F172A',
-                  border: isCenter ? '2px solid #F59E0B' : '1.5px solid rgba(217, 119, 6, 0.6)',
+                  border: isCenter ? '2.5px solid #F59E0B' : '2px solid rgba(217, 119, 6, 0.65)',
                   boxShadow: isCenter
-                    ? '0 0 20px rgba(245, 158, 11, 0.8), 0 8px 16px rgba(0,0,0,0.8)'
-                    : '0 4px 10px rgba(0,0,0,0.6)',
+                    ? '0 0 22px rgba(245, 158, 11, 0.9), 0 8px 16px rgba(0,0,0,0.8)'
+                    : '0 4px 12px rgba(0,0,0,0.6)',
                   overflow: 'hidden',
                   display: 'flex',
-                  flexDirection: 'column',
                   alignItems: 'center',
                   justifyContent: 'center',
                   background: 'linear-gradient(145deg, #1E293B 0%, #0B1120 100%)',
                   position: 'relative'
                 }}
               >
-                {/* Perforation Sprocket Dots on Left and Right edges of frame */}
-                <div style={{ position: 'absolute', top: '3px', left: '2px', width: '3px', height: '4px', background: '#F59E0B', borderRadius: '1px' }} />
-                <div style={{ position: 'absolute', bottom: '3px', left: '2px', width: '3px', height: '4px', background: '#F59E0B', borderRadius: '1px' }} />
-                <div style={{ position: 'absolute', top: '3px', right: '2px', width: '3px', height: '4px', background: '#F59E0B', borderRadius: '1px' }} />
-                <div style={{ position: 'absolute', bottom: '3px', right: '2px', width: '3px', height: '4px', background: '#F59E0B', borderRadius: '1px' }} />
-
-                {/* Craft Photo or Icon */}
+                {/* Circular Craft Image */}
                 {craft.image ? (
                   <img
                     src={craft.image}
                     alt={craft.name}
                     style={{
                       width: '100%',
-                      height: '38px',
+                      height: '100%',
                       objectFit: 'cover',
+                      borderRadius: '50%',
                       display: 'block'
                     }}
                     onError={(e) => {
@@ -206,29 +200,43 @@ export default function FilmStrip3D({
                     }}
                   />
                 ) : (
-                  <div style={{ color: '#F59E0B', fontSize: '18px', padding: '4px' }}>
+                  <div style={{ color: '#F59E0B', fontSize: '18px' }}>
                     🎬
                   </div>
                 )}
 
-                {/* Craft Label */}
-                <span
+                {/* Subtle golden rim overlay */}
+                <div
                   style={{
-                    fontSize: '8px',
-                    fontWeight: 700,
-                    color: isCenter ? '#FDE68A' : '#E2E8F0',
-                    lineHeight: 1.1,
-                    textAlign: 'center',
-                    padding: '2px 4px',
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    maxWidth: '48px',
-                    textTransform: 'uppercase'
+                    position: 'absolute',
+                    inset: 0,
+                    borderRadius: '50%',
+                    border: '1px solid rgba(254, 243, 199, 0.3)',
+                    pointerEvents: 'none'
                   }}
-                >
-                  {craft.shortName || craft.name}
-                </span>
+                />
+              </div>
+
+              {/* Miniature Craft Name Tag */}
+              <div
+                style={{
+                  position: 'absolute',
+                  bottom: '-16px',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  fontSize: '8px',
+                  fontWeight: 800,
+                  color: isCenter ? '#FDE68A' : '#CBD5E1',
+                  background: 'rgba(15, 23, 42, 0.85)',
+                  padding: '1px 6px',
+                  borderRadius: '4px',
+                  border: isCenter ? '1px solid #F59E0B' : '1px solid rgba(255,255,255,0.1)',
+                  whiteSpace: 'nowrap',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.04em'
+                }}
+              >
+                {craft.shortName || craft.name}
               </div>
             </div>
           );
@@ -257,13 +265,9 @@ export default function FilmStrip3D({
             <stop offset="75%" stopColor="#F59E0B" stopOpacity="0.95" />
             <stop offset="100%" stopColor="#92621C" stopOpacity="0.8" />
           </linearGradient>
-          <filter id="goldGlow" x="-20%" y="-20%" width="140%" height="140%">
-            <feGaussianBlur stdDeviation="4" result="blur" />
-            <feComposite in="SourceGraphic" in2="blur" operator="over" />
-          </filter>
         </defs>
         <g transform={`translate(${CX} ${CY}) rotate(${(TILT * 180) / Math.PI})`}>
-          {/* Front Golden Ribbon with Metallic Glow */}
+          {/* Front Golden Ribbon with Metallic Sheen */}
           {createArc(RX, RY, 68, 'url(#goldFrontGrad)', '', 0)}
           {/* Film Edge Borders */}
           {createArc(RX + 34, RY + 34, 2, '#FDE68A', '', 0)}

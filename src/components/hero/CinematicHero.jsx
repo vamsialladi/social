@@ -8,7 +8,7 @@ import './CinematicHero.css';
 
 /**
  * ============================================================================
- * TrueHunt 24 Cinema Crafts Definition with Existing Popular Roles Images
+ * TrueHunt 24 Cinema Crafts Definition
  * ============================================================================
  */
 export const CINEMA_24_CRAFTS = [
@@ -232,73 +232,88 @@ export const CINEMA_24_CRAFTS = [
 
 /**
  * ============================================================================
- * CinematicHero – Top Homepage Banner with 3D Earth & Rotating Golden Film Strip
+ * CinematicHero – Top Homepage Banner with Circular Craft Images & Click Navigation
  * ============================================================================
  */
 export default function CinematicHero() {
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [isPaused, setIsPaused] = useState(false);
   const [rotationOffset, setRotationOffset] = useState(0);
   const navigate = useNavigate();
   const N = CINEMA_24_CRAFTS.length;
 
-  const timerRef = useRef(null);
-  const animFrameRef = useRef(null);
-  const lastTimeRef = useRef(null);
+  const animRef = useRef({
+    currentAngle: 0,
+    targetAngle: 0,
+    animating: false,
+    startTime: null,
+    startAngle: 0
+  });
+  const animFrameId = useRef(null);
 
-  // Sync 3D Film Strip Continuous Rotation
+  // Smooth ease-out animation step for user navigation
+  const animateToAngle = useCallback((targetAngle) => {
+    animRef.current.targetAngle = targetAngle;
+    animRef.current.startAngle = animRef.current.currentAngle;
+    animRef.current.startTime = null;
+
+    if (!animRef.current.animating) {
+      animRef.current.animating = true;
+
+      const step = (timestamp) => {
+        if (!animRef.current.startTime) animRef.current.startTime = timestamp;
+        const progress = Math.min(1, (timestamp - animRef.current.startTime) / 420);
+        // Cubic ease-out
+        const ease = 1 - Math.pow(1 - progress, 3);
+        
+        const nextAngle = animRef.current.startAngle + (animRef.current.targetAngle - animRef.current.startAngle) * ease;
+        animRef.current.currentAngle = nextAngle;
+        setRotationOffset(nextAngle);
+
+        if (progress < 1) {
+          animFrameId.current = requestAnimationFrame(step);
+        } else {
+          animRef.current.animating = false;
+          animRef.current.currentAngle = animRef.current.targetAngle;
+          setRotationOffset(animRef.current.targetAngle);
+        }
+      };
+
+      animFrameId.current = requestAnimationFrame(step);
+    }
+  }, []);
+
   useEffect(() => {
-    const loop = (timestamp) => {
-      if (lastTimeRef.current === null) lastTimeRef.current = timestamp;
-      const delta = (timestamp - lastTimeRef.current) / 1000;
-      lastTimeRef.current = timestamp;
-
-      // Continuously rotate ribbon subtly
-      if (!isPaused) {
-        setRotationOffset((prev) => prev - delta * 0.14);
-      }
-
-      animFrameRef.current = requestAnimationFrame(loop);
-    };
-
-    animFrameRef.current = requestAnimationFrame(loop);
     return () => {
-      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+      if (animFrameId.current) cancelAnimationFrame(animFrameId.current);
     };
-  }, [isPaused]);
+  }, []);
 
-  // Automatic Craft Carousel Rotation every 4 seconds
-  useEffect(() => {
-    if (isPaused) return;
-
-    timerRef.current = setInterval(() => {
-      setCurrentIndex((prev) => (prev + 1) % N);
-    }, 4000);
-
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, [isPaused, N]);
-
-  // Navigate to previous craft
+  // ONLY move when the user clicks the Left button
   const handlePrev = useCallback(() => {
-    setCurrentIndex((prev) => (prev - 1 + N) % N);
-    // Align ribbon angle to active craft
-    setRotationOffset((prev) => prev + (2 * Math.PI) / N);
-  }, [N]);
+    const nextIdx = (currentIndex - 1 + N) % N;
+    setCurrentIndex(nextIdx);
+    const targetAngle = animRef.current.targetAngle + (2 * Math.PI) / N;
+    animateToAngle(targetAngle);
+  }, [currentIndex, N, animateToAngle]);
 
-  // Navigate to next craft
+  // ONLY move when the user clicks the Right button
   const handleNext = useCallback(() => {
-    setCurrentIndex((prev) => (prev + 1) % N);
-    setRotationOffset((prev) => prev - (2 * Math.PI) / N);
-  }, [N]);
+    const nextIdx = (currentIndex + 1) % N;
+    setCurrentIndex(nextIdx);
+    const targetAngle = animRef.current.targetAngle - (2 * Math.PI) / N;
+    animateToAngle(targetAngle);
+  }, [currentIndex, N, animateToAngle]);
 
-  // Jump to specific craft
-  const handleSelectCraft = useCallback((index) => {
-    setCurrentIndex(index);
-    // Calculate targeted angle offset
-    setRotationOffset(Math.PI / 2 - (index / N) * 2 * Math.PI);
-  }, [N]);
+  // Move when user clicks a specific craft indicator or miniature frame
+  const handleSelectCraft = useCallback((targetIndex) => {
+    let diff = targetIndex - currentIndex;
+    if (diff > N / 2) diff -= N;
+    if (diff < -N / 2) diff += N;
+    
+    setCurrentIndex(targetIndex);
+    const targetAngle = animRef.current.targetAngle - diff * ((2 * Math.PI) / N);
+    animateToAngle(targetAngle);
+  }, [currentIndex, N, animateToAngle]);
 
   // Click on craft card -> Navigate to Join Now page with preselected craft
   const handleCraftClick = useCallback((craft) => {
@@ -319,8 +334,6 @@ export default function CinematicHero() {
   return (
     <section 
       className="cinematic-hero-banner"
-      onMouseEnter={() => setIsPaused(true)}
-      onMouseLeave={() => setIsPaused(false)}
       aria-label="TrueHunt 3D Cinematic Globe & Film Strip Showcase"
     >
       {/* Deep Space Background with Stars & Golden Atmospheric Nebula */}
@@ -352,33 +365,30 @@ export default function CinematicHero() {
 
         </header>
 
-        {/* Center Stage: Rotating 3D Globe + Orbiting Golden Film Strip */}
+        {/* Center Stage: 3D Earth Globe + Orbiting Golden Film Strip with Circular Craft Images */}
         <div className="cinematic-stage-arena">
           
-          {/* Central 3D Earth Globe with Atmospheric Rim Lighting */}
+          {/* Central 3D Earth Globe (Rotates continuously on vertical axis) */}
           <div className="globe-center-pod">
-            <RotatingGlobe size={360} isRotating={!isPaused} />
+            <RotatingGlobe size={360} isRotating={true} />
           </div>
 
-          {/* Golden 3D Revolving Cinema Film Reel */}
+          {/* Golden 3D Revolving Cinema Film Reel with Circular Miniatures */}
           <FilmStrip3D
             crafts={CINEMA_24_CRAFTS}
             currentIndex={currentIndex}
             rotationOffset={rotationOffset}
             onSelectCraft={handleSelectCraft}
-            isPaused={isPaused}
             width={980}
             height={520}
           />
 
-          {/* Front 3 Craft Showcase Cards with Interactive Controls */}
+          {/* Front 3 Craft Showcase Cards with Circular Images (Moves ONLY on Left/Right Click) */}
           <CraftCarousel
             crafts={CINEMA_24_CRAFTS}
             currentIndex={currentIndex}
-            isPaused={isPaused}
             onPrev={handlePrev}
             onNext={handleNext}
-            onTogglePause={() => setIsPaused((p) => !p)}
             onSelectCraft={handleSelectCraft}
             onCraftClick={handleCraftClick}
           />

@@ -257,3 +257,4 @@ export default function RotatingGlobe({ size = 380, isRotating = true }) {
     />
   );
 }
+

@@ -2,38 +2,32 @@ import React from 'react';
 import { 
   ChevronLeft, 
   ChevronRight, 
-  Pause, 
-  Play, 
   ArrowUpRight, 
   Sparkles,
-  Clapperboard
+  Film
 } from 'lucide-react';
 
 /**
  * ============================================================================
- * CraftCarousel – Front 3 Craft Showcase with Full Carousel Controls
+ * CraftCarousel – Circular Craft Images with User-Driven Left/Right Navigation
  * ============================================================================
  * Features:
- * - Displays 3 prominent craft cards in the front (Left Prev, Center Active, Right Next)
- * - Clickable cards navigating to `/join-now?craft=...`
- * - Previous / Next navigation controls
- * - Pause / Play auto-rotation toggle
- * - 24 Craft pagination indicator dots
- * - Responsive layout for desktop, tablet, and mobile
+ * - 100% Circular shaped images for all crafts with golden film-reel rings
+ * - Three visible front craft cards (Previous, Center Active, Next)
+ * - Moves ONLY when the user clicks the Left and Right navigation buttons
+ * - Clickable to join/register as that craft on TrueHunt
+ * - Interactive pagination dots allowing direct jump to any of the 24 crafts
  */
 export default function CraftCarousel({
   crafts = [],
   currentIndex = 0,
-  isPaused = false,
   onPrev,
   onNext,
-  onTogglePause,
   onSelectCraft,
   onCraftClick
 }) {
   const N = crafts.length || 24;
 
-  // Retrieve previous, current, and next crafts
   const prevIndex = (currentIndex - 1 + N) % N;
   const nextIndex = (currentIndex + 1) % N;
 
@@ -50,7 +44,7 @@ export default function CraftCarousel({
   return (
     <div className="craft-carousel-root">
       
-      {/* 3 Prominent Craft Cards in Front of the Globe */}
+      {/* 3 Prominent Craft Cards with Circular Images */}
       <div className="craft-cards-stage">
         
         {/* Left Craft Card (Slot -1) */}
@@ -58,34 +52,34 @@ export default function CraftCarousel({
           className="craft-card-slot slot-left"
           onClick={() => {
             onPrev();
-            handleCardClick(prevCraft);
           }}
-          title={`Previous Craft: ${prevCraft.name}`}
+          title={`Click to view Previous: ${prevCraft.name}`}
           role="button"
           tabIndex={0}
         >
-          <div className="craft-card-inner">
-            <div className="craft-card-media">
+          <div className="craft-card-inner card-circular">
+            {/* Circular Image Container */}
+            <div className="craft-circle-media circle-side">
+              <div className="craft-circle-ring" />
               <img
                 src={prevCraft.image}
                 alt={prevCraft.name}
-                className="craft-card-img"
+                className="craft-circle-img"
                 onError={(e) => {
                   e.currentTarget.style.display = 'none';
                 }}
               />
-              <div className="craft-card-badge">
-                <span className="craft-badge-icon">{prevCraft.icon || '🎬'}</span>
-                <span>{prevCraft.name}</span>
-              </div>
+              <span className="craft-circle-icon">{prevCraft.icon || '🎬'}</span>
             </div>
+            
             <div className="craft-card-content">
-              <span className="craft-tagline">{prevCraft.tagline}</span>
+              <span className="craft-name-side">{prevCraft.name}</span>
+              <span className="craft-tagline-side">{prevCraft.tagline}</span>
             </div>
           </div>
         </div>
 
-        {/* Center Craft Card (Slot 0 - Featured Active) */}
+        {/* Center Featured Craft Card (Slot 0 - Active) */}
         <div
           className="craft-card-slot slot-center"
           onClick={() => handleCardClick(currentCraft)}
@@ -93,34 +87,32 @@ export default function CraftCarousel({
           role="button"
           tabIndex={0}
         >
-          <div className="craft-card-inner card-featured">
+          <div className="craft-card-inner card-featured card-circular-featured">
             <div className="craft-card-gold-glow" />
             
-            <div className="craft-card-media">
+            {/* Top Counter Badge */}
+            <div className="craft-top-badge">
+              <span className="craft-top-badge-icon">{currentCraft.icon || '🎬'}</span>
+              <span className="craft-top-badge-name">{currentCraft.name}</span>
+              <span className="craft-top-badge-num">{currentIndex + 1} / {N}</span>
+            </div>
+
+            {/* Large Glowing Circular Image with Film Reel Border */}
+            <div className="craft-circle-media circle-center">
+              <div className="craft-film-sprocket-ring" />
+              <div className="craft-circle-gold-halo" />
               <img
                 src={currentCraft.image}
                 alt={currentCraft.name}
-                className="craft-card-img"
+                className="craft-circle-img"
                 onError={(e) => {
                   e.currentTarget.style.display = 'none';
                 }}
               />
-              <div className="craft-card-overlay-grad" />
-              
-              {/* Category Pill */}
-              <div className="craft-card-badge badge-gold">
-                <span className="craft-badge-icon">{currentCraft.icon || '🎬'}</span>
-                <span className="craft-badge-name">{currentCraft.name}</span>
-                <span className="craft-badge-counter">{currentIndex + 1}/24</span>
-              </div>
-
-              {/* Instant Join Click Pill */}
-              <div className="craft-join-cta-pill">
-                <span>Join as {currentCraft.name}</span>
-                <ArrowUpRight size={14} />
-              </div>
+              <div className="craft-circle-overlay-shimmer" />
             </div>
 
+            {/* Craft Title & Tagline */}
             <div className="craft-card-content content-featured">
               <h3 className="craft-headline">
                 <span className="craft-headline-name">{currentCraft.name}</span>
@@ -128,7 +120,17 @@ export default function CraftCarousel({
                 <span className="craft-headline-tagline">{currentCraft.tagline}</span>
               </h3>
               <p className="craft-desc">{currentCraft.desc}</p>
+              
+              {/* Click to Join CTA */}
+              <div className="craft-join-cta-row">
+                <span className="craft-join-cta-btn">
+                  <span>Join as {currentCraft.name}</span>
+                  <ArrowUpRight size={15} />
+                </span>
+                <span className="craft-click-hint">Click card to start journey</span>
+              </div>
             </div>
+
           </div>
         </div>
 
@@ -137,84 +139,77 @@ export default function CraftCarousel({
           className="craft-card-slot slot-right"
           onClick={() => {
             onNext();
-            handleCardClick(nextCraft);
           }}
-          title={`Next Craft: ${nextCraft.name}`}
+          title={`Click to view Next: ${nextCraft.name}`}
           role="button"
           tabIndex={0}
         >
-          <div className="craft-card-inner">
-            <div className="craft-card-media">
+          <div className="craft-card-inner card-circular">
+            {/* Circular Image Container */}
+            <div className="craft-circle-media circle-side">
+              <div className="craft-circle-ring" />
               <img
                 src={nextCraft.image}
                 alt={nextCraft.name}
-                className="craft-card-img"
+                className="craft-circle-img"
                 onError={(e) => {
                   e.currentTarget.style.display = 'none';
                 }}
               />
-              <div className="craft-card-badge">
-                <span className="craft-badge-icon">{nextCraft.icon || '🎬'}</span>
-                <span>{nextCraft.name}</span>
-              </div>
+              <span className="craft-circle-icon">{nextCraft.icon || '🎬'}</span>
             </div>
+            
             <div className="craft-card-content">
-              <span className="craft-tagline">{nextCraft.tagline}</span>
+              <span className="craft-name-side">{nextCraft.name}</span>
+              <span className="craft-tagline-side">{nextCraft.tagline}</span>
             </div>
           </div>
         </div>
 
       </div>
 
-      {/* Carousel Navigation & Playback Controls Bar */}
+      {/* Manual Left & Right Controls Bar (Moves only on click) */}
       <div className="craft-controls-bar">
         
-        {/* Previous Button */}
+        {/* Left Arrow Button */}
         <button
           type="button"
           onClick={onPrev}
-          className="craft-ctrl-arrow-btn"
+          className="craft-ctrl-arrow-btn arrow-prev"
           aria-label="Previous Craft"
-          title="Previous Craft (Arrow Left)"
+          title="Previous Craft (Click to move left)"
         >
-          <ChevronLeft size={20} />
+          <ChevronLeft size={22} />
         </button>
 
-        {/* Center Indicators and Play/Pause */}
+        {/* Center Current Craft Name Badge */}
         <div className="craft-center-playback">
-          <button
-            type="button"
-            onClick={onTogglePause}
-            className={`craft-play-pause-btn ${isPaused ? 'btn-paused' : 'btn-playing'}`}
-            aria-label={isPaused ? 'Resume auto-rotation' : 'Pause auto-rotation'}
-            title={isPaused ? 'Resume Carousel' : 'Pause Carousel'}
-          >
-            {isPaused ? <Play size={14} /> : <Pause size={14} />}
-            <span>{isPaused ? 'Play' : 'Pause'}</span>
-          </button>
-
           <span className="craft-active-label">
-            <span style={{ color: '#F59E0B', fontWeight: 800 }}>{currentCraft.name}</span>
-            <span style={{ color: '#94A3B8', margin: '0 6px' }}>•</span>
-            <span style={{ color: '#E2E8F0' }}>Craft {currentIndex + 1} of {N}</span>
+            <span style={{ color: '#F59E0B', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              {currentCraft.name}
+            </span>
+            <span style={{ color: '#64748B', margin: '0 8px' }}>•</span>
+            <span style={{ color: '#E2E8F0', fontWeight: 600 }}>
+              {currentIndex + 1} of {N} Crafts
+            </span>
           </span>
         </div>
 
-        {/* Next Button */}
+        {/* Right Arrow Button */}
         <button
           type="button"
           onClick={onNext}
-          className="craft-ctrl-arrow-btn"
+          className="craft-ctrl-arrow-btn arrow-next"
           aria-label="Next Craft"
-          title="Next Craft (Arrow Right)"
+          title="Next Craft (Click to move right)"
         >
-          <ChevronRight size={20} />
+          <ChevronRight size={22} />
         </button>
 
       </div>
 
-      {/* 24 Craft Mini Progress Dots */}
-      <div className="craft-dots-indicator" role="tablist" aria-label="Craft indicators">
+      {/* 24 Craft Mini Progress Dots (Clickable) */}
+      <div className="craft-dots-indicator" role="tablist" aria-label="Craft selection dots">
         {crafts.map((c, i) => (
           <button
             key={c.name}
