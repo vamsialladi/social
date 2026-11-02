@@ -13,6 +13,7 @@ import {
 import TalentCard from '../components/cards/TalentCard';
 import OpportunityCard from '../components/cards/OpportunityCard';
 import CraftCard from '../components/cards/CraftCard';
+import CinematicHero from '../components/hero/CinematicHero';
 import { 
   PLATFORM_STATS, 
   FILM_CRAFTS, 
@@ -262,6 +263,9 @@ export default function HomePage() {
   return (
     <div className="landing-page">
 
+      {/* 3D Cinematic Earth Globe & Rotating Film Strip Hero Banner */}
+      <CinematicHero />
+
       <section className="hero-section">
         {/* Subtle cinematic gradient aura background */}
         <div className="hero-aura-bg" />
@@ -312,7 +316,7 @@ export default function HomePage() {
               )}
 
               {/* Popular Professional Roles */}
-              <div className="hero-roles-section">
+              <div className="hero-roles-section" id="popular-roles">
                 <span className="hero-roles-label">
                   POPULAR ROLES:
                 </span>
