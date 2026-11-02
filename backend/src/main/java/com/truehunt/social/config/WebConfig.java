@@ -28,5 +28,9 @@ public class WebConfig implements WebMvcConfigurer {
         String uploadAbsolutePath = Paths.get(uploadDir).toAbsolutePath().toUri().toString();
         registry.addResourceHandler("/uploads/**")
                 .addResourceLocations(uploadAbsolutePath.endsWith("/") ? uploadAbsolutePath : uploadAbsolutePath + "/");
+
+        // Serve static assets, cinema backdrop, clapperboard, and TrueHunt brand assets
+        registry.addResourceHandler("/assets/**")
+                .addResourceLocations("classpath:/static/assets/", "file:public/assets/", "file:./public/assets/");
     }
 }

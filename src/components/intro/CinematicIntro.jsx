@@ -1,32 +1,38 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Volume2, VolumeX, FastForward, Film, Clapperboard, CheckCircle2 } from 'lucide-react';
+import { Volume2, VolumeX, FastForward, Film, Video, Radio, Sparkles } from 'lucide-react';
+import cinemaSetImg from '../../assets/cinema-hero.jpg';
+import clapperboardImg from '../../assets/clapperboard.png';
 import logoImg from '../../assets/truehunt-logo.png';
+import emblemImg from '../../assets/truehunt-emblem.png';
 
 /**
  * ============================================================================
- * TrueHunt – All-in-One Cinematic Movie Production Intro Experience
+ * TrueHunt – Cinematic Movie Production Intro Screen
  * ============================================================================
- * Features:
- * - 100% self-contained single-file React component (Zero external CSS needed)
- * - 2.39:1 Anamorphic cinema scope letterbox bars with live 24 FPS timecode HUD
- * - Atmospheric film soundstage with volumetric spotlight beam, haze & gear silhouettes
- * - Realistic film crew member figure entering the set with production headset
- * - Authentic movie slate clapperboard with realistic hinged top-arm clap animation
- * - Built-in Web Audio API synthesizer for realistic wooden slate impact clap sound
- * - TrueHunt cinematic brand reveal with golden anamorphic lens flare sweep
- * - Skip Intro button, Mute/Sound toggle, browser autoplay safety & smooth unmount
+ * Realistic film production soundstage experience:
+ * - Professional movie set background (cinema-hero.jpg) with camera dolly push-in
+ * - 2.39:1 Anamorphic cinema scope letterbox bars & 24 FPS SMPTE timecode HUD
+ * - Film crew member stepping into scene wearing production headset & holding slate
+ * - Movie clapperboard modeled directly after TrueHunt reference:
+ *   - PROD. TRUEHUNT, SCENE 48B, TAKE 3, DIR: J. REED, CAM: L. CHEN, DATE: 14 OCT
+ *   - Multi-colored chevron stripes (Green, Red, Yellow, Blue, White, Black)
+ *   - Hinged top-arm lifting and slamming shut with realistic recoil physics
+ * - Built-in Web Audio API synthesized wooden slate clap sound effect
+ * - TrueHunt cinematic logo reveal with anamorphic lens flare sweep
+ * - Skip Intro & Sound toggle buttons with responsive mobile/tablet layout
+ * - Smooth unmount transition to TrueHunt homepage
  */
 export default function CinematicIntro({ onComplete }) {
-  // Phase sequence: INITIALIZING -> CREW_ENTERING -> ARM_OPENING -> SLATE_CLAP -> CREW_EXIT -> TRUEHUNT_REVEAL -> FADING_OUT
+  // Phases: INITIALIZING -> CREW_ENTERING -> ARM_OPENING -> SLATE_CLAP -> CREW_EXIT -> TRUEHUNT_REVEAL -> FADING_OUT
   const [phase, setPhase] = useState('INITIALIZING');
   const [isMuted, setIsMuted] = useState(false);
-  const [calloutText, setCalloutText] = useState('SCENE 1, TAKE 1');
+  const [calloutText, setCalloutText] = useState('SCENE 48B, TAKE 3');
   const [timecode, setTimecode] = useState('00:00:01:04');
 
   const audioCtxRef = useRef(null);
   const timeoutsRef = useRef([]);
 
-  // Timecode simulation (24 FPS SMPTE)
+  // Timecode generator simulating 24 FPS SMPTE cinema recorder
   useEffect(() => {
     let frame = 4;
     let sec = 1;
@@ -43,7 +49,7 @@ export default function CinematicIntro({ onComplete }) {
     return () => clearInterval(interval);
   }, []);
 
-  // Web Audio API Synthesis for realistic wooden slate clapper sound
+  // Web Audio API Synthesis for authentic wooden clapperboard impact clap
   const playClapperSound = () => {
     if (isMuted) return;
     try {
@@ -60,61 +66,61 @@ export default function CinematicIntro({ onComplete }) {
 
       const now = ctx.currentTime;
 
-      // 1. Sharp wooden slap transient (bandpassed noise burst)
-      const bufferSize = ctx.sampleRate * 0.04;
+      // 1. Sharp wooden slap transient (bandpassed high-frequency noise burst)
+      const bufferSize = ctx.sampleRate * 0.045;
       const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
       const data = buffer.getChannelData(0);
       for (let i = 0; i < bufferSize; i++) {
-        data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (ctx.sampleRate * 0.008));
+        data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (ctx.sampleRate * 0.007));
       }
       const noise = ctx.createBufferSource();
       noise.buffer = buffer;
 
       const noiseFilter = ctx.createBiquadFilter();
       noiseFilter.type = 'bandpass';
-      noiseFilter.frequency.setValueAtTime(2400, now);
-      noiseFilter.Q.setValueAtTime(2.5, now);
+      noiseFilter.frequency.setValueAtTime(2200, now);
+      noiseFilter.Q.setValueAtTime(3.0, now);
 
       const noiseGain = ctx.createGain();
-      noiseGain.gain.setValueAtTime(0.95, now);
-      noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.045);
+      noiseGain.gain.setValueAtTime(1.0, now);
+      noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
 
       noise.connect(noiseFilter);
       noiseFilter.connect(noiseGain);
       noiseGain.connect(ctx.destination);
       noise.start(now);
 
-      // 2. Solid wooden slate board body resonance
+      // 2. Heavy wooden slate body resonance (low triangle decay)
       const osc = ctx.createOscillator();
       const oscGain = ctx.createGain();
       osc.type = 'triangle';
-      osc.frequency.setValueAtTime(380, now);
-      osc.frequency.exponentialRampToValueAtTime(110, now + 0.06);
+      osc.frequency.setValueAtTime(390, now);
+      osc.frequency.exponentialRampToValueAtTime(105, now + 0.065);
 
-      oscGain.gain.setValueAtTime(0.85, now);
-      oscGain.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
+      oscGain.gain.setValueAtTime(0.9, now);
+      oscGain.gain.exponentialRampToValueAtTime(0.001, now + 0.075);
 
       osc.connect(oscGain);
       oscGain.connect(ctx.destination);
       osc.start(now);
       osc.stop(now + 0.08);
 
-      // 3. Crisp mechanical strike click
+      // 3. Crisp mechanical hinge click
       const clickOsc = ctx.createOscillator();
       const clickGain = ctx.createGain();
       clickOsc.type = 'sine';
-      clickOsc.frequency.setValueAtTime(1200, now);
-      clickOsc.frequency.exponentialRampToValueAtTime(300, now + 0.02);
+      clickOsc.frequency.setValueAtTime(1400, now);
+      clickOsc.frequency.exponentialRampToValueAtTime(320, now + 0.022);
 
-      clickGain.gain.setValueAtTime(0.6, now);
-      clickGain.gain.exponentialRampToValueAtTime(0.001, now + 0.025);
+      clickGain.gain.setValueAtTime(0.65, now);
+      clickGain.gain.exponentialRampToValueAtTime(0.001, now + 0.028);
 
       clickOsc.connect(clickGain);
       clickGain.connect(ctx.destination);
       clickOsc.start(now);
       clickOsc.stop(now + 0.03);
     } catch {
-      // Audio autoplay policy fallback
+      // Browser autoplay restriction fallback
     }
   };
 
@@ -124,46 +130,47 @@ export default function CinematicIntro({ onComplete }) {
     return id;
   };
 
-  // Choreographed movie production sequence
+  // Movie set production choreography
   useEffect(() => {
-    // Stage 1: Crew member steps into the spotlight (1.0s)
+    // Act 1: Crew member walks in holding slate (1.0s)
     schedule(() => {
       setPhase('CREW_ENTERING');
-      setCalloutText('SCENE 1, TAKE 1... MARKER!');
+      setCalloutText('SCENE 48B, TAKE 3... MARKER!');
     }, 1000);
 
-    // Stage 2: Top clapper arm lifts up (2.5s)
+    // Act 2: Clapper top arm raises smoothly (2.3s)
     schedule(() => {
       setPhase('ARM_OPENING');
-    }, 2500);
+      setCalloutText('MARKER READY...');
+    }, 2300);
 
-    // Stage 3: SLAM! Clapper snaps shut with sound effect (3.8s)
+    // Act 3: SNAP! Clapper snaps shut with authentic sound (3.6s)
     schedule(() => {
       setPhase('SLATE_CLAP');
       playClapperSound();
       setCalloutText('CLAP! 🎬');
-    }, 3800);
+    }, 3600);
 
-    // Stage 4: Crew member clears the camera frame (4.6s)
+    // Act 4: Crew member clears the frame (4.4s)
     schedule(() => {
       setPhase('CREW_EXIT');
-      setCalloutText('ACTION!');
-    }, 4600);
+      setCalloutText('ACTION! 🎥');
+    }, 4400);
 
-    // Stage 5: TrueHunt cinematic branding reveal (5.2s)
+    // Act 5: TrueHunt cinematic branding reveal (5.2s)
     schedule(() => {
       setPhase('TRUEHUNT_REVEAL');
     }, 5200);
 
-    // Stage 6: Crossfade to homepage (7.4s)
+    // Act 6: Crossfade to TrueHunt main homepage (7.5s)
     schedule(() => {
       setPhase('FADING_OUT');
-    }, 7400);
+    }, 7500);
 
-    // Stage 7: Transition complete & unmount (8.1s)
+    // Act 7: Complete and unmount (8.2s)
     schedule(() => {
       if (onComplete) onComplete();
-    }, 8100);
+    }, 8200);
 
     return () => {
       timeoutsRef.current.forEach(clearTimeout);
@@ -183,32 +190,32 @@ export default function CinematicIntro({ onComplete }) {
   };
 
   return (
-    <div 
+    <div
       className={`cinema-intro-wrapper ${phase === 'FADING_OUT' ? 'fading-out' : ''}`}
       role="region"
-      aria-label="TrueHunt Cinema Production Intro"
+      aria-label="TrueHunt Movie Production Intro"
     >
-      {/* 2.39:1 Anamorphic Scope Letterbox Bars */}
+      {/* 2.39:1 Anamorphic Cinema Scope Letterbox Bars */}
       <div className="cinema-letterbox-bar cinema-letterbox-top" />
       <div className="cinema-letterbox-bar cinema-letterbox-bottom" />
 
-      {/* Production Camera HUD Header */}
+      {/* Production Camera Live HUD */}
       <header className="cinema-hud-header">
         <div className="cinema-rec-indicator">
           <div className="cinema-rec-dot" />
           <span>REC</span>
-          <span style={{ color: '#F3F4F6', marginLeft: '6px' }}>{timecode}</span>
+          <span className="cinema-timecode-display">{timecode}</span>
         </div>
         <div className="cinema-camera-data">
-          <span>4K RAW</span>
+          <span>ARRI RAW 4K</span>
           <span>24 FPS</span>
-          <span>SHUTTER 1/48</span>
+          <span>SHUTTER 180°</span>
           <span>ISO 800</span>
           <span>5600K</span>
         </div>
       </header>
 
-      {/* Action Controls: Skip & Audio Toggle */}
+      {/* Quick Action Controls: Skip & Audio Toggle */}
       <div className="cinema-action-controls">
         <button
           type="button"
@@ -224,87 +231,109 @@ export default function CinematicIntro({ onComplete }) {
         <button
           type="button"
           onClick={handleSkip}
-          className="cinema-ctrl-btn"
+          className="cinema-ctrl-btn cinema-skip-btn"
           aria-label="Skip Cinematic Intro"
-          title="Skip Intro to Homepage"
-          style={{ backgroundColor: 'rgba(128, 24, 35, 0.85)' }}
+          title="Skip directly to TrueHunt Homepage"
         >
           <span>Skip Intro</span>
           <FastForward size={14} />
         </button>
       </div>
 
-      {/* Soundstage Environment */}
-      <div className="cinema-stage-bg">
+      {/* Professional Movie Soundstage Environment Background */}
+      <div className={`cinema-stage-bg ${phase === 'SLATE_CLAP' ? 'camera-shake' : ''}`}>
+        {/* Real Movie Production Set Backdrop Image */}
+        <img
+          src={cinemaSetImg}
+          alt="TrueHunt Movie Production Soundstage"
+          className={`cinema-set-backdrop ${phase === 'TRUEHUNT_REVEAL' || phase === 'FADING_OUT' ? 'backdrop-blurred' : ''}`}
+        />
+        
+        {/* Cinematic Lighting Vignette & Depth Layers */}
+        <div className="cinema-backdrop-overlay" />
         <div className="cinema-spotlight-beam" />
         <div className="cinema-haze-layer" />
-        <div className="cinema-stage-floor" />
+        <div className="cinema-stage-floor-reflection" />
 
-        {/* Studio Silhouette Equipment */}
-        <div className="cinema-silhouette-equipment">
-          <svg width="120" height="180" viewBox="0 0 120 180" fill="none">
-            <circle cx="60" cy="30" r="22" fill="#1E293B" />
-            <rect x="42" y="14" width="36" height="32" rx="4" fill="#0F172A" />
-            <line x1="60" y1="52" x2="60" y2="180" stroke="#334155" strokeWidth="4" />
-            <line x1="60" y1="120" x2="20" y2="180" stroke="#334155" strokeWidth="3" />
-            <line x1="60" y1="120" x2="100" y2="180" stroke="#334155" strokeWidth="3" />
-          </svg>
-          <svg width="140" height="180" viewBox="0 0 140 180" fill="none">
-            <rect x="35" y="30" width="70" height="35" rx="5" fill="#0F172A" />
-            <rect x="18" y="34" width="20" height="26" rx="2" fill="#1E293B" />
-            <circle cx="70" cy="46" r="12" fill="#334155" />
-            <rect x="85" y="20" width="16" height="18" fill="#1E293B" />
-            <line x1="70" y1="65" x2="70" y2="180" stroke="#334155" strokeWidth="5" />
-            <line x1="70" y1="100" x2="25" y2="180" stroke="#334155" strokeWidth="4" />
-            <line x1="70" y1="100" x2="115" y2="180" stroke="#334155" strokeWidth="4" />
-          </svg>
-        </div>
+        {/* Ambient Production Strobe Flash on Clap */}
+        {phase === 'SLATE_CLAP' && <div className="cinema-strobe-flash" />}
       </div>
 
       {/* Center Stage Presentation */}
       <main className="cinema-center-stage">
-        
-        {/* ACT 1 & ACT 2: Film Crew Member with Movie Clapperboard */}
+        {/* ACT 1 & 2: Crew Member entering and operating Movie Clapperboard */}
         {(phase === 'INITIALIZING' || phase === 'CREW_ENTERING' || phase === 'ARM_OPENING' || phase === 'SLATE_CLAP' || phase === 'CREW_EXIT') && (
           <div className="crew-clapper-scene">
             
-            {/* Film Crew Member Figure */}
+            {/* Film Crew Member Figure & Hands */}
             <div className={`crew-member-figure ${phase === 'CREW_EXIT' ? 'crew-exiting' : ''}`}>
               
               {/* Clapperboard Apparatus */}
               <div className={`clapperboard-container ${phase === 'SLATE_CLAP' ? 'just-clapped' : ''}`}>
                 
-                {/* Director Voice Callout */}
+                {/* Director Voice Callout Bubble */}
                 <div className="cinema-callout-bubble">
                   {calloutText}
                 </div>
 
-                {/* Top Hinged Clapper Stick (Opens & Slams) */}
-                <div 
+                {/* Top Hinged Clapper Stick (Opens & Slams with Chevrons) */}
+                <div
                   className={`clapper-top-arm ${
-                    phase === 'ARM_OPENING' ? 'arm-opened' : 
+                    phase === 'ARM_OPENING' ? 'arm-opened' :
                     phase === 'SLATE_CLAP' || phase === 'CREW_EXIT' ? 'arm-slammed' : ''
                   }`}
                 >
-                  <div className="clapper-stripes" />
+                  {/* Multi-Colored Chevron Stripes matching TrueHunt Reference */}
+                  <div className="clapper-chevrons-bar">
+                    <span className="ch-stripe ch-green" />
+                    <span className="ch-stripe ch-red" />
+                    <span className="ch-stripe ch-yellow" />
+                    <span className="ch-stripe ch-blue" />
+                    <span className="ch-stripe ch-white" />
+                    <span className="ch-stripe ch-black" />
+                    <span className="ch-stripe ch-green" />
+                    <span className="ch-stripe ch-red" />
+                    <span className="ch-stripe ch-yellow" />
+                    <span className="ch-stripe ch-blue" />
+                  </div>
+                  {/* Heavy Steel Hinge Bolt */}
                   <div className="clapper-hinge-pin" />
                 </div>
 
-                {/* Slate Board Body */}
+                {/* Stationary Slate Top Bar */}
+                <div className="clapper-fixed-bar">
+                  <div className="clapper-chevrons-bar fixed-stripes">
+                    <span className="ch-stripe ch-green" />
+                    <span className="ch-stripe ch-red" />
+                    <span className="ch-stripe ch-yellow" />
+                    <span className="ch-stripe ch-blue" />
+                    <span className="ch-stripe ch-white" />
+                    <span className="ch-stripe ch-black" />
+                    <span className="ch-stripe ch-green" />
+                    <span className="ch-stripe ch-red" />
+                    <span className="ch-stripe ch-yellow" />
+                    <span className="ch-stripe ch-blue" />
+                  </div>
+                </div>
+
+                {/* White Acrylic Slate Body with TrueHunt Production Grid */}
                 <div className="clapper-board-body">
+                  {/* Header Title */}
                   <div className="slate-header-title">
-                    <span className="slate-prod-name">PROD. TRUEHUNT</span>
-                    <span style={{ fontSize: '11px', color: '#9CA3AF', fontFamily: 'monospace' }}>FPS 24</span>
+                    <span className="slate-prod-label">PROD.</span>
+                    <span className="slate-prod-name">TRUEHUNT</span>
+                    <span className="slate-fps-badge">24 FPS</span>
                   </div>
 
+                  {/* Scene, Take, Roll Grid */}
                   <div className="slate-grid-row">
                     <div className="slate-cell">
                       <span className="slate-cell-label">SCENE</span>
-                      <span className="slate-cell-value">01</span>
+                      <span className="slate-cell-value">48B</span>
                     </div>
-                    <div className="slate-cell">
+                    <div className="slate-cell slate-cell-take">
                       <span className="slate-cell-label">TAKE</span>
-                      <span className="slate-cell-value" style={{ color: '#F87171' }}>01</span>
+                      <span className="slate-cell-value">3</span>
                     </div>
                     <div className="slate-cell">
                       <span className="slate-cell-label">ROLL</span>
@@ -312,64 +341,96 @@ export default function CinematicIntro({ onComplete }) {
                     </div>
                   </div>
 
-                  <div className="slate-meta-row">
-                    <div>
-                      <span style={{ color: '#9CA3AF', fontSize: '9px' }}>DIRECTOR: </span>
-                      <strong>CINEMA CREATORS</strong>
+                  {/* Director & Camera Credits */}
+                  <div className="slate-meta-grid">
+                    <div className="slate-meta-item">
+                      <span className="slate-meta-k">DIR:</span>
+                      <span className="slate-meta-v">J. REED</span>
                     </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <span style={{ color: '#9CA3AF', fontSize: '9px' }}>DATE: </span>
-                      <strong>2026</strong>
+                    <div className="slate-meta-item">
+                      <span className="slate-meta-k">CAM:</span>
+                      <span className="slate-meta-v">L. CHEN</span>
+                    </div>
+                    <div className="slate-meta-item slate-meta-full">
+                      <span className="slate-meta-k">DATE:</span>
+                      <span className="slate-meta-v">14 OCT 2026</span>
+                      <span className="slate-sync-pill">SYNC SOUND</span>
                     </div>
                   </div>
                 </div>
 
+                {/* Realistic Hands Gripping the Slate */}
+                <div className="crew-hand-left" title="Crew Hand Left" />
+                <div className="crew-hand-right" title="Crew Hand Right" />
+
               </div>
 
-              {/* Realistic Film Crew Member Silhouette with Production Headset */}
-              <svg width="240" height="160" viewBox="0 0 240 160" fill="none" style={{ filter: 'drop-shadow(0 10px 20px rgba(0,0,0,0.8))' }}>
-                <circle cx="120" cy="38" r="26" fill="#1E293B" />
-                <path d="M96 34 C96 16, 144 16, 144 34" stroke="#475569" strokeWidth="5" fill="none" />
-                <rect x="92" y="28" width="9" height="18" rx="4" fill="#64748B" />
-                <rect x="139" y="28" width="9" height="18" rx="4" fill="#64748B" />
-                <path d="M96 38 Q90 54, 108 52" stroke="#64748B" strokeWidth="3" fill="none" />
-                <path d="M60 160 C60 85, 95 72, 120 72 C145 72, 180 85, 180 160 Z" fill="#0F172A" />
-                <path d="M45 40 Q70 50, 85 70" stroke="#1E293B" strokeWidth="14" strokeLinecap="round" />
-                <path d="M195 40 Q170 50, 155 70" stroke="#1E293B" strokeWidth="14" strokeLinecap="round" />
-              </svg>
+              {/* Realistic Film Crew Member Silhouette with Headset */}
+              <div className="crew-silhouette-wrapper">
+                <svg width="280" height="200" viewBox="0 0 280 200" fill="none">
+                  {/* Head */}
+                  <circle cx="140" cy="42" r="28" fill="#0F172A" />
+                  {/* Production Headset Band & Earcups */}
+                  <path d="M112 38 C112 18, 168 18, 168 38" stroke="#64748B" strokeWidth="5" fill="none" />
+                  <rect x="108" y="32" width="10" height="20" rx="4" fill="#94A3B8" />
+                  <rect x="162" y="32" width="10" height="20" rx="4" fill="#94A3B8" />
+                  {/* Boom Mic */}
+                  <path d="M114 44 Q108 58, 126 56" stroke="#94A3B8" strokeWidth="3" fill="none" />
+                  <circle cx="127" cy="56" r="3" fill="#EF4444" />
+                  {/* Crew Torso with Tactical Jacket */}
+                  <path d="M70 200 C70 100, 110 82, 140 82 C170 82, 210 100, 210 200 Z" fill="#0B1120" />
+                  {/* Crew Arms reaching forward to hold slate */}
+                  <path d="M50 48 Q80 65, 100 95" stroke="#0F172A" strokeWidth="18" strokeLinecap="round" />
+                  <path d="M230 48 Q200 65, 180 95" stroke="#0F172A" strokeWidth="18" strokeLinecap="round" />
+                </svg>
+              </div>
 
             </div>
 
           </div>
         )}
 
-        {/* ACT 3: TrueHunt Brand Reveal */}
+        {/* ACT 3: TrueHunt Brand Reveal with Golden Anamorphic Flares */}
         <div className={`truehunt-reveal-stage ${phase === 'TRUEHUNT_REVEAL' || phase === 'FADING_OUT' ? 'stage-active' : ''}`}>
           <div className="cinema-lens-flare" />
+          <div className="cinema-light-burst" />
 
           <div className="truehunt-logo-hero">
-            <img 
-              src={logoImg} 
-              alt="TrueHunt" 
-              className="truehunt-brand-image" 
-            />
+            {/* TrueHunt Emblem Badge */}
+            <div className="truehunt-emblem-container">
+              <img
+                src={emblemImg}
+                alt="TrueHunt Emblem"
+                className="truehunt-emblem-img"
+              />
+            </div>
 
+            {/* TrueHunt Official Logo */}
+            <div className="truehunt-brand-image-wrapper">
+              <img
+                src={logoImg}
+                alt="TrueHunt"
+                className="truehunt-brand-image"
+              />
+              <div className="truehunt-logo-shimmer" />
+            </div>
+
+            {/* Tagline Badge */}
             <div className="cinema-tagline-badge">
-              <Film size={14} />
-              <span>The Film & Entertainment Industry Network</span>
+              <Film size={15} color="#D97706" />
+              <span>THE FILM & ENTERTAINMENT NETWORK</span>
             </div>
 
             <p className="cinema-sub-heading">
-              Connect. Grow. Create the Next Story.
+              Connect. Collaborate. Create the Next Story.
             </p>
 
             <div className="cinema-action-indicator">
-              <span>● Production Rolling</span>
+              <span className="live-dot" />
+              <span>PRODUCTION ROLLING • ENTERING STUDIO</span>
             </div>
           </div>
-
         </div>
-
       </main>
 
       {/* Embedded Cinema Styles (All-in-One Self Contained) */}
@@ -395,14 +456,15 @@ export default function CinematicIntro({ onComplete }) {
           pointer-events: none;
         }
 
+        /* 2.39:1 Anamorphic Cinema Scope Letterbox Bars */
         .cinema-letterbox-bar {
           position: absolute;
           left: 0;
           right: 0;
-          height: clamp(32px, 6vh, 64px);
+          height: clamp(34px, 6.5vh, 70px);
           background: #000000;
           z-index: 50;
-          box-shadow: 0 0 30px rgba(0, 0, 0, 0.9);
+          box-shadow: 0 0 35px rgba(0, 0, 0, 0.95);
         }
 
         .cinema-letterbox-top {
@@ -415,9 +477,10 @@ export default function CinematicIntro({ onComplete }) {
           border-top: 1px solid rgba(255, 255, 255, 0.08);
         }
 
+        /* Top Film Production Status HUD */
         .cinema-hud-header {
           position: absolute;
-          top: clamp(8px, 1.5vh, 16px);
+          top: clamp(8px, 1.8vh, 18px);
           left: 24px;
           right: 24px;
           display: flex;
@@ -428,7 +491,7 @@ export default function CinematicIntro({ onComplete }) {
           letter-spacing: 0.12em;
           font-weight: 600;
           text-transform: uppercase;
-          color: rgba(255, 255, 255, 0.7);
+          color: rgba(255, 255, 255, 0.75);
           pointer-events: none;
         }
 
@@ -437,7 +500,7 @@ export default function CinematicIntro({ onComplete }) {
           align-items: center;
           gap: 8px;
           color: #EF4444;
-          font-family: monospace;
+          font-family: 'Courier New', Courier, monospace;
           font-size: 13px;
           font-weight: 700;
         }
@@ -447,7 +510,7 @@ export default function CinematicIntro({ onComplete }) {
           height: 10px;
           background-color: #EF4444;
           border-radius: 50%;
-          box-shadow: 0 0 12px #EF4444;
+          box-shadow: 0 0 14px #EF4444;
           animation: cinemaPulseRec 1s ease-in-out infinite;
         }
 
@@ -456,453 +519,681 @@ export default function CinematicIntro({ onComplete }) {
           50% { opacity: 0.3; transform: scale(0.85); }
         }
 
+        .cinema-timecode-display {
+          color: #F3F4F6;
+          margin-left: 6px;
+          letter-spacing: 0.08em;
+        }
+
         .cinema-camera-data {
           display: flex;
           align-items: center;
           gap: 16px;
-          font-family: monospace;
-          font-size: 12px;
+          font-family: 'Courier New', Courier, monospace;
+          font-size: 11px;
           color: #9CA3AF;
         }
 
+        @media (max-width: 768px) {
+          .cinema-camera-data {
+            display: none;
+          }
+        }
+
+        /* User Controls (Skip & Audio Toggle) */
         .cinema-action-controls {
           position: absolute;
-          top: clamp(40px, 8vh, 76px);
-          right: clamp(16px, 3vw, 36px);
-          z-index: 70;
+          bottom: clamp(14px, 2.5vh, 26px);
+          right: 24px;
           display: flex;
           align-items: center;
           gap: 12px;
-          pointer-events: auto;
+          z-index: 70;
         }
 
         .cinema-ctrl-btn {
-          background: rgba(15, 23, 42, 0.75);
-          border: 1px solid rgba(255, 255, 255, 0.2);
-          color: #FFFFFF;
-          padding: 8px 16px;
-          border-radius: 9999px;
-          font-size: 13px;
-          font-weight: 600;
-          cursor: pointer;
           display: inline-flex;
           align-items: center;
           gap: 8px;
-          backdrop-filter: blur(12px);
+          padding: 8px 16px;
+          border-radius: 9999px;
+          background-color: rgba(15, 23, 42, 0.85);
+          border: 1px solid rgba(255, 255, 255, 0.18);
+          color: #FFFFFF;
+          font-size: 12px;
+          font-weight: 600;
+          letter-spacing: 0.05em;
+          cursor: pointer;
+          backdrop-filter: blur(8px);
           transition: all 0.2s ease;
+          box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
         }
 
         .cinema-ctrl-btn:hover {
-          background: rgba(128, 24, 35, 0.9);
-          border-color: #F87171;
-          transform: translateY(-1px);
-          box-shadow: 0 4px 16px rgba(128, 24, 35, 0.4);
+          background-color: rgba(30, 41, 59, 0.95);
+          border-color: rgba(255, 255, 255, 0.35);
+          transform: translateY(-2px);
         }
 
+        .cinema-skip-btn {
+          background-color: #801823;
+          border-color: #A01B2B;
+        }
+
+        .cinema-skip-btn:hover {
+          background-color: #991B1B;
+          border-color: #DC2626;
+        }
+
+        /* Soundstage Environment Background */
         .cinema-stage-bg {
           position: absolute;
           inset: 0;
-          background: radial-gradient(circle at 50% 45%, #0B132B 0%, #050811 60%, #020307 100%);
+          background-color: #03060A;
           overflow: hidden;
+        }
+
+        .cinema-stage-bg.camera-shake {
+          animation: cameraShakeImpact 0.22s ease-out;
+        }
+
+        @keyframes cameraShakeImpact {
+          0% { transform: translate(0, 0) scale(1); }
+          25% { transform: translate(-3px, 4px) scale(1.002); }
+          50% { transform: translate(3px, -2px) scale(0.999); }
+          75% { transform: translate(-1px, 1px) scale(1.001); }
+          100% { transform: translate(0, 0) scale(1); }
+        }
+
+        /* Real Movie Set Backdrop Image */
+        .cinema-set-backdrop {
+          position: absolute;
+          inset: 0;
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          object-position: center;
+          filter: brightness(0.45) contrast(1.15) saturate(0.95);
+          transform: scale(1.0);
+          animation: cinemaDollyPush 10s ease-out forwards;
+          transition: filter 1.2s ease, transform 1.2s ease;
+        }
+
+        @keyframes cinemaDollyPush {
+          0% { transform: scale(1.0); }
+          100% { transform: scale(1.07); }
+        }
+
+        .cinema-set-backdrop.backdrop-blurred {
+          filter: brightness(0.25) contrast(1.2) blur(8px);
+          transform: scale(1.08);
+        }
+
+        .cinema-backdrop-overlay {
+          position: absolute;
+          inset: 0;
+          background: radial-gradient(circle at 50% 50%, rgba(3, 7, 18, 0.3) 0%, rgba(3, 7, 18, 0.75) 75%, #030712 100%);
+          pointer-events: none;
         }
 
         .cinema-spotlight-beam {
           position: absolute;
-          top: -120px;
+          top: -20%;
           left: 50%;
           transform: translateX(-50%);
-          width: 580px;
-          height: 800px;
-          background: radial-gradient(ellipse at 50% 0%, rgba(224, 231, 255, 0.22) 0%, rgba(147, 197, 253, 0.08) 40%, transparent 75%);
+          width: clamp(350px, 60vw, 900px);
+          height: 120%;
+          background: radial-gradient(ellipse at 50% 0%, rgba(245, 158, 11, 0.16) 0%, rgba(217, 119, 6, 0.05) 45%, transparent 75%);
           pointer-events: none;
-          filter: blur(28px);
-          animation: cinemaSpotlightSway 8s ease-in-out infinite alternate;
-        }
-
-        @keyframes cinemaSpotlightSway {
-          0% { transform: translateX(-52%) rotate(-2deg); }
-          100% { transform: translateX(-48%) rotate(2deg); }
+          mix-blend-mode: screen;
         }
 
         .cinema-haze-layer {
           position: absolute;
           inset: 0;
-          background: radial-gradient(circle at 50% 60%, rgba(30, 41, 59, 0.4) 0%, transparent 70%);
+          background: linear-gradient(180deg, transparent 0%, rgba(15, 23, 42, 0.35) 65%, rgba(3, 7, 18, 0.8) 100%);
           pointer-events: none;
-          mix-blend-mode: screen;
         }
 
-        .cinema-stage-floor {
+        .cinema-strobe-flash {
           position: absolute;
-          bottom: 0;
-          left: 0;
-          right: 0;
-          height: 260px;
-          background: linear-gradient(to top, rgba(15, 23, 42, 0.95), transparent);
-          border-top: 1px solid rgba(255, 255, 255, 0.05);
-        }
-
-        .cinema-silhouette-equipment {
-          position: absolute;
-          bottom: 40px;
-          width: 100%;
-          display: flex;
-          justify-content: space-between;
-          padding: 0 4vw;
-          opacity: 0.35;
+          inset: 0;
+          background: rgba(255, 255, 255, 0.18);
           pointer-events: none;
-          filter: blur(1.5px);
+          animation: flashFade 0.25s ease-out forwards;
         }
 
+        @keyframes flashFade {
+          0% { opacity: 1; }
+          100% { opacity: 0; }
+        }
+
+        /* Center Stage Layout */
         .cinema-center-stage {
           position: absolute;
           inset: 0;
           display: flex;
           align-items: center;
           justify-content: center;
-          flex-direction: column;
-          z-index: 20;
+          z-index: 40;
+          padding: 20px;
         }
 
+        /* Act 1 & 2: Crew Member & Clapper Scene */
         .crew-clapper-scene {
-          position: relative;
-          width: min(640px, 92vw);
-          height: min(480px, 68vh);
           display: flex;
+          flex-direction: column;
           align-items: center;
-          justify-content: center;
-          transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+          position: relative;
         }
 
         .crew-member-figure {
-          position: absolute;
-          bottom: -40px;
-          left: 50%;
-          transform: translateX(-50%) translateY(40px) scale(0.95);
-          width: 100%;
-          height: 100%;
+          position: relative;
           display: flex;
           flex-direction: column;
           align-items: center;
-          justify-content: flex-end;
-          pointer-events: none;
-          animation: crewWalkIn 1.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+          animation: crewStepIn 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
         }
 
-        @keyframes crewWalkIn {
+        @keyframes crewStepIn {
           0% {
             opacity: 0;
-            transform: translateX(-62%) translateY(140px) scale(0.85);
-          }
-          60% {
-            opacity: 1;
+            transform: translateY(80px) scale(0.92);
           }
           100% {
             opacity: 1;
-            transform: translateX(-50%) translateY(0px) scale(1);
+            transform: translateY(0) scale(1);
           }
         }
 
         .crew-member-figure.crew-exiting {
-          animation: crewWalkOut 0.8s cubic-bezier(0.4, 0, 1, 1) forwards;
+          animation: crewClearFrame 0.75s cubic-bezier(0.7, 0, 0.84, 0) forwards;
         }
 
-        @keyframes crewWalkOut {
+        @keyframes crewClearFrame {
           0% {
             opacity: 1;
-            transform: translateX(-50%) translateY(0px) scale(1);
+            transform: translateY(0) scale(1);
           }
           100% {
             opacity: 0;
-            transform: translateX(-50%) translateY(180px) scale(0.9);
+            transform: translateY(120px) translateX(60px) scale(0.85);
           }
         }
 
+        /* Clapperboard Container */
         .clapperboard-container {
           position: relative;
-          width: min(380px, 85vw);
-          height: min(280px, 50vh);
-          perspective: 1200px;
-          margin-bottom: 20px;
-          filter: drop-shadow(0 25px 45px rgba(0, 0, 0, 0.85));
+          width: clamp(280px, 38vw, 440px);
+          display: flex;
+          flex-direction: column;
+          box-shadow: 0 20px 45px rgba(0, 0, 0, 0.85), 0 0 30px rgba(245, 158, 11, 0.15);
+          border-radius: 8px;
+          margin-bottom: -50px;
+          z-index: 25;
         }
 
         .clapperboard-container.just-clapped {
-          animation: slateRecoilImpact 0.35s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+          animation: clapperRecoilShock 0.25s ease-out;
         }
 
-        @keyframes slateRecoilImpact {
-          0% { transform: translateY(0) scale(1); }
-          25% { transform: translateY(8px) rotate(-1.5deg) scale(0.99); }
-          50% { transform: translateY(-3px) rotate(1deg) scale(1.01); }
-          75% { transform: translateY(2px) scale(1); }
-          100% { transform: translateY(0) scale(1); }
+        @keyframes clapperRecoilShock {
+          0% { transform: scale(1); }
+          30% { transform: scale(0.97) rotate(-0.5deg); }
+          60% { transform: scale(1.02) rotate(0.4deg); }
+          100% { transform: scale(1) rotate(0); }
         }
 
-        .clapper-top-arm {
+        /* Director Callout Speech Bubble */
+        .cinema-callout-bubble {
           position: absolute;
-          top: 0;
-          left: 0;
-          width: 100%;
-          height: clamp(48px, 9vh, 60px);
-          transform-origin: 18px 46px;
-          z-index: 10;
-          transition: transform 0.15s cubic-bezier(0.2, 0.9, 0.2, 1);
-          transform: rotate(0deg);
+          top: -55px;
+          left: 50%;
+          transform: translateX(-50%);
+          background-color: #801823;
+          color: #FFFFFF;
+          padding: 6px 18px;
+          border-radius: 20px;
+          font-size: 13px;
+          font-weight: 700;
+          letter-spacing: 0.08em;
+          box-shadow: 0 4px 15px rgba(128, 24, 35, 0.6);
+          white-space: nowrap;
+          border: 1px solid rgba(255, 255, 255, 0.2);
+          animation: bubbleBounce 0.4s ease-out;
+        }
+
+        @keyframes bubbleBounce {
+          0% { opacity: 0; transform: translateX(-50%) translateY(-10px) scale(0.8); }
+          100% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+        }
+
+        /* Top Hinged Clapper Stick */
+        .clapper-top-arm {
+          position: relative;
+          height: 38px;
+          background: #0B0F19;
+          border-top-left-radius: 8px;
+          border-top-right-radius: 8px;
+          transform-origin: 18px 36px;
+          transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+          z-index: 20;
+          box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.5);
+          border: 2px solid #1E293B;
+          border-bottom: none;
         }
 
         .clapper-top-arm.arm-opened {
-          transform: rotate(-32deg);
+          transform: rotate(-35deg);
         }
 
         .clapper-top-arm.arm-slammed {
-          transform: rotate(0deg);
-          animation: armBounceSnap 0.22s ease-out;
+          animation: clapperSnapDown 0.16s cubic-bezier(0.8, 0, 0.2, 1) forwards;
         }
 
-        @keyframes armBounceSnap {
-          0% { transform: rotate(0deg); }
-          40% { transform: rotate(-5deg); }
-          70% { transform: rotate(1deg); }
+        @keyframes clapperSnapDown {
+          0% { transform: rotate(-35deg); }
+          70% { transform: rotate(1.5deg); }
+          88% { transform: rotate(-1deg); }
           100% { transform: rotate(0deg); }
         }
 
-        .clapper-stripes {
-          width: 100%;
+        /* Multi-Colored Chevron Stripes */
+        .clapper-chevrons-bar {
+          display: flex;
           height: 100%;
-          border-radius: 8px 8px 0 0;
-          background: repeating-linear-gradient(
-            -45deg,
-            #111827 0,
-            #111827 22px,
-            #F3F4F6 22px,
-            #F3F4F6 44px
-          );
-          box-shadow: inset 0 2px 4px rgba(255, 255, 255, 0.2), 0 4px 10px rgba(0, 0, 0, 0.6);
-          border: 2px solid #1F2937;
-          position: relative;
+          width: 100%;
+          overflow: hidden;
+          border-radius: 6px 6px 0 0;
+        }
+
+        .ch-stripe {
+          flex: 1;
+          height: 100%;
+          transform: skewX(-26deg);
+        }
+
+        .ch-green { background-color: #10B981; }
+        .ch-red { background-color: #EF4444; }
+        .ch-yellow { background-color: #F59E0B; }
+        .ch-blue { background-color: #3B82F6; }
+        .ch-white { background-color: #F3F4F6; }
+        .ch-black { background-color: #111827; }
+
+        .clapper-fixed-bar {
+          height: 24px;
+          background: #0B0F19;
+          border-left: 2px solid #1E293B;
+          border-right: 2px solid #1E293B;
+          border-bottom: 2px solid #1E293B;
         }
 
         .clapper-hinge-pin {
           position: absolute;
-          left: 14px;
-          bottom: 8px;
+          left: 12px;
+          bottom: 4px;
           width: 14px;
           height: 14px;
-          background: radial-gradient(circle at 35% 35%, #9CA3AF 0%, #4B5563 60%, #1F2937 100%);
           border-radius: 50%;
-          border: 1px solid #111827;
-          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
-          z-index: 20;
+          background: radial-gradient(circle, #E2E8F0 30%, #475569 80%);
+          border: 1px solid #1E293B;
+          box-shadow: 0 2px 5px rgba(0,0,0,0.6);
+          z-index: 30;
         }
 
+        /* White Acrylic Slate Body */
         .clapper-board-body {
-          position: absolute;
-          top: clamp(48px, 9vh, 60px);
-          left: 0;
-          width: 100%;
-          height: calc(100% - clamp(48px, 9vh, 60px));
-          background-color: #111827;
-          border-radius: 0 0 10px 10px;
-          border: 3px solid #1F2937;
-          border-top: 3px solid #000000;
-          padding: 14px;
-          box-sizing: border-box;
-          display: flex;
-          flex-direction: column;
-          justify-content: space-between;
-          box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.8), 0 15px 35px rgba(0, 0, 0, 0.7);
+          background-color: #FFFFFF;
+          color: #0F172A;
+          padding: 16px 18px;
+          border-radius: 0 0 8px 8px;
+          border: 2px solid #1E293B;
+          border-top: none;
+          box-shadow: inset 0 2px 6px rgba(0,0,0,0.1);
         }
 
         .slate-header-title {
           display: flex;
-          justify-content: space-between;
           align-items: center;
-          border-bottom: 2px solid rgba(255, 255, 255, 0.2);
-          padding-bottom: 6px;
-          margin-bottom: 8px;
+          justify-content: space-between;
+          border-bottom: 2px solid #0F172A;
+          padding-bottom: 8px;
+          margin-bottom: 10px;
+        }
+
+        .slate-prod-label {
+          font-size: 11px;
+          font-weight: 800;
+          letter-spacing: 0.1em;
+          color: #475569;
         }
 
         .slate-prod-name {
-          font-size: clamp(14px, 2.5vw, 18px);
-          font-weight: 800;
-          color: #FFFFFF;
-          letter-spacing: 0.08em;
-          font-family: 'Courier New', monospace;
-          text-transform: uppercase;
+          font-size: 18px;
+          font-weight: 900;
+          letter-spacing: 0.14em;
+          color: #801823;
         }
 
+        .slate-fps-badge {
+          font-family: 'Courier New', Courier, monospace;
+          font-size: 11px;
+          font-weight: 700;
+          background: #0F172A;
+          color: #FFFFFF;
+          padding: 2px 6px;
+          border-radius: 3px;
+        }
+
+        /* Scene Take Roll Grid */
         .slate-grid-row {
           display: grid;
           grid-template-columns: 1fr 1fr 1fr;
-          gap: 6px;
-          border-bottom: 1.5px solid rgba(255, 255, 255, 0.15);
-          padding-bottom: 8px;
-          margin-bottom: 8px;
+          gap: 8px;
+          border-bottom: 2px solid #0F172A;
+          padding-bottom: 10px;
+          margin-bottom: 10px;
         }
 
         .slate-cell {
-          background: rgba(255, 255, 255, 0.04);
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          padding: 6px 8px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          background-color: #F8FAFC;
+          border: 1.5px solid #CBD5E1;
           border-radius: 4px;
-          text-align: center;
+          padding: 6px 4px;
+        }
+
+        .slate-cell-take {
+          border-color: #801823;
+          background-color: #FFF1F2;
         }
 
         .slate-cell-label {
-          display: block;
           font-size: 9px;
-          letter-spacing: 0.08em;
-          color: #9CA3AF;
-          font-weight: 700;
-          text-transform: uppercase;
-          margin-bottom: 2px;
+          font-weight: 800;
+          letter-spacing: 0.12em;
+          color: #64748B;
+        }
+
+        .slate-cell-take .slate-cell-label {
+          color: #801823;
         }
 
         .slate-cell-value {
-          font-family: 'Courier New', monospace;
-          font-size: clamp(15px, 2.8vw, 20px);
-          font-weight: 800;
-          color: #FFFFFF;
+          font-size: 24px;
+          font-weight: 900;
+          font-family: 'Courier New', Courier, monospace;
+          color: #0F172A;
+          margin-top: 2px;
         }
 
-        .slate-meta-row {
+        .slate-cell-take .slate-cell-value {
+          color: #801823;
+        }
+
+        /* Metadata Grid */
+        .slate-meta-grid {
           display: grid;
-          grid-template-columns: 1.4fr 1fr;
-          gap: 8px;
-          font-size: 11px;
-          color: #D1D5DB;
-          font-family: 'Courier New', monospace;
-        }
-
-        .cinema-callout-bubble {
-          position: absolute;
-          top: -46px;
-          left: 50%;
-          transform: translateX(-50%);
-          background: rgba(128, 24, 35, 0.95);
-          border: 1px solid #F87171;
-          padding: 6px 18px;
-          border-radius: 9999px;
-          font-size: 13px;
+          grid-template-columns: 1fr 1fr;
+          gap: 6px 12px;
+          font-size: 10px;
           font-weight: 700;
-          letter-spacing: 0.06em;
+          color: #1E293B;
+        }
+
+        .slate-meta-k {
+          color: #64748B;
+          margin-right: 4px;
+        }
+
+        .slate-meta-v {
+          color: #0F172A;
+        }
+
+        .slate-meta-full {
+          grid-column: 1 / -1;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          border-top: 1px dashed #CBD5E1;
+          padding-top: 6px;
+          margin-top: 2px;
+        }
+
+        .slate-sync-pill {
+          background-color: #059669;
           color: #FFFFFF;
-          box-shadow: 0 4px 20px rgba(128, 24, 35, 0.6);
-          white-space: nowrap;
-          animation: calloutPop 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+          padding: 1px 6px;
+          border-radius: 3px;
+          font-size: 8px;
+          font-weight: 800;
+          letter-spacing: 0.05em;
         }
 
-        @keyframes calloutPop {
-          0% { opacity: 0; transform: translateX(-50%) translateY(8px) scale(0.9); }
-          100% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+        /* Realistic Hands holding slate sides */
+        .crew-hand-left {
+          position: absolute;
+          left: -18px;
+          top: 45%;
+          width: 28px;
+          height: 60px;
+          background: #B45309;
+          border-radius: 12px 4px 4px 12px;
+          box-shadow: 2px 4px 10px rgba(0, 0, 0, 0.4);
+          border: 2px solid #78350F;
         }
 
+        .crew-hand-right {
+          position: absolute;
+          right: -18px;
+          top: 45%;
+          width: 28px;
+          height: 60px;
+          background: #B45309;
+          border-radius: 4px 12px 12px 4px;
+          box-shadow: -2px 4px 10px rgba(0, 0, 0, 0.4);
+          border: 2px solid #78350F;
+        }
+
+        .crew-silhouette-wrapper {
+          filter: drop-shadow(0 15px 30px rgba(0, 0, 0, 0.9));
+        }
+
+        /* Act 3: TrueHunt Brand Reveal Stage */
         .truehunt-reveal-stage {
           position: absolute;
           inset: 0;
           display: flex;
           align-items: center;
           justify-content: center;
-          flex-direction: column;
-          z-index: 30;
           opacity: 0;
+          pointer-events: none;
           transform: scale(0.92);
           transition: all 0.9s cubic-bezier(0.16, 1, 0.3, 1);
-          pointer-events: none;
         }
 
         .truehunt-reveal-stage.stage-active {
           opacity: 1;
+          pointer-events: auto;
           transform: scale(1);
         }
 
         .cinema-lens-flare {
           position: absolute;
-          top: 50%;
-          left: 50%;
-          transform: translate(-50%, -50%);
-          width: min(850px, 98vw);
-          height: 6px;
-          background: linear-gradient(90deg, transparent 0%, rgba(251, 191, 36, 0.2) 20%, #F59E0B 50%, rgba(251, 191, 36, 0.2) 80%, transparent 100%);
-          filter: blur(2px);
-          box-shadow: 0 0 35px #F59E0B, 0 0 80px rgba(245, 158, 11, 0.8);
-          animation: flareExpand 1.2s ease-out forwards;
+          width: 140%;
+          height: 4px;
+          background: linear-gradient(90deg, transparent 0%, rgba(245, 158, 11, 0.2) 20%, rgba(255, 255, 255, 0.9) 50%, rgba(245, 158, 11, 0.2) 80%, transparent 100%);
+          box-shadow: 0 0 40px rgba(245, 158, 11, 0.7);
+          animation: lensFlareSweep 2.2s ease-in-out infinite alternate;
         }
 
-        @keyframes flareExpand {
-          0% { width: 0; opacity: 0; }
-          50% { opacity: 1; }
-          100% { width: min(900px, 98vw); opacity: 0.85; }
+        @keyframes lensFlareSweep {
+          0% { transform: translateY(-40px) scaleX(0.7); opacity: 0.6; }
+          100% { transform: translateY(40px) scaleX(1.1); opacity: 1; }
+        }
+
+        .cinema-light-burst {
+          position: absolute;
+          width: 500px;
+          height: 500px;
+          border-radius: 50%;
+          background: radial-gradient(circle, rgba(245, 158, 11, 0.2) 0%, rgba(128, 24, 35, 0.1) 40%, transparent 70%);
+          animation: burstPulse 3s ease-in-out infinite alternate;
+        }
+
+        @keyframes burstPulse {
+          0% { transform: scale(0.9); opacity: 0.6; }
+          100% { transform: scale(1.15); opacity: 1; }
         }
 
         .truehunt-logo-hero {
+          position: relative;
           display: flex;
           flex-direction: column;
           align-items: center;
           text-align: center;
-          gap: 16px;
-          z-index: 40;
+          z-index: 30;
+          max-width: 680px;
+          padding: 24px;
+        }
+
+        .truehunt-emblem-container {
+          width: 86px;
+          height: 86px;
+          margin-bottom: 16px;
+          border-radius: 20px;
+          background: rgba(15, 23, 42, 0.75);
+          border: 1.5px solid rgba(245, 158, 11, 0.5);
+          box-shadow: 0 10px 25px rgba(0, 0, 0, 0.6), 0 0 25px rgba(245, 158, 11, 0.3);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 8px;
+          animation: emblemFloat 3s ease-in-out infinite alternate;
+        }
+
+        @keyframes emblemFloat {
+          0% { transform: translateY(0); }
+          100% { transform: translateY(-6px); }
+        }
+
+        .truehunt-emblem-img {
+          width: 100%;
+          height: 100%;
+          object-fit: contain;
+        }
+
+        .truehunt-brand-image-wrapper {
+          position: relative;
+          overflow: hidden;
+          padding: 4px 12px;
         }
 
         .truehunt-brand-image {
-          max-width: min(360px, 82vw);
-          height: auto;
-          filter: drop-shadow(0 12px 30px rgba(0, 0, 0, 0.9)) drop-shadow(0 0 25px rgba(128, 24, 35, 0.6));
-          animation: brandImageZoom 1.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+          height: clamp(56px, 10vw, 84px);
+          width: auto;
+          object-fit: contain;
+          filter: drop-shadow(0 8px 24px rgba(0, 0, 0, 0.75));
         }
 
-        @keyframes brandImageZoom {
-          0% { transform: scale(0.85); opacity: 0; filter: blur(8px); }
-          100% { transform: scale(1); opacity: 1; filter: blur(0); }
+        .truehunt-logo-shimmer {
+          position: absolute;
+          inset: 0;
+          background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.4) 50%, transparent 100%);
+          transform: translateX(-100%) skewX(-20deg);
+          animation: logoShimmerPass 3.5s ease-in-out infinite;
+        }
+
+        @keyframes logoShimmerPass {
+          0% { transform: translateX(-100%) skewX(-20deg); }
+          40%, 100% { transform: translateX(200%) skewX(-20deg); }
         }
 
         .cinema-tagline-badge {
           display: inline-flex;
           align-items: center;
           gap: 8px;
-          padding: 6px 18px;
-          background: rgba(128, 24, 35, 0.85);
-          border: 1px solid rgba(248, 113, 113, 0.6);
+          margin-top: 18px;
+          padding: 6px 16px;
           border-radius: 9999px;
-          color: #FFFFFF;
-          font-size: 13px;
+          background: rgba(30, 41, 59, 0.7);
+          border: 1px solid rgba(245, 158, 11, 0.4);
+          color: #F3F4F6;
+          font-size: 11px;
           font-weight: 700;
-          letter-spacing: 0.08em;
+          letter-spacing: 0.14em;
           text-transform: uppercase;
-          box-shadow: 0 6px 25px rgba(128, 24, 35, 0.5);
-          animation: badgeSlideUp 0.8s 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
-        }
-
-        @keyframes badgeSlideUp {
-          0% { opacity: 0; transform: translateY(16px); }
-          100% { opacity: 1; transform: translateY(0); }
+          box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
         }
 
         .cinema-sub-heading {
-          font-size: clamp(16px, 2.5vw, 22px);
+          font-size: 16px;
           color: #E2E8F0;
+          margin-top: 12px;
           font-weight: 500;
-          letter-spacing: -0.01em;
-          max-width: 540px;
-          line-height: 1.5;
-          margin: 0;
-          animation: badgeSlideUp 0.8s 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+          letter-spacing: 0.04em;
+          text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8);
         }
 
         .cinema-action-indicator {
-          margin-top: 14px;
-          font-size: 14px;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin-top: 16px;
+          font-size: 11px;
           font-weight: 700;
-          color: #F87171;
-          letter-spacing: 0.15em;
-          text-transform: uppercase;
-          animation: actionPulse 1.2s infinite alternate;
+          letter-spacing: 0.12em;
+          color: #D97706;
+          font-family: 'Courier New', Courier, monospace;
         }
 
-        @keyframes actionPulse {
-          0% { opacity: 0.6; transform: scale(0.98); }
-          100% { opacity: 1; transform: scale(1.02); }
+        .live-dot {
+          width: 8px;
+          height: 8px;
+          background-color: #D97706;
+          border-radius: 50%;
+          animation: pulseDot 1s infinite alternate;
+        }
+
+        @keyframes pulseDot {
+          0% { opacity: 0.4; }
+          100% { opacity: 1; transform: scale(1.2); }
+        }
+
+        /* Mobile & Small Device Optimization */
+        @media (max-width: 640px) {
+          .clapperboard-container {
+            width: 90vw;
+            margin-bottom: -30px;
+          }
+
+          .slate-header-title {
+            padding-bottom: 4px;
+            margin-bottom: 6px;
+          }
+
+          .slate-prod-name {
+            font-size: 15px;
+          }
+
+          .slate-cell-value {
+            font-size: 18px;
+          }
+
+          .slate-meta-grid {
+            font-size: 9px;
+          }
+
+          .crew-silhouette-wrapper svg {
+            width: 220px;
+            height: 150px;
+          }
+
+          .truehunt-sub-heading {
+            font-size: 13px;
+          }
         }
       `}</style>
     </div>
