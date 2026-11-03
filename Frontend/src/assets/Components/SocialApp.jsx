@@ -25,19 +25,194 @@ const navigationHashes = {
   business: 'business',
 }
 
-const cinemaTypeFilters = [
-  { label: 'Hero / Lead', value: 'Hero', terms: ['hero', 'lead actor', 'leading actor', 'lead actress', 'leading actress', 'protagonist'] },
-  { label: 'Child artist', value: 'Child Artist', terms: ['child artist', 'child actor', 'child actress', 'child performer'] },
-  { label: 'Side character', value: 'Side Character', terms: ['side character', 'supporting character', 'supporting actor', 'supporting actress', 'character actor'] },
-  { label: 'Mother character', value: 'Mother', terms: ['mother character', 'mother role', 'mother'] },
-  { label: 'Father character', value: 'Father Character', terms: ['father character', 'father role', 'father']
-   },
-  { label: 'Villain / Antagonist', value: 'Villain', terms: ['villain', 'antagonist', 'bad guy', 'bad character'] },
-  { label: 'Comedian / Comic role', value: 'Comedian', terms: ['comedian', 'comic role', 'comic actor', 'comic actress'] },
-  { label: 'Supporting role', value: 'Supporting Role', terms: ['supporting role', 'supporting actor', 'supporting actress'] },
-  { label: 'Cameo / Guest appearance', value: 'Cameo', terms: ['cameo', 'guest appearance', 'guest role'] },
-  { label: 'Extra / Background artist', value: 'Extra', terms: ['extra', 'background artist', 'background actor', 'background actress'] },
-]
+const cinemaTypesByCraft = {
+  Acting: [
+    'Hero / Lead Actor', 'Heroine / Lead Actress', 'Child Artist', 'Side Character',
+    'Mother Character', 'Father Character', 'Villain / Antagonist', 'Main Antagonist',
+    'Comedian / Comic Role', 'Supporting Role', 'Cameo / Guest Appearance',
+    'Extra / Background Artist', 'Character Artist', 'Romantic Lead', 'Action Hero',
+    'Action Heroine', 'Police Officer Character', 'Doctor Character', 'Lawyer Character',
+    'Historical Character', 'Dancer / Special Appearance', 'Voice Actor',
+  ],
+  'Art Director': [
+    'Production Designer', 'Art Director', 'Assistant Art Director', 'Set Designer',
+    'Set Decorator', 'Prop Designer', 'Prop Master', 'Set Construction Supervisor',
+    'Model Maker', 'Concept Artist', 'Art Illustrator', 'Location Art Designer',
+    'Graphic Art Designer', 'Set Painter',
+  ],
+  'Assistant Director': [
+    'First Assistant Director', 'Second Assistant Director', 'Third Assistant Director',
+    'Chief Assistant Director', 'Associate Director', 'Additional Assistant Director',
+    'Script Supervisor', 'Continuity Assistant', 'Floor Manager',
+    'Shooting Schedule Coordinator', 'Crowd Coordinator', 'Direction Team Assistant',
+  ],
+  'Audiography (Sound Recording/Mixing)': [
+    'Sound Designer', 'Production Sound Mixer', 'Location Sound Recordist', 'Boom Operator',
+    'Sound Editor', 'Dialogue Editor', 'Foley Artist', 'Foley Recordist',
+    'Re-recording Mixer', 'Audio Mixing Engineer', 'Audio Mastering Engineer',
+    'Sound Effects Editor', 'ADR Recordist', 'Surround Sound Engineer',
+  ],
+  'Camera Operator': [
+    'Main Camera Operator', 'Assistant Camera Operator', 'First AC / Focus Puller', 'Second AC',
+    'Camera Assistant', 'Steadicam Operator', 'Gimbal Operator', 'Drone Camera Operator',
+    'Jib Operator', 'Crane Camera Operator', 'Underwater Camera Operator', 'Camera Technician',
+    'Video Assist Operator', 'Digital Imaging Technician (DIT)',
+  ],
+  Choreographer: [
+    'Dance Choreographer', 'Assistant Choreographer', 'Classical Dance Choreographer',
+    'Western Dance Choreographer', 'Folk Dance Choreographer', 'Hip-Hop Choreographer',
+    'Contemporary Dance Choreographer', 'Group Dance Choreographer',
+    'Wedding Song Choreographer', 'Background Dancers Coordinator', 'Dance Trainer',
+    'Movement Coach',
+  ],
+  'Cinematographer (DOP)': [
+    'Director of Photography', 'Associate Cinematographer', 'Assistant Cinematographer',
+    'Lighting Director', 'Camera Lighting Specialist', 'Second Unit Cinematographer',
+    'Steadicam Cinematographer', 'Drone Cinematographer', 'Underwater Cinematographer',
+    'Documentary Cinematographer', 'Digital Imaging Specialist',
+  ],
+  'Costume Designer': [
+    'Costume Designer', 'Assistant Costume Designer', 'Costume Stylist', 'Costume Supervisor',
+    'Costume Assistant', 'Wardrobe Supervisor', 'Wardrobe Assistant', 'Costume Tailor',
+    'Costume Cutter', 'Costume Illustrator', 'Costume Researcher',
+    'Costume Continuity Assistant', 'Traditional Costume Specialist', 'Period Costume Designer',
+  ],
+  'Dialogue Writer': [
+    'Lead Dialogue Writer', 'Assistant Dialogue Writer', 'Telugu Dialogue Writer',
+    'Hindi Dialogue Writer', 'Tamil Dialogue Writer', 'Comedy Dialogue Writer',
+    'Action Dialogue Writer', 'Romantic Dialogue Writer', 'Emotional Dialogue Writer',
+    'Political Dialogue Writer', 'Dubbing Dialogue Adapter', 'Dialogue Polisher',
+  ],
+  Director: [
+    'Film Director', 'Associate Director', 'Assistant Director', 'Co-Director',
+    'Second Unit Director', 'Action Sequence Director', 'Music Video Director',
+    'Short Film Director', 'Documentary Director', 'Commercial Advertisement Director',
+    'Web Series Director', 'Episodic Director', 'Creative Director',
+  ],
+  'Dubbing Artist': [
+    'Male Dubbing Artist', 'Female Dubbing Artist', 'Child Voice Artist', 'Hero Voice Artist',
+    'Heroine Voice Artist', 'Villain Voice Artist', 'Character Voice Artist',
+    'Comedy Voice Artist', 'Narrator', 'Voice-over Artist', 'Animation Voice Artist',
+    'Multilingual Dubbing Artist', 'ADR Artist',
+  ],
+  Editor: [
+    'Film Editor', 'Assistant Editor', 'Associate Editor', 'Trailer Editor', 'Teaser Editor',
+    'Song Editor', 'Action Sequence Editor', 'Dialogue Editor', 'Montage Editor',
+    'Documentary Editor', 'VFX Editor', 'Online Editor', 'Offline Editor', 'Colorist',
+    'Post-production Supervisor',
+  ],
+  'Junior Artists & Agents': [
+    'Junior Artist', 'Background Artist', 'Crowd Artist', 'Junior Artist Coordinator',
+    'Casting Agent', 'Casting Coordinator', 'Casting Assistant', 'Artist Manager',
+    'Artist Booking Agent', 'Crowd Manager', 'Location Artist Coordinator',
+    'Extra Artist Supplier',
+  ],
+  'Makeup & Hair Stylist': [
+    'Makeup Artist', 'Assistant Makeup Artist', 'Hair Stylist', 'Assistant Hair Stylist',
+    'Character Makeup Artist', 'Bridal Makeup Artist', 'Prosthetic Makeup Artist',
+    'Special Effects Makeup Artist', 'Body Makeup Artist', 'Bald Cap Specialist',
+    'Wig Stylist', 'Hair Continuity Assistant', 'Makeup Supervisor',
+  ],
+  'Music Composer': [
+    'Music Director', 'Music Composer', 'Background Score Composer', 'Song Composer',
+    'Assistant Music Director', 'Music Arranger', 'Orchestrator', 'Music Programmer',
+    'Keyboard Programmer', 'Instrumentalist', 'Music Producer', 'Theme Music Composer',
+    'Jingle Composer', 'Soundtrack Producer',
+  ],
+  'Outdoor Lightmen': [
+    'Chief Lighting Technician', 'Gaffer', 'Best Boy Electric', 'Lighting Technician',
+    'Assistant Lighting Technician', 'LED Lighting Technician', 'HMI Lighting Technician',
+    'Generator Operator', 'Lighting Rigging Technician', 'Grip Technician',
+    'Rigging Electrician', 'Lighting Equipment Assistant',
+  ],
+  Producer: [
+    'Film Producer', 'Executive Producer', 'Co-Producer', 'Associate Producer',
+    'Line Producer', 'Creative Producer', 'Supervising Producer', 'Development Producer',
+    'Production Partner', 'Financial Producer', 'Independent Film Producer',
+    'Executive Production Manager',
+  ],
+  'Production Executive': [
+    'Production Executive', 'Production Manager', 'Associate Production Manager',
+    'Production Coordinator', 'Assistant Production Coordinator',
+    'Line Production Coordinator', 'Location Manager', 'Location Assistant',
+    'Logistics Coordinator', 'Travel Coordinator', 'Budget Coordinator',
+    'Accounts Coordinator', 'Unit Production Manager', 'Production Secretary',
+  ],
+  'Publicity Designer': [
+    'Movie Poster Designer', 'Graphic Designer', 'Motion Graphic Designer', 'Title Designer',
+    'Teaser Designer', 'Trailer Graphics Designer', 'Social Media Designer',
+    'Promotional Banner Designer', 'Film Branding Designer', 'Typography Designer',
+    'Photo Manipulation Artist', 'Digital Marketing Creative Designer',
+  ],
+  'Screenplay Writer': [
+    'Screenplay Writer', 'Assistant Screenplay Writer', 'Scriptwriter',
+    'Story Screenplay Adapter', 'Scene Writer', 'Co-Screenplay Writer',
+    'Script Consultant', 'Script Doctor', 'Series Screenplay Writer',
+    'Short Film Screenplay Writer', 'Web Series Scriptwriter', 'Screenplay Researcher',
+  ],
+  'Story Writer': [
+    'Story Writer', 'Original Story Writer', 'Concept Writer', 'Plot Developer',
+    'Story Developer', 'Story Consultant', 'Co-Story Writer', 'Adaptation Writer',
+    'Fiction Writer', 'Short Film Story Writer', 'Web Series Story Writer',
+    'Story Researcher',
+  ],
+  'Still Photographer': [
+    'Movie Still Photographer', 'Behind-the-Scenes Photographer', 'Set Photographer',
+    'Celebrity Photographer', 'Portrait Photographer', 'Promotional Photographer',
+    'Publicity Photographer', 'Event Photographer', 'Candid Photographer',
+    'Production Unit Photographer', 'Photo Editor',
+  ],
+  'Stunt Director (Action)': [
+    'Stunt Director', 'Action Director', 'Fight Master', 'Assistant Fight Master',
+    'Stunt Coordinator', 'Stunt Performer', 'Fight Choreographer', 'Martial Arts Performer',
+    'Wire Stunt Specialist', 'Vehicle Stunt Coordinator', 'Horse Stunt Specialist',
+    'Fire Stunt Specialist', 'High Fall Stunt Specialist', 'Stunt Safety Supervisor',
+    'Stunt Double',
+  ],
+  'Studio/Production Support Workers': [
+    'Production Assistant', 'Set Assistant', 'Studio Assistant', 'Equipment Assistant',
+    'Camera Equipment Assistant', 'Lighting Equipment Assistant', 'Art Department Assistant',
+    'Carpenter', 'Set Painter', 'Electrician', 'Generator Operator', 'Production Driver',
+    'Set Cleaner', 'Props Assistant', 'Studio Maintenance Technician',
+    'Production Office Assistant',
+  ],
+  'VFX & Animation': [
+    'VFX Artist', 'VFX Supervisor', 'VFX Producer', 'Compositor', '3D Artist',
+    '3D Modeler', '3D Animator', 'Character Animator', 'Visual Effects Editor',
+    'Rotoscope Artist', 'Matte Painter', 'Motion Graphics Artist', 'CGI Artist',
+    'Lighting and Rendering Artist', 'Texture Artist', 'Rigging Artist',
+    'Animation Director', 'Storyboard Artist',
+  ],
+}
+
+function combineCraftRoles(...crafts) {
+  return [...new Set(crafts.flatMap((craft) => cinemaTypesByCraft[craft] || []))]
+}
+
+Object.assign(cinemaTypesByCraft, {
+  Direction: combineCraftRoles('Director', 'Assistant Director'),
+  Cinematography: combineCraftRoles('Cinematographer (DOP)', 'Camera Operator', 'Outdoor Lightmen'),
+  Editing: cinemaTypesByCraft.Editor,
+  Screenwriting: combineCraftRoles('Screenplay Writer', 'Story Writer', 'Dialogue Writer'),
+  'Art Direction': cinemaTypesByCraft['Art Director'],
+  'Sound Design': cinemaTypesByCraft['Audiography (Sound Recording/Mixing)'],
+  Music: cinemaTypesByCraft['Music Composer'],
+  'Dance & Choreography': cinemaTypesByCraft.Choreographer,
+  'Production Management': combineCraftRoles('Producer', 'Production Executive'),
+  'Makeup & Costume': combineCraftRoles('Makeup & Hair Stylist', 'Costume Designer'),
+})
+
+const cinemaTypeFiltersByCraft = Object.fromEntries(
+  Object.entries(cinemaTypesByCraft).map(([craft, roles]) => [
+    craft,
+    roles.map((role) => ({
+      label: role,
+      value: role,
+      terms: [role.toLowerCase()],
+    })),
+  ])
+)
+const noCinemaTypeFilters = []
 
 const genderFilters = [
   'Female',
@@ -55,6 +230,7 @@ const skinToneFilters = [
 ]
 
 const bodyBuildFilters = ['Slim', 'Average', 'Athletic', 'Plus-size']
+const facialHairFilters = ['Clean-shaven', 'Mustache', 'Beard', 'Goatee', 'Stubble']
 
 const experienceFilters = [
   { label: '0-2 years', value: '0-2', min: 0, max: 2 },
@@ -132,6 +308,7 @@ function Navigation({
   const [genderDraft, setGenderDraft] = useState([])
   const [skinToneDraft, setSkinToneDraft] = useState([])
   const [bodyBuildDraft, setBodyBuildDraft] = useState([])
+  const [facialHairDraft, setFacialHairDraft] = useState([])
   const [heightRangeDraft, setHeightRangeDraft] = useState({ min: '', max: '' })
   const [weightRangeDraft, setWeightRangeDraft] = useState({ min: '', max: '' })
   const [experienceDraft, setExperienceDraft] = useState([])
@@ -151,14 +328,19 @@ function Navigation({
     setActiveNavigation(navigation)
     setIsMobileMenuOpen(false)
     setIsProfileMenuOpen(false)
+    setReferralId('')
+    setReferralSearchMessage('')
   }
+
+  const selectedCinemaTypeFilters = cinemaTypeFiltersByCraft[talentCategoryDraft] || noCinemaTypeFilters
+  const isActingFilterContext = talentCategoryDraft === 'Acting'
 
   const searchResults = useMemo(() => {
     if (!hasSearched) return []
 
     const keyword = searchQueryDraft.trim().toLowerCase()
     const location = searchLocationDraft.trim().toLowerCase()
-    const selectedCinemaTypes = cinemaTypeFilters.filter((filter) => cinemaTypeDraft.includes(filter.value))
+    const selectedCinemaTypes = selectedCinemaTypeFilters.filter((filter) => cinemaTypeDraft.includes(filter.value))
     const selectedExperienceRanges = experienceFilters.filter((filter) => experienceDraft.includes(filter.value))
 
     return talentDirectory.filter((talent) => {
@@ -185,7 +367,8 @@ function Navigation({
       const matchesKeyword = !keyword || searchableText.includes(keyword)
       const matchesLocation = !location || (talent.location || '').toLowerCase().includes(location)
       const matchesCategory = talentCategoryDraft === 'All'
-        || (talent.category || '').toLowerCase() === talentCategoryDraft.toLowerCase()
+        || [talent.category, talent.primaryCraft, talent.craft]
+          .some((craft) => String(craft || '').toLowerCase() === talentCategoryDraft.toLowerCase())
       const matchesCinemaType = selectedCinemaTypes.length === 0
         || selectedCinemaTypes.some((filter) => filter.terms.some((term) => searchableText.includes(term)))
       const matchesGender = genderDraft.length === 0
@@ -195,6 +378,9 @@ function Navigation({
       const bodyBuild = (talent.bodyBuild || '').toLowerCase()
       const matchesBodyBuild = bodyBuildDraft.length === 0
         || bodyBuildDraft.some((build) => bodyBuild === build.toLowerCase())
+      const facialHair = String(talent.facialHair ?? talent.facial_hair ?? '').trim().toLowerCase()
+      const matchesFacialHair = facialHairDraft.length === 0
+        || facialHairDraft.some((style) => facialHair === style.toLowerCase())
       const height = Number.parseFloat(String(talent.height ?? ''))
       const minHeight = heightRangeDraft.min === '' ? null : Number(heightRangeDraft.min)
       const maxHeight = heightRangeDraft.max === '' ? null : Number(heightRangeDraft.max)
@@ -221,16 +407,19 @@ function Navigation({
         && matchesGender
         && matchesSkinTone
         && matchesBodyBuild
+        && matchesFacialHair
         && matchesHeight
         && matchesWeight
         && matchesExperience
     })
   }, [
     cinemaTypeDraft,
+    selectedCinemaTypeFilters,
     genderDraft,
     hasSearched,
     experienceDraft,
     bodyBuildDraft,
+    facialHairDraft,
     heightRangeDraft,
     searchLocationDraft,
     searchQueryDraft,
@@ -461,6 +650,7 @@ function Navigation({
                           setGenderDraft([])
                           setSkinToneDraft([])
                           setBodyBuildDraft([])
+                          setFacialHairDraft([])
                           setHeightRangeDraft({ min: '', max: '' })
                           setWeightRangeDraft({ min: '', max: '' })
                           setExperienceDraft([])
@@ -472,140 +662,175 @@ function Navigation({
                         Clear all
                       </button>
                     </div>
-                    <fieldset className="social-talent-filter-group">
-                      <legend>Cinema type</legend>
-                      {cinemaTypeFilters.map((filter) => (
-                        <label className="social-talent-filter-option" key={filter.value}>
-                          <input
-                            type="checkbox"
-                            name="cinema-type"
-                            value={filter.value}
-                            checked={cinemaTypeDraft.includes(filter.value)}
-                            onChange={() => setCinemaTypeDraft((selected) => (
-                              selected.includes(filter.value)
-                                ? selected.filter((value) => value !== filter.value)
-                                : [...selected, filter.value]
+                    {selectedCinemaTypeFilters.length > 0 && (
+                      <fieldset className="social-talent-filter-group">
+                        <legend>{isActingFilterContext ? 'Cinema type' : 'Role / sub-craft'}</legend>
+                        {selectedCinemaTypeFilters.map((filter) => (
+                          <label className="social-talent-filter-option" key={filter.value}>
+                            <input
+                              type="checkbox"
+                              name="cinema-type"
+                              value={filter.value}
+                              checked={cinemaTypeDraft.includes(filter.value)}
+                              onChange={() => setCinemaTypeDraft((selected) => (
+                                selected.includes(filter.value)
+                                  ? selected.filter((value) => value !== filter.value)
+                                  : [...selected, filter.value]
+                              ))}
+                            />
+                            <span>{filter.label}</span>
+                          </label>
+                        ))}
+                      </fieldset>
+                    )}
+                    {isActingFilterContext && (
+                      <>
+                        <fieldset className="social-talent-filter-group">
+                          <legend>Gender</legend>
+                          {genderFilters.map((gender) => (
+                            <label className="social-talent-filter-option" key={gender}>
+                              <input
+                                type="checkbox"
+                                name="talent-gender"
+                                value={gender}
+                                checked={genderDraft.includes(gender)}
+                                onChange={() => {
+                                  const removesMale = gender === 'Male' && genderDraft.includes('Male')
+                                  setGenderDraft((selected) => {
+                                    return selected.includes(gender)
+                                      ? selected.filter((value) => value !== gender)
+                                      : [...selected, gender]
+                                  })
+                                  if (removesMale) setFacialHairDraft([])
+                                }}
+                              />
+                              <span>{gender}</span>
+                            </label>
+                          ))}
+                        </fieldset>
+                        {genderDraft.includes('Male') && (
+                          <fieldset className="social-talent-filter-group">
+                            <legend>Facial hair</legend>
+                            {facialHairFilters.map((style) => (
+                              <label className="social-talent-filter-option" key={style}>
+                                <input
+                                  type="checkbox"
+                                  name="talent-facial-hair"
+                                  value={style}
+                                  checked={facialHairDraft.includes(style)}
+                                  onChange={() => setFacialHairDraft((selected) => (
+                                    selected.includes(style)
+                                      ? selected.filter((value) => value !== style)
+                                      : [...selected, style]
+                                  ))}
+                                />
+                                <span>{style}</span>
+                              </label>
                             ))}
-                          />
-                          <span>{filter.label}</span>
-                        </label>
-                      ))}
-                    </fieldset>
-                    <fieldset className="social-talent-filter-group">
-                      <legend>Gender</legend>
-                      {genderFilters.map((gender) => (
-                        <label className="social-talent-filter-option" key={gender}>
-                          <input
-                            type="checkbox"
-                            name="talent-gender"
-                            value={gender}
-                            checked={genderDraft.includes(gender)}
-                            onChange={() => setGenderDraft((selected) => (
-                              selected.includes(gender)
-                                ? selected.filter((value) => value !== gender)
-                                : [...selected, gender]
-                            ))}
-                          />
-                          <span>{gender}</span>
-                        </label>
-                      ))}
-                    </fieldset>
-                    <fieldset className="social-talent-filter-group">
-                      <legend>Skin tone</legend>
-                      {skinToneFilters.map((skinTone) => (
-                        <label className="social-talent-filter-option" key={skinTone}>
-                          <input
-                            type="checkbox"
-                            name="talent-skin-tone"
-                            value={skinTone}
-                            checked={skinToneDraft.includes(skinTone)}
-                            onChange={() => setSkinToneDraft((selected) => (
-                              selected.includes(skinTone)
-                                ? selected.filter((value) => value !== skinTone)
-                                : [...selected, skinTone]
-                            ))}
-                          />
-                          <span>{skinTone}</span>
-                        </label>
-                      ))}
-                    </fieldset>
-                    <fieldset className="social-talent-filter-group">
-                      <legend>Body build</legend>
-                      {bodyBuildFilters.map((build) => (
-                        <label className="social-talent-filter-option" key={build}>
-                          <input
-                            type="checkbox"
-                            name="talent-body-build"
-                            value={build}
-                            checked={bodyBuildDraft.includes(build)}
-                            onChange={() => setBodyBuildDraft((selected) => (
-                              selected.includes(build)
-                                ? selected.filter((value) => value !== build)
-                                : [...selected, build]
-                            ))}
-                          />
-                          <span>{build}</span>
-                        </label>
-                      ))}
-                    </fieldset>
-                    <fieldset className="social-talent-filter-group">
-                      <legend>Height (cm)</legend>
-                      <div className="social-talent-filter-range">
-                        <label>
-                          Min
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.1"
-                            aria-label="Minimum height in centimeters"
-                            placeholder="Min"
-                            value={heightRangeDraft.min}
-                            onChange={(event) => setHeightRangeDraft((range) => ({ ...range, min: event.target.value }))}
-                          />
-                        </label>
-                        <label>
-                          Max
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.1"
-                            aria-label="Maximum height in centimeters"
-                            placeholder="Max"
-                            value={heightRangeDraft.max}
-                            onChange={(event) => setHeightRangeDraft((range) => ({ ...range, max: event.target.value }))}
-                          />
-                        </label>
-                      </div>
-                    </fieldset>
-                    <fieldset className="social-talent-filter-group">
-                      <legend>Weight (kg)</legend>
-                      <div className="social-talent-filter-range">
-                        <label>
-                          Min
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.1"
-                            aria-label="Minimum weight in kilograms"
-                            placeholder="Min"
-                            value={weightRangeDraft.min}
-                            onChange={(event) => setWeightRangeDraft((range) => ({ ...range, min: event.target.value }))}
-                          />
-                        </label>
-                        <label>
-                          Max
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.1"
-                            aria-label="Maximum weight in kilograms"
-                            placeholder="Max"
-                            value={weightRangeDraft.max}
-                            onChange={(event) => setWeightRangeDraft((range) => ({ ...range, max: event.target.value }))}
-                          />
-                        </label>
-                      </div>
-                    </fieldset>
+                          </fieldset>
+                        )}
+                      </>
+                    )}
+                    {isActingFilterContext && (
+                      <>
+                        <fieldset className="social-talent-filter-group">
+                          <legend>Skin tone</legend>
+                          {skinToneFilters.map((skinTone) => (
+                            <label className="social-talent-filter-option" key={skinTone}>
+                              <input
+                                type="checkbox"
+                                name="talent-skin-tone"
+                                value={skinTone}
+                                checked={skinToneDraft.includes(skinTone)}
+                                onChange={() => setSkinToneDraft((selected) => (
+                                  selected.includes(skinTone)
+                                    ? selected.filter((value) => value !== skinTone)
+                                    : [...selected, skinTone]
+                                ))}
+                              />
+                              <span>{skinTone}</span>
+                            </label>
+                          ))}
+                        </fieldset>
+                        <fieldset className="social-talent-filter-group">
+                          <legend>Body build</legend>
+                          {bodyBuildFilters.map((build) => (
+                            <label className="social-talent-filter-option" key={build}>
+                              <input
+                                type="checkbox"
+                                name="talent-body-build"
+                                value={build}
+                                checked={bodyBuildDraft.includes(build)}
+                                onChange={() => setBodyBuildDraft((selected) => (
+                                  selected.includes(build)
+                                    ? selected.filter((value) => value !== build)
+                                    : [...selected, build]
+                                ))}
+                              />
+                              <span>{build}</span>
+                            </label>
+                          ))}
+                        </fieldset>
+                        <fieldset className="social-talent-filter-group">
+                          <legend>Height (cm)</legend>
+                          <div className="social-talent-filter-range">
+                            <label>
+                              Min
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.1"
+                                aria-label="Minimum height in centimeters"
+                                placeholder="Min"
+                                value={heightRangeDraft.min}
+                                onChange={(event) => setHeightRangeDraft((range) => ({ ...range, min: event.target.value }))}
+                              />
+                            </label>
+                            <label>
+                              Max
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.1"
+                                aria-label="Maximum height in centimeters"
+                                placeholder="Max"
+                                value={heightRangeDraft.max}
+                                onChange={(event) => setHeightRangeDraft((range) => ({ ...range, max: event.target.value }))}
+                              />
+                            </label>
+                          </div>
+                        </fieldset>
+                        <fieldset className="social-talent-filter-group">
+                          <legend>Weight (kg)</legend>
+                          <div className="social-talent-filter-range">
+                            <label>
+                              Min
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.1"
+                                aria-label="Minimum weight in kilograms"
+                                placeholder="Min"
+                                value={weightRangeDraft.min}
+                                onChange={(event) => setWeightRangeDraft((range) => ({ ...range, min: event.target.value }))}
+                              />
+                            </label>
+                            <label>
+                              Max
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.1"
+                                aria-label="Maximum weight in kilograms"
+                                placeholder="Max"
+                                value={weightRangeDraft.max}
+                                onChange={(event) => setWeightRangeDraft((range) => ({ ...range, max: event.target.value }))}
+                              />
+                            </label>
+                          </div>
+                        </fieldset>
+                      </>
+                    )}
                     <fieldset className="social-talent-filter-group">
                       <legend>Experience</legend>
                       {experienceFilters.map((filter) => (
@@ -635,7 +860,19 @@ function Navigation({
                           id="social-search-category"
                           aria-label="Film craft"
                           value={talentCategoryDraft}
-                          onChange={(event) => setTalentCategoryDraft(event.target.value)}
+                          onChange={(event) => {
+                            const nextCategory = event.target.value
+                            if (nextCategory !== talentCategoryDraft) setCinemaTypeDraft([])
+                            setTalentCategoryDraft(nextCategory)
+                            if (nextCategory !== 'Acting') {
+                              setGenderDraft([])
+                              setSkinToneDraft([])
+                              setBodyBuildDraft([])
+                              setFacialHairDraft([])
+                              setHeightRangeDraft({ min: '', max: '' })
+                              setWeightRangeDraft({ min: '', max: '' })
+                            }
+                          }}
                         >
                           <option value="All">All crafts</option>
                           {FILM_CRAFTS.map((craft) => (

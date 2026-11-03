@@ -37,10 +37,13 @@ public class ProfileService {
                     directoryProfile.put("userId", publicUserId);
                     directoryProfile.put("referId", publicUserId);
                     directoryProfile.put("name", profile.getName());
+                    directoryProfile.put("category", profile.getPrimaryCraft() != null ? profile.getPrimaryCraft() : "");
+                    directoryProfile.put("primaryCraft", profile.getPrimaryCraft() != null ? profile.getPrimaryCraft() : "");
                     directoryProfile.put("height", profile.getHeight() != null ? profile.getHeight() : "");
                     directoryProfile.put("weight", profile.getWeight() != null ? profile.getWeight() : "");
                     directoryProfile.put("bodyBuild", profile.getBodyBuild() != null ? profile.getBodyBuild() : "");
                     directoryProfile.put("gender", profile.getGender() != null ? profile.getGender() : "");
+                    directoryProfile.put("facialHair", profile.getFacialHair() != null ? profile.getFacialHair() : "");
                     directoryProfile.put("skinTone", profile.getSkinTone() != null ? profile.getSkinTone() : "");
                     directoryProfile.put("experience", profile.getExperience() != null ? profile.getExperience() : "");
                     directoryProfile.put("avatar", profile.getProfileImageUrl() != null ? profile.getProfileImageUrl() : "");
@@ -136,6 +139,7 @@ public class ProfileService {
         if (req.getWeight() != null) profile.setWeight(req.getWeight());
         if (req.getBodyBuild() != null) profile.setBodyBuild(req.getBodyBuild());
         if (req.getGender() != null) profile.setGender(req.getGender());
+        if (req.getFacialHair() != null) profile.setFacialHair(req.getFacialHair());
         if (req.getSkinTone() != null) profile.setSkinTone(req.getSkinTone());
         if (req.getAddress() != null) profile.setAddress(req.getAddress());
         if (req.getLocation() != null && !req.getLocation().isBlank()) profile.setAddress(req.getLocation());
@@ -567,6 +571,7 @@ public class ProfileService {
         dto.setWeight(entity.getWeight());
         dto.setBodyBuild(entity.getBodyBuild());
         dto.setGender(entity.getGender());
+        dto.setFacialHair(entity.getFacialHair());
         dto.setSkinTone(entity.getSkinTone());
         dto.setOtherLanguage(entity.getOtherLanguage());
         dto.setAvatar(entity.getProfileImageUrl());

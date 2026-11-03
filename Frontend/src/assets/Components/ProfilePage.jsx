@@ -20,6 +20,7 @@ export const emptyProfileDetails = {
   weight: '',
   bodyBuild: '',
   gender: '',
+  facialHair: '',
   skinTone: '',
   address: '',
   languages: [],
@@ -385,6 +386,7 @@ function ProfilePage({
   const [profileFormKey, setProfileFormKey] = useState(0)
   const [isEditingProfile, setIsEditingProfile] = useState(false)
   const [dateOfBirthDraft, setDateOfBirthDraft] = useState('')
+  const [genderDraft, setGenderDraft] = useState(profileDetails.gender || '')
   const [isExperienceModalOpen, setIsExperienceModalOpen] = useState(false)
   const [editingExperienceId, setEditingExperienceId] = useState(null)
   const [experienceAttachmentType, setExperienceAttachmentType] = useState('')
@@ -859,6 +861,7 @@ function ProfilePage({
     setVideoUrlInput('')
     setVideoUrlError('')
     setDateOfBirthDraft(profileDetails.dateOfBirth || '')
+    setGenderDraft(profileDetails.gender || '')
     setProfilePreview(profileDetails.profileImageUrl || profilePreview)
     setProfileFormKey((key) => key + 1)
     setIsEditingProfile(true)
@@ -1078,6 +1081,7 @@ function ProfilePage({
       weight: formData.get('weight') || '',
       bodyBuild: formData.get('bodyBuild') || '',
       gender: formData.get('gender') || '',
+      facialHair: formData.get('facialHair') || '',
       skinTone: formData.get('skinTone') || '',
       address: formData.get('address') || '',
       languages: selectedLanguages,
@@ -2296,7 +2300,8 @@ function ProfilePage({
                 <select
                   id="candidate-gender"
                   name="gender"
-                  defaultValue={profileDetails.gender}
+                  value={genderDraft}
+                  onChange={(event) => setGenderDraft(event.target.value)}
                 >
                   <option value="">Select gender</option>
                   <option value="Female">Female</option>
@@ -2306,6 +2311,23 @@ function ProfilePage({
                   <option value="Prefer not to say">Prefer not to say</option>
                 </select>
               </div>
+              {genderDraft === 'Male' && (
+                <div className="form-field">
+                  <label htmlFor="candidate-facial-hair">Facial hair</label>
+                  <select
+                    id="candidate-facial-hair"
+                    name="facialHair"
+                    defaultValue={profileDetails.facialHair || ''}
+                  >
+                    <option value="">Select facial hair</option>
+                    <option value="Clean-shaven">Clean-shaven</option>
+                    <option value="Mustache">Mustache</option>
+                    <option value="Beard">Beard</option>
+                    <option value="Goatee">Goatee</option>
+                    <option value="Stubble">Stubble</option>
+                  </select>
+                </div>
+              )}
               <div className="form-field">
                 <label htmlFor="candidate-skin-tone">Skin tone</label>
                 <select

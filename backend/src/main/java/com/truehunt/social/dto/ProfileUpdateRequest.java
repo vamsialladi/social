@@ -40,6 +40,7 @@ public class ProfileUpdateRequest {
     private String weight;
     private String bodyBuild;
     private String gender;
+    private String facialHair;
     private String skinTone;
     private String otherLanguage;
     private String websiteUrl;
@@ -335,6 +336,14 @@ public class ProfileUpdateRequest {
 
     public void setGender(String gender) {
         this.gender = gender;
+    }
+
+    public String getFacialHair() {
+        return facialHair;
+    }
+
+    public void setFacialHair(String facialHair) {
+        this.facialHair = facialHair;
     }
 
     public String getSkinTone() {

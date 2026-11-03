@@ -13,7 +13,7 @@ export const CINEMA_24_CRAFTS = [
     tagline: 'Live Your Character',
     desc: 'Embody captivating characters and convey powerful human emotions on screen.',
     icon: '🎭',
-    image: 'https://commons.wikimedia.org/wiki/Special:FilePath/The_portrait_of_Pawan_Kalyan_%282024%29.jpg?width=250',
+    image: 'https://commons.wikimedia.org/wiki/Special:FilePath/Prabhas_by_Gage_Skidmore.jpg?width=250',
     targetCraft: 'Acting'
   },
   {

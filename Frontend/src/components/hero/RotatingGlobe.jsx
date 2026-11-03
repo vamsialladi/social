@@ -4,6 +4,10 @@ import * as THREE from 'three';
 import { WORLDWIDE_IMAGES } from './worldwide';
 
 const IMAGE_MARKER_RADIUS = 0.055;
+const INITIAL_MARKER_IMAGE_COUNT = 24;
+const MARKER_IMAGE_BATCH_SIZE = 12;
+const MAX_CONCURRENT_MARKER_IMAGES = 8;
+const MARKER_IMAGE_BATCH_DELAY_MS = 5;
 const FALLBACK_MARKER_IMAGES = [
   'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=300&q=80',
   'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=300&q=80',
@@ -104,6 +108,11 @@ export default function RotatingGlobe({ size = 380, isRotating = true }) {
     const markerMeshes = [];
     let isDisposed = false;
     const imageMarkers = WORLDWIDE_IMAGES;
+    const markerImageQueue = [];
+    let nextMarkerImage = 0;
+    let markerImageBatchEnd = Math.min(INITIAL_MARKER_IMAGE_COUNT, imageMarkers.length);
+    let activeMarkerImageLoads = 0;
+    let markerImageLoadTimer = null;
     const markerNormals = imageMarkers.map(({ latitude, longitude }) => {
       const lat = THREE.MathUtils.degToRad(latitude);
       const lon = THREE.MathUtils.degToRad(longitude);
@@ -115,40 +124,13 @@ export default function RotatingGlobe({ size = 380, isRotating = true }) {
     });
 
     imageMarkers.forEach(({ name, image }, index) => {
-      let markerMaterial;
-      const markerTexture = textureLoader.load(
-        image,
-        cropTextureToSquare,
-        undefined,
-        (error) => {
-          console.error(`Failed to load globe marker for ${name}: ${image}`, error);
-          if (isDisposed) return;
-
-          const fallbackImage = FALLBACK_MARKER_IMAGES[index % FALLBACK_MARKER_IMAGES.length];
-          textureLoader.load(
-            fallbackImage,
-            (fallbackTexture) => {
-              cropTextureToSquare(fallbackTexture);
-              if (isDisposed) {
-                fallbackTexture.dispose();
-                return;
-              }
-              markerMaterial.map?.dispose();
-              markerMaterial.map = fallbackTexture;
-              markerMaterial.needsUpdate = true;
-            },
-            undefined,
-            (fallbackError) => console.error(`Failed to load fallback globe marker for ${name}: ${fallbackImage}`, fallbackError)
-          );
-        }
-      );
-
-      markerMaterial = new THREE.MeshBasicMaterial({
-        map: markerTexture,
+      const markerMaterial = new THREE.MeshBasicMaterial({
+        color: 0x334155,
         side: THREE.DoubleSide,
         toneMapped: false
       });
       markerMaterials.push(markerMaterial);
+      markerImageQueue.push({ name, image, index, markerMaterial });
 
       const markerGroup = new THREE.Group();
 
@@ -176,6 +158,89 @@ export default function RotatingGlobe({ size = 380, isRotating = true }) {
       markerGroup.renderOrder = 3;
       earthGroup.add(markerGroup);
     });
+
+    const pumpMarkerImageQueue = () => {
+      if (isDisposed) return;
+
+      while (
+        activeMarkerImageLoads < MAX_CONCURRENT_MARKER_IMAGES
+        && nextMarkerImage < markerImageBatchEnd
+      ) {
+        const { name, image, index, markerMaterial } = markerImageQueue[nextMarkerImage];
+        nextMarkerImage += 1;
+        activeMarkerImageLoads += 1;
+
+        const finishLoading = () => {
+          activeMarkerImageLoads -= 1;
+          pumpMarkerImageQueue();
+        };
+        const markerTexture = textureLoader.load(
+          image,
+          (loadedTexture) => {
+            cropTextureToSquare(loadedTexture);
+            if (isDisposed) {
+              loadedTexture.dispose();
+              finishLoading();
+              return;
+            }
+            markerMaterial.map?.dispose();
+            markerMaterial.map = loadedTexture;
+            markerMaterial.color.set(0xffffff);
+            markerMaterial.needsUpdate = true;
+            finishLoading();
+          },
+          undefined,
+          (error) => {
+            console.error(`Failed to load globe marker for ${name}: ${image}`, error);
+            if (isDisposed) {
+              finishLoading();
+              return;
+            }
+
+            const fallbackImage = FALLBACK_MARKER_IMAGES[index % FALLBACK_MARKER_IMAGES.length];
+            textureLoader.load(
+              fallbackImage,
+              (fallbackTexture) => {
+                cropTextureToSquare(fallbackTexture);
+                if (isDisposed) {
+                  fallbackTexture.dispose();
+                  finishLoading();
+                  return;
+                }
+                markerMaterial.map?.dispose();
+                markerMaterial.map = fallbackTexture;
+                markerMaterial.color.set(0xffffff);
+                markerMaterial.needsUpdate = true;
+                finishLoading();
+              },
+              undefined,
+              (fallbackError) => {
+                console.error(`Failed to load fallback globe marker for ${name}: ${fallbackImage}`, fallbackError);
+                finishLoading();
+              }
+            );
+          }
+        );
+        markerTexture.colorSpace = THREE.SRGBColorSpace;
+      }
+
+      if (
+        activeMarkerImageLoads === 0
+        && nextMarkerImage === markerImageBatchEnd
+        && nextMarkerImage < markerImageQueue.length
+        && markerImageLoadTimer === null
+      ) {
+        markerImageLoadTimer = window.setTimeout(() => {
+          markerImageLoadTimer = null;
+          markerImageBatchEnd = Math.min(
+            nextMarkerImage + MARKER_IMAGE_BATCH_SIZE,
+            markerImageQueue.length
+          );
+          pumpMarkerImageQueue();
+        }, MARKER_IMAGE_BATCH_DELAY_MS);
+      }
+    };
+    pumpMarkerImageQueue();
 
     const raycaster = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
@@ -335,6 +400,7 @@ export default function RotatingGlobe({ size = 380, isRotating = true }) {
     // 9. Cleanup on unmount
     return () => {
       isDisposed = true;
+      window.clearTimeout(markerImageLoadTimer);
       renderer.domElement.removeEventListener('click', handleMarkerClick);
       if (frameIdRef.current) cancelAnimationFrame(frameIdRef.current);
       if (renderer) {
@@ -391,12 +457,16 @@ export default function RotatingGlobe({ size = 380, isRotating = true }) {
             <X size={16} />
           </button>
           <img
-            className="globe-profile-image"
+            className={`globe-profile-image ${loaded ? "loaded" : "hidden"}`}
             src={selectedProfile.image}
             alt={selectedProfile.name}
+            loading="lazy"
+            decoding="async"
+            onLoad={() => setLoaded(true)}
             onError={(event) => {
               event.currentTarget.onerror = null;
               event.currentTarget.src = FALLBACK_MARKER_IMAGES[0];
+              setLoaded(false);
             }}
           />
           <div className="globe-profile-label">Cinema talent</div>

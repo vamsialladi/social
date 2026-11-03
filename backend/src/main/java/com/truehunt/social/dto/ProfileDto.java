@@ -42,6 +42,7 @@ public class ProfileDto {
     private String weight;
     private String bodyBuild;
     private String gender;
+    private String facialHair;
     private String skinTone;
     private String otherLanguage;
 
@@ -323,6 +324,14 @@ public class ProfileDto {
         this.gender = gender;
     }
 
+    public String getFacialHair() {
+        return facialHair;
+    }
+
+    public void setFacialHair(String facialHair) {
+        this.facialHair = facialHair;
+    }
+
     public String getSkinTone() {
         return skinTone;
     }
@@ -443,4 +452,3 @@ public class ProfileDto {
         this.credits = credits;
     }
 }
-
