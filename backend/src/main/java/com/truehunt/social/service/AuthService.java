@@ -38,7 +38,7 @@ public class AuthService {
 
     public OtpResponse sendOtp(OtpRequest req) {
         String destination = req != null ? req.getEmail() : "";
-        String msg = "Dummy OTP 123456 sent successfully to " + (destination != null && !destination.isBlank() ? destination : "your email");
+        String msg = "Dummy OTP 123456 generated for " + (destination != null && !destination.isBlank() ? destination : "your phone number");
         return new OtpResponse("123456", msg);
     }
 
@@ -133,10 +133,12 @@ public class AuthService {
 
         if (existingOpt.isPresent()) {
             user = existingOpt.get();
-            publicUserId = user.getPublicUserId() != null ? user.getPublicUserId() : generateUniquePublicUserId();
+            publicUserId = user.getPublicUserId() != null
+                    ? user.getPublicUserId()
+                    : generateUniquePublicUserId(name);
         } else {
             user = new UserAccountEntity();
-            publicUserId = generateUniquePublicUserId();
+            publicUserId = generateUniquePublicUserId(name);
             user.setCreatedAt(LocalDateTime.now());
         }
 
@@ -243,19 +245,23 @@ public class AuthService {
 
     private void ensurePublicUserId(UserAccountEntity user) {
         if (user.getPublicUserId() == null || user.getPublicUserId().isBlank()) {
-            user.setPublicUserId(generateUniquePublicUserId());
+            user.setPublicUserId(generateUniquePublicUserId(user.getName()));
             userAccountRepository.save(user);
         }
     }
 
-    private String generateUniquePublicUserId() {
-        for (int i = 0; i < 20; i++) {
-            String candidate = String.format("%07d", SECURE_RANDOM.nextInt(10_000_000));
+    private String generateUniquePublicUserId(String name) {
+        String initials = name == null ? "" : name.replaceAll("[^\\p{L}]", "").toUpperCase(Locale.ROOT);
+        initials = initials.length() >= 2 ? initials.substring(0, 2) : (initials + "XX").substring(0, 2);
+
+        for (int i = 0; i < 100; i++) {
+            String candidate = "TH" + initials
+                    + String.format(Locale.ROOT, "%010d", SECURE_RANDOM.nextLong(10_000_000_000L));
             if (userAccountRepository.findByPublicUserId(candidate).isEmpty()
                     && profileRepository.findByUserId(candidate).isEmpty()) {
                 return candidate;
             }
         }
-        return UUID.randomUUID().toString().replace("-", "").substring(0, 7);
+        throw new IllegalStateException("Unable to generate a unique public user ID.");
     }
 }
