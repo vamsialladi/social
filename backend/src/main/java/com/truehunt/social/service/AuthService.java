@@ -88,6 +88,7 @@ public class AuthService {
         resp.setRole(user.getRole());
         resp.setName(user.getName());
         resp.setPhone(user.getPhone());
+        resp.setProfessionalPhone(user.getProfessionalPhone() != null ? user.getProfessionalPhone() : user.getPhone());
         resp.setPrimaryCraft(user.getPrimaryCraft());
         resp.setSubCraft(user.getSubCraft());
 
@@ -98,6 +99,7 @@ public class AuthService {
         userMap.put("name", user.getName());
         userMap.put("role", user.getRole());
         userMap.put("phone", user.getPhone());
+        userMap.put("professionalPhone", user.getProfessionalPhone() != null ? user.getProfessionalPhone() : user.getPhone());
         userMap.put("primaryCraft", user.getPrimaryCraft());
         userMap.put("subCraft", user.getSubCraft());
         userMap.put("experience", user.getExperience());
@@ -146,6 +148,7 @@ public class AuthService {
         user.setPasswordHash(passwordEncoder.encode(req.getPassword()));
         user.setName(name);
         user.setPhone(req.getPhone());
+        user.setProfessionalPhone(req.getProfessionalPhone() != null ? req.getProfessionalPhone() : req.getPhone());
         user.setRole(role);
         user.setPublicUserId(publicUserId);
         user.setPrimaryCraft(req.getPrimaryCraft());
@@ -164,6 +167,7 @@ public class AuthService {
         profile.setName(user.getName());
         profile.setEmail(user.getEmail());
         profile.setPhone(user.getPhone());
+        profile.setProfessionalPhone(user.getProfessionalPhone());
         profile.setPrimaryCraft(user.getPrimaryCraft());
         profile.setSubCraft(user.getSubCraft());
         profile.setExperience(user.getExperience());
@@ -182,6 +186,7 @@ public class AuthService {
         resp.setRole(user.getRole());
         resp.setName(user.getName());
         resp.setPhone(user.getPhone());
+        resp.setProfessionalPhone(user.getProfessionalPhone() != null ? user.getProfessionalPhone() : user.getPhone());
         resp.setPrimaryCraft(user.getPrimaryCraft());
         resp.setSubCraft(user.getSubCraft());
 
@@ -192,6 +197,7 @@ public class AuthService {
         userMap.put("name", user.getName());
         userMap.put("role", user.getRole());
         userMap.put("phone", user.getPhone());
+        userMap.put("professionalPhone", user.getProfessionalPhone() != null ? user.getProfessionalPhone() : user.getPhone());
         userMap.put("primaryCraft", user.getPrimaryCraft());
         userMap.put("subCraft", user.getSubCraft());
         userMap.put("experience", user.getExperience());
@@ -214,6 +220,7 @@ public class AuthService {
             data.put("name", u.getName());
             data.put("role", u.getRole());
             data.put("phone", u.getPhone());
+            data.put("professionalPhone", u.getProfessionalPhone() != null ? u.getProfessionalPhone() : u.getPhone());
             data.put("primaryCraft", u.getPrimaryCraft());
             data.put("subCraft", u.getSubCraft());
             data.put("experience", u.getExperience());
@@ -230,6 +237,7 @@ public class AuthService {
         fallback.put("email", "pro@truehunt.in");
         fallback.put("role", "TALENT");
         fallback.put("primaryCraft", "Acting");
+        fallback.put("professionalPhone", "+91 9876543210");
         return fallback;
     }
 

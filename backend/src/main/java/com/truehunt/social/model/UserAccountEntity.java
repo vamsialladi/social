@@ -30,6 +30,7 @@ public class UserAccountEntity {
     private String publicUserId;
 
     private String phoneNumber;
+    private String professionalPhone;
     private String role;
     private String craft;
     private String subCraft;
@@ -95,6 +96,14 @@ public class UserAccountEntity {
 
     public void setPhone(String phone) {
         this.phoneNumber = phone;
+    }
+
+    public String getProfessionalPhone() {
+        return professionalPhone;
+    }
+
+    public void setProfessionalPhone(String professionalPhone) {
+        this.professionalPhone = professionalPhone;
     }
 
     public String getRole() {

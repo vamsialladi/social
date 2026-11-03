@@ -22,6 +22,7 @@ public class ProfileEntity {
     private String name;
     private String headline;
     private String phone;
+    private String professionalPhone;
     private String email;
     private String experience;
     private String primaryCraft;
@@ -106,6 +107,9 @@ public class ProfileEntity {
 
     public String getPhone() { return phone; }
     public void setPhone(String phone) { this.phone = phone; }
+
+    public String getProfessionalPhone() { return professionalPhone; }
+    public void setProfessionalPhone(String professionalPhone) { this.professionalPhone = professionalPhone; }
 
     public String getEmail() { return email; }
     public void setEmail(String email) { this.email = email; }

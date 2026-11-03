@@ -1070,7 +1070,7 @@ function ProfilePage({
 
     const nextDetails = {
       ...profileDetails,
-      userId: profileDetails.userId || 'me',
+      userId: formData.get('userId')?.trim() || accountUserId?.trim() || profileDetails.userId || 'me',
       name: formData.get('name') || '',
       phone: formData.get('phone')?.trim() || '',
       professionalPhone: formData.get('professionalPhone')?.trim() || '',
@@ -2178,7 +2178,8 @@ function ProfilePage({
                 <input
                   id="user-id"
                   type="text"
-                  value={accountUserId}
+                  name="userId"
+                  value={accountUserId || profileDetails.userId || ''}
                   readOnly
                   aria-readonly="true"
                   placeholder="Your TrueHunt ID is assigned at registration"

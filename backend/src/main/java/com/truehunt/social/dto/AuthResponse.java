@@ -11,6 +11,7 @@ public class AuthResponse {
     private String role;
     private String name;
     private String phone;
+    private String professionalPhone;
     private String primaryCraft;
     private String subCraft;
     private Map<String, Object> user;
@@ -63,6 +64,14 @@ public class AuthResponse {
 
     public void setPhone(String phone) {
         this.phone = phone;
+    }
+
+    public String getProfessionalPhone() {
+        return professionalPhone;
+    }
+
+    public void setProfessionalPhone(String professionalPhone) {
+        this.professionalPhone = professionalPhone;
     }
 
     public String getPrimaryCraft() {

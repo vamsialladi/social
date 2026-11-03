@@ -63,6 +63,18 @@ public class PostService {
         post.setMediaType(req.getMediaType());
         post.setCreatedAt(LocalDateTime.now());
 
+        if (req.getMedia() != null) {
+            post.setMedia(req.getMedia());
+            if (post.getMediaUrl() == null && req.getMedia().get("url") != null) {
+                post.setMediaUrl(String.valueOf(req.getMedia().get("url")));
+            }
+            if (post.getMediaType() == null) {
+                Object kind = req.getMedia().get("kind");
+                if (kind == null) kind = req.getMedia().get("contentType");
+                if (kind != null) post.setMediaType(String.valueOf(kind));
+            }
+        }
+
         if (req.getOpportunityDetails() != null) {
             post.setOpportunityDetails(req.getOpportunityDetails());
         }

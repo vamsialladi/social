@@ -28,6 +28,7 @@ public class ProfileUpdateRequest {
     private String coverImage;
     private String coverImageUrl;
     private String phone;
+    private String professionalPhone;
     private String phoneNumber;
     private String email;
     private String dateOfBirth;
@@ -231,6 +232,14 @@ public class ProfileUpdateRequest {
 
     public void setPhone(String phone) {
         this.phone = phone;
+    }
+
+    public String getProfessionalPhone() {
+        return professionalPhone;
+    }
+
+    public void setProfessionalPhone(String professionalPhone) {
+        this.professionalPhone = professionalPhone;
     }
 
     public String getPhoneNumber() {

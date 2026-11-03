@@ -32,6 +32,7 @@ public class ProfileDto {
     private String showreel;
 
     private String phone;
+    private String professionalPhone;
     private String email;
     private String address;
     private String dateOfBirth;
@@ -242,6 +243,14 @@ public class ProfileDto {
 
     public void setPhone(String phone) {
         this.phone = phone;
+    }
+
+    public String getProfessionalPhone() {
+        return professionalPhone;
+    }
+
+    public void setProfessionalPhone(String professionalPhone) {
+        this.professionalPhone = professionalPhone;
     }
 
     public String getEmail() {

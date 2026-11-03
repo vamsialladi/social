@@ -1371,7 +1371,7 @@ export default function SocialApp() {
       <div hidden={activeNavigation !== 'profile'}>
         <ProfilePage
           isOwner={!viewingCandidateProfile && isAuthenticated}
-          accountUserId={user?.userId || ''}
+          accountUserId={user?.userId || profileDetails?.userId || ''}
           profileDetails={viewingCandidateProfile || profileDetails}
           setProfileDetails={(updater) => {
             setProfileDetails((prev) => {

@@ -122,7 +122,24 @@ public class ProfileService {
 
     @Transactional
     public ProfileDto updateMyProfile(ProfileUpdateRequest req, String userEmail) {
-        ProfileEntity profile = findCurrentProfile(userEmail);
+        String effectiveEmail = (userEmail != null && !userEmail.isBlank())
+                ? userEmail.trim()
+                : (req.getEmail() != null && !req.getEmail().isBlank() ? req.getEmail().trim() : null);
+        String requestedUserId = (req.getUserId() != null && !req.getUserId().isBlank() && !"me".equalsIgnoreCase(req.getUserId().trim()))
+                ? req.getUserId().trim()
+                : null;
+
+        ProfileEntity profile = findCurrentProfile(effectiveEmail, requestedUserId);
+
+        if (requestedUserId != null) {
+            profile.setUserId(requestedUserId);
+            findAccountByEmail(profile.getEmail()).ifPresent(acc -> {
+                acc.setPublicUserId(requestedUserId);
+                userAccountRepository.save(acc);
+            });
+        }
+
+
 
         if (req.getName() != null) profile.setName(req.getName());
         if (req.getFullName() != null && !req.getFullName().isBlank()) profile.setName(req.getFullName());
@@ -236,6 +253,7 @@ public class ProfileService {
     @Transactional
     public ExperienceDto addExperience(ExperienceDto exp, String userEmail) {
         ProfileEntity profile = findCurrentProfile(userEmail);
+
         if (exp.getId() == null || exp.getId().isBlank()) {
             exp.setId("exp-" + UUID.randomUUID().toString().substring(0, 8));
         }
@@ -267,6 +285,7 @@ public class ProfileService {
     @Transactional
     public ExperienceDto updateExperience(String id, ExperienceDto exp, String userEmail) {
         ProfileEntity profile = findCurrentProfile(userEmail);
+
         List<Map<String, Object>> experiences = new ArrayList<>(profile.getExperiences());
         boolean found = false;
         for (int i = 0; i < experiences.size(); i++) {
@@ -300,6 +319,7 @@ public class ProfileService {
     @Transactional
     public Map<String, Object> deleteExperience(String id, String userEmail) {
         ProfileEntity profile = findCurrentProfile(userEmail);
+
         List<Map<String, Object>> filtered = profile.getExperiences().stream()
                 .filter(item -> !Objects.equals(item.get("id"), id))
                 .collect(Collectors.toList());
@@ -317,6 +337,7 @@ public class ProfileService {
     @Transactional
     public EducationDto addEducation(EducationDto edu, String userEmail) {
         ProfileEntity profile = findCurrentProfile(userEmail);
+
         if (edu.getId() == null || edu.getId().isBlank()) {
             edu.setId("edu-" + UUID.randomUUID().toString().substring(0, 8));
         }
@@ -344,6 +365,7 @@ public class ProfileService {
     @Transactional
     public EducationDto updateEducation(String id, EducationDto edu, String userEmail) {
         ProfileEntity profile = findCurrentProfile(userEmail);
+
         List<Map<String, Object>> educations = new ArrayList<>(profile.getEducations());
         boolean found = false;
         for (int i = 0; i < educations.size(); i++) {
@@ -376,6 +398,7 @@ public class ProfileService {
     @Transactional
     public Map<String, Object> deleteEducation(String id, String userEmail) {
         ProfileEntity profile = findCurrentProfile(userEmail);
+
         List<Map<String, Object>> filtered = profile.getEducations().stream()
                 .filter(item -> !Objects.equals(item.get("id"), id))
                 .collect(Collectors.toList());
@@ -393,6 +416,7 @@ public class ProfileService {
     @Transactional
     public ProjectDto addProject(ProjectDto project, String userEmail) {
         ProfileEntity profile = findCurrentProfile(userEmail);
+
         if (project.getId() == null || project.getId().isBlank()) {
             project.setId("proj-" + UUID.randomUUID().toString().substring(0, 8));
         }
@@ -418,6 +442,7 @@ public class ProfileService {
     @Transactional
     public ProjectDto updateProject(String id, ProjectDto project, String userEmail) {
         ProfileEntity profile = findCurrentProfile(userEmail);
+
         List<Map<String, Object>> projects = new ArrayList<>(profile.getProjects());
         boolean found = false;
         for (int i = 0; i < projects.size(); i++) {
@@ -449,6 +474,7 @@ public class ProfileService {
     @Transactional
     public Map<String, Object> deleteProject(String id, String userEmail) {
         ProfileEntity profile = findCurrentProfile(userEmail);
+
         List<Map<String, Object>> filtered = profile.getProjects().stream()
                 .filter(item -> !Objects.equals(item.get("id"), id))
                 .collect(Collectors.toList());
@@ -466,6 +492,7 @@ public class ProfileService {
     @Transactional
     public ProfileDto addSkill(String skill, String userEmail) {
         ProfileEntity profile = findCurrentProfile(userEmail);
+
         List<String> skills = new ArrayList<>(profile.getTalents());
         if (!skills.contains(skill)) {
             skills.add(skill);
@@ -479,6 +506,7 @@ public class ProfileService {
     @Transactional
     public ProfileDto deleteSkill(String skill, String userEmail) {
         ProfileEntity profile = findCurrentProfile(userEmail);
+
         List<String> skills = profile.getTalents().stream()
                 .filter(s -> !s.equalsIgnoreCase(skill))
                 .collect(Collectors.toList());
@@ -518,6 +546,27 @@ public class ProfileService {
     }
 
     public ProfileEntity findCurrentProfile(String userEmail) {
+        return findCurrentProfile(userEmail, null);
+    }
+
+    public ProfileEntity findCurrentProfile(String userEmail, String requestedUserId) {
+        if (requestedUserId != null && !requestedUserId.isBlank() && !"me".equalsIgnoreCase(requestedUserId.trim())) {
+            String cleanUserId = requestedUserId.trim();
+            Optional<ProfileEntity> byId = profileRepository.findByUserId(cleanUserId);
+            if (byId.isPresent()) {
+                return byId.get();
+            }
+            Optional<UserAccountEntity> byAccount = findAccountByPublicUserId(cleanUserId);
+            if (byAccount.isPresent()) {
+                UserAccountEntity acc = byAccount.get();
+                ProfileEntity p = profileRepository.findByEmail(acc.getEmail()).orElseGet(ProfileEntity::new);
+                p.setUserId(cleanUserId);
+                if (p.getName() == null || p.getName().isBlank()) p.setName(acc.getName());
+                if (p.getEmail() == null || p.getEmail().isBlank()) p.setEmail(acc.getEmail());
+                return profileRepository.save(p);
+            }
+        }
+
         Optional<UserAccountEntity> account = findAccountByEmail(userEmail);
         if (account.isPresent()) {
             UserAccountEntity currentAccount = account.get();
@@ -535,6 +584,18 @@ public class ProfileService {
                 }
                 return profileRepository.save(profile);
             }
+        }
+
+        if (requestedUserId != null && !requestedUserId.isBlank() && !"me".equalsIgnoreCase(requestedUserId.trim())) {
+            String cleanUserId = requestedUserId.trim();
+            ProfileEntity meProfile = profileRepository.findByUserId("me").orElse(null);
+            if (meProfile != null) {
+                meProfile.setUserId(cleanUserId);
+                return profileRepository.save(meProfile);
+            }
+            ProfileEntity newProfile = new ProfileEntity();
+            newProfile.setUserId(cleanUserId);
+            return profileRepository.save(newProfile);
         }
 
         return profileRepository.findByUserId("me").orElseGet(() -> {

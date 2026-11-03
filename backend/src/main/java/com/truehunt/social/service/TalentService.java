@@ -42,10 +42,25 @@ public class TalentService {
         if (s == null && params != null) s = params.get("query");
         final String search = s;
 
+        final String gender = params != null ? params.get("gender") : null;
+        final String facialHair = params != null ? params.get("facialHair") : null;
+        final String skinTone = params != null ? params.get("skinTone") : null;
+        final String bodyBuild = params != null ? params.get("bodyBuild") : null;
+        final String minHeight = params != null ? params.get("minHeight") : null;
+        final String maxHeight = params != null ? params.get("maxHeight") : null;
+        final String minWeight = params != null ? params.get("minWeight") : null;
+        final String maxWeight = params != null ? params.get("maxWeight") : null;
+
         return getCombinedTalents().stream()
                 .filter(t -> isCraftMatching(t, category))
                 .filter(t -> isSubCraftMatching(t, subCraft))
                 .filter(t -> isLocationMatching(t, location))
+                .filter(t -> isGenderMatching(t, gender))
+                .filter(t -> isFacialHairMatching(t, facialHair))
+                .filter(t -> isSkinToneMatching(t, skinTone))
+                .filter(t -> isBodyBuildMatching(t, bodyBuild))
+                .filter(t -> isHeightMatching(t, minHeight, maxHeight))
+                .filter(t -> isWeightMatching(t, minWeight, maxWeight))
                 .filter(t -> search == null || search.isBlank() || matchesSearch(t, search))
                 .collect(Collectors.toList());
     }
@@ -58,10 +73,20 @@ public class TalentService {
     }
 
     public List<TalentDto> search(String term, String category, String location) {
+        return search(term, category, location, null, null, null, null, null, null, null, null);
+    }
+
+    public List<TalentDto> search(String term, String category, String location, String gender, String facialHair, String skinTone, String bodyBuild, String minHeight, String maxHeight, String minWeight, String maxWeight) {
         return getCombinedTalents().stream()
                 .filter(t -> term == null || term.isBlank() || matchesSearch(t, term))
                 .filter(t -> isCraftMatching(t, category))
                 .filter(t -> isLocationMatching(t, location))
+                .filter(t -> isGenderMatching(t, gender))
+                .filter(t -> isFacialHairMatching(t, facialHair))
+                .filter(t -> isSkinToneMatching(t, skinTone))
+                .filter(t -> isBodyBuildMatching(t, bodyBuild))
+                .filter(t -> isHeightMatching(t, minHeight, maxHeight))
+                .filter(t -> isWeightMatching(t, minWeight, maxWeight))
                 .collect(Collectors.toList());
     }
 
@@ -102,6 +127,20 @@ public class TalentService {
                     dto.setBio(p.getHighlights());
                     dto.setSkills(p.getTalents());
                     dto.setVerified(true);
+                    dto.setUserId(uid);
+                    dto.setGender(p.getGender());
+                    dto.setFacialHair(p.getFacialHair());
+                    dto.setSkinTone(p.getSkinTone());
+                    dto.setBodyBuild(p.getBodyBuild());
+                    dto.setHeight(p.getHeight());
+                    dto.setWeight(p.getWeight());
+                    dto.setDateOfBirth(p.getDateOfBirth());
+                    dto.setPhone(p.getPhone());
+                    dto.setProfessionalPhone(p.getProfessionalPhone());
+                    dto.setSecondaryCrafts(p.getSecondaryCrafts());
+                    dto.setSecondarySubCrafts(p.getSecondarySubCrafts());
+                    dto.setLanguages(p.getLanguages());
+                    dto.setWorkTypes(p.getWorkTypes());
                     map.put(uid, dto);
                 }
             }
@@ -217,6 +256,50 @@ public class TalentService {
                 || (t.getSkills() != null && t.getSkills().stream().anyMatch(s -> s.toLowerCase().contains(lower)));
     }
 
+    private boolean isGenderMatching(TalentDto t, String gender) {
+        if (gender == null || gender.isBlank() || gender.equalsIgnoreCase("all")) return true;
+        return t.getGender() != null && t.getGender().equalsIgnoreCase(gender.trim());
+    }
+
+    private boolean isFacialHairMatching(TalentDto t, String facialHair) {
+        if (facialHair == null || facialHair.isBlank() || facialHair.equalsIgnoreCase("all")) return true;
+        return t.getFacialHair() != null && t.getFacialHair().equalsIgnoreCase(facialHair.trim());
+    }
+
+    private boolean isSkinToneMatching(TalentDto t, String skinTone) {
+        if (skinTone == null || skinTone.isBlank() || skinTone.equalsIgnoreCase("all")) return true;
+        return t.getSkinTone() != null && t.getSkinTone().equalsIgnoreCase(skinTone.trim());
+    }
+
+    private boolean isBodyBuildMatching(TalentDto t, String bodyBuild) {
+        if (bodyBuild == null || bodyBuild.isBlank() || bodyBuild.equalsIgnoreCase("all")) return true;
+        return t.getBodyBuild() != null && t.getBodyBuild().equalsIgnoreCase(bodyBuild.trim());
+    }
+
+    private boolean isHeightMatching(TalentDto t, String minH, String maxH) {
+        if ((minH == null || minH.isBlank()) && (maxH == null || maxH.isBlank())) return true;
+        try {
+            double h = Double.parseDouble(t.getHeight() != null ? t.getHeight().replaceAll("[^0-9.]", "") : "0");
+            if (minH != null && !minH.isBlank() && h < Double.parseDouble(minH.trim())) return false;
+            if (maxH != null && !maxH.isBlank() && h > Double.parseDouble(maxH.trim())) return false;
+            return true;
+        } catch (Exception e) {
+            return true;
+        }
+    }
+
+    private boolean isWeightMatching(TalentDto t, String minW, String maxW) {
+        if ((minW == null || minW.isBlank()) && (maxW == null || maxW.isBlank())) return true;
+        try {
+            double w = Double.parseDouble(t.getWeight() != null ? t.getWeight().replaceAll("[^0-9.]", "") : "0");
+            if (minW != null && !minW.isBlank() && w < Double.parseDouble(minW.trim())) return false;
+            if (maxW != null && !maxW.isBlank() && w > Double.parseDouble(maxW.trim())) return false;
+            return true;
+        } catch (Exception e) {
+            return true;
+        }
+    }
+
     private void initDefaultTalents() {
         // Talent 1: Aarav Varma (Cinematographer)
         TalentDto t1 = new TalentDto();
@@ -241,6 +324,15 @@ public class TalentService {
         t1.setCompany("Aura Cinema Works");
         t1.setIndustry("Motion Pictures & Film");
         t1.setWebsiteUrl("https://aaravvarma.cinematography.in");
+        t1.setUserId("t-1");
+        t1.setGender("Male");
+        t1.setFacialHair("Beard");
+        t1.setSkinTone("Fair");
+        t1.setBodyBuild("Athletic");
+        t1.setHeight("178");
+        t1.setWeight("74");
+        t1.setPhone("+91 9876543201");
+        t1.setProfessionalPhone("+91 9876543201");
         t1.setCredits(List.of(
                 Map.of("title", "Shadows of Malabar", "role", "Director of Photography", "year", "2025", "format", "Feature Film (Netflix)"),
                 Map.of("title", "The Silent Ghat", "role", "DoP", "year", "2024", "format", "Independent Festival Film")
@@ -286,6 +378,15 @@ public class TalentService {
         t2.setConnectionsCount(412);
         t2.setFollowersCount(3200);
         t2.setHeadline("Lead Actress & Theatre Artist | NSD Alumna | Multilingual Performer");
+        t2.setUserId("t-2");
+        t2.setGender("Female");
+        t2.setFacialHair("");
+        t2.setSkinTone("Fair");
+        t2.setBodyBuild("Slim");
+        t2.setHeight("165");
+        t2.setWeight("54");
+        t2.setPhone("+91 9876543202");
+        t2.setProfessionalPhone("+91 9876543202");
         t2.setCredits(List.of(
                 Map.of("title", "Kayal", "role", "Lead Actress (Ananya)", "year", "2025", "format", "Malayalam Theatrical Feature"),
                 Map.of("title", "Echoes of the Stage", "role", "Lead Protagonist", "year", "2024", "format", "National Theatre Tour")
@@ -307,6 +408,15 @@ public class TalentService {
         t7.setBio("Dynamic lead actor specializing in intense romantic dramas, action thrillers, and commercial feature films in Telugu and Pan-India cinema.");
         t7.setSkills(List.of("Lead Actor", "Method Acting", "Action Stunts", "Telugu & Hindi Diction", "Horse Riding"));
         t7.setHeadline("Lead Actor | Commercial & Indie Features | Telugu & Pan-India Cinema");
+        t7.setUserId("t-7");
+        t7.setGender("Male");
+        t7.setFacialHair("Beard");
+        t7.setSkinTone("Medium");
+        t7.setBodyBuild("Athletic");
+        t7.setHeight("182");
+        t7.setWeight("78");
+        t7.setPhone("+91 9876543207");
+        t7.setProfessionalPhone("+91 9876543207");
         t7.setAvailability("Booking for 2026/2027 Schedules");
         t7.setVerified(true);
         t7.setConnectionsCount(780);
@@ -328,6 +438,15 @@ public class TalentService {
         t8.setBio("Versatile character actor and antagonist with extensive theatre and feature film background across Hindi and regional cinema.");
         t8.setSkills(List.of("Character Actor", "Antagonist / Villain", "Improvisation", "Voice Modulation", "Fight Choreography"));
         t8.setHeadline("Character Actor & Antagonist | Hindi & Regional Cinema");
+        t8.setUserId("t-8");
+        t8.setGender("Male");
+        t8.setFacialHair("Stubble");
+        t8.setSkinTone("Medium");
+        t8.setBodyBuild("Heavy");
+        t8.setHeight("180");
+        t8.setWeight("85");
+        t8.setPhone("+91 9876543208");
+        t8.setProfessionalPhone("+91 9876543208");
         t8.setAvailability("Available Immediately");
         t8.setVerified(true);
         t8.setConnectionsCount(590);
@@ -348,6 +467,15 @@ public class TalentService {
         t9.setBio("Supporting actress and voice artist fluent in Tamil, Telugu, and Malayalam. Experienced in family dramas and streaming series.");
         t9.setSkills(List.of("Supporting Actress", "Voice Actor", "Dubbing", "Expressive Delivery", "Classical Dance"));
         t9.setHeadline("Supporting Actress & Voice Artist | South Indian Cinema");
+        t9.setUserId("t-9");
+        t9.setGender("Female");
+        t9.setFacialHair("");
+        t9.setSkinTone("Fair");
+        t9.setBodyBuild("Slim");
+        t9.setHeight("160");
+        t9.setWeight("50");
+        t9.setPhone("+91 9876543209");
+        t9.setProfessionalPhone("+91 9876543209");
         t9.setAvailability("Open for Auditions");
         t9.setVerified(true);
         t9.setConnectionsCount(340);
@@ -368,6 +496,15 @@ public class TalentService {
         t10.setBio("Comic performer and situational humor specialist with over 20 feature film credits in Telugu cinema.");
         t10.setSkills(List.of("Comedian", "Comic Timing", "Dialect Mimicry", "Character Artist"));
         t10.setHeadline("Comedian & Character Artist | 20+ Feature Film Credits");
+        t10.setUserId("t-10");
+        t10.setGender("Male");
+        t10.setFacialHair("Clean-shaven");
+        t10.setSkinTone("Medium");
+        t10.setBodyBuild("Average");
+        t10.setHeight("170");
+        t10.setWeight("76");
+        t10.setPhone("+91 9876543210");
+        t10.setProfessionalPhone("+91 9876543210");
         t10.setAvailability("Available from Nov 2026");
         t10.setVerified(true);
         t10.setConnectionsCount(480);
@@ -393,6 +530,15 @@ public class TalentService {
         t3.setConnectionsCount(890);
         t3.setFollowersCount(5600);
         t3.setHeadline("Director & Screenwriter | 3 Box-Office Successes | Telugu & Hindi Cinema");
+        t3.setUserId("t-3");
+        t3.setGender("Male");
+        t3.setFacialHair("Goatee");
+        t3.setSkinTone("Medium");
+        t3.setBodyBuild("Average");
+        t3.setHeight("178");
+        t3.setWeight("75");
+        t3.setPhone("+91 9876543203");
+        t3.setProfessionalPhone("+91 9876543203");
         talentMap.put(t3.getId(), t3);
 
         // Talent 4: Sanjana Sen (Art Direction)
@@ -413,6 +559,15 @@ public class TalentService {
         t4.setVerified(true);
         t4.setConnectionsCount(330);
         t4.setFollowersCount(1420);
+        t4.setUserId("t-4");
+        t4.setGender("Female");
+        t4.setFacialHair("");
+        t4.setSkinTone("Fair");
+        t4.setBodyBuild("Slim");
+        t4.setHeight("162");
+        t4.setWeight("52");
+        t4.setPhone("+91 9876543204");
+        t4.setProfessionalPhone("+91 9876543204");
         talentMap.put(t4.getId(), t4);
 
         // Talent 5: Kabir Ahmed (Sound Design)
@@ -433,6 +588,15 @@ public class TalentService {
         t5.setVerified(true);
         t5.setConnectionsCount(640);
         t5.setFollowersCount(2100);
+        t5.setUserId("t-5");
+        t5.setGender("Male");
+        t5.setFacialHair("Mustache");
+        t5.setSkinTone("Medium");
+        t5.setBodyBuild("Average");
+        t5.setHeight("172");
+        t5.setWeight("72");
+        t5.setPhone("+91 9876543205");
+        t5.setProfessionalPhone("+91 9876543205");
         talentMap.put(t5.getId(), t5);
 
         // Talent 6: Ananya Roy (Editing)
@@ -453,6 +617,15 @@ public class TalentService {
         t6.setVerified(true);
         t6.setConnectionsCount(470);
         t6.setFollowersCount(1790);
+        t6.setUserId("t-6");
+        t6.setGender("Female");
+        t6.setFacialHair("");
+        t6.setSkinTone("Fair");
+        t6.setBodyBuild("Slim");
+        t6.setHeight("167");
+        t6.setWeight("56");
+        t6.setPhone("+91 9876543206");
+        t6.setProfessionalPhone("+91 9876543206");
         talentMap.put(t6.getId(), t6);
     }
 }

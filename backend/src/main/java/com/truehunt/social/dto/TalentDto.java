@@ -11,6 +11,20 @@ import java.util.Map;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class TalentDto {
     private String id;
+    private String userId;
+    private String gender;
+    private String facialHair;
+    private String skinTone;
+    private String bodyBuild;
+    private String height;
+    private String weight;
+    private String dateOfBirth;
+    private String phone;
+    private String professionalPhone;
+    private List<String> secondaryCrafts = new ArrayList<>();
+    private List<String> secondarySubCrafts = new ArrayList<>();
+    private List<String> languages = new ArrayList<>();
+    private List<String> workTypes = new ArrayList<>();
     private String name;
     private String role;
     private String category;
@@ -47,6 +61,118 @@ public class TalentDto {
 
     public void setId(String id) {
         this.id = id;
+    }
+
+    public String getUserId() {
+        return userId != null ? userId : id;
+    }
+
+    public void setUserId(String userId) {
+        this.userId = userId;
+    }
+
+    public String getGender() {
+        return gender;
+    }
+
+    public void setGender(String gender) {
+        this.gender = gender;
+    }
+
+    public String getFacialHair() {
+        return facialHair;
+    }
+
+    public void setFacialHair(String facialHair) {
+        this.facialHair = facialHair;
+    }
+
+    public String getSkinTone() {
+        return skinTone;
+    }
+
+    public void setSkinTone(String skinTone) {
+        this.skinTone = skinTone;
+    }
+
+    public String getBodyBuild() {
+        return bodyBuild;
+    }
+
+    public void setBodyBuild(String bodyBuild) {
+        this.bodyBuild = bodyBuild;
+    }
+
+    public String getHeight() {
+        return height;
+    }
+
+    public void setHeight(String height) {
+        this.height = height;
+    }
+
+    public String getWeight() {
+        return weight;
+    }
+
+    public void setWeight(String weight) {
+        this.weight = weight;
+    }
+
+    public String getDateOfBirth() {
+        return dateOfBirth;
+    }
+
+    public void setDateOfBirth(String dateOfBirth) {
+        this.dateOfBirth = dateOfBirth;
+    }
+
+    public String getPhone() {
+        return phone;
+    }
+
+    public void setPhone(String phone) {
+        this.phone = phone;
+    }
+
+    public String getProfessionalPhone() {
+        return professionalPhone;
+    }
+
+    public void setProfessionalPhone(String professionalPhone) {
+        this.professionalPhone = professionalPhone;
+    }
+
+    public List<String> getSecondaryCrafts() {
+        return secondaryCrafts != null ? secondaryCrafts : new ArrayList<>();
+    }
+
+    public void setSecondaryCrafts(List<String> secondaryCrafts) {
+        this.secondaryCrafts = secondaryCrafts;
+    }
+
+    public List<String> getSecondarySubCrafts() {
+        return secondarySubCrafts != null ? secondarySubCrafts : new ArrayList<>();
+    }
+
+    public void setSecondarySubCrafts(List<String> secondarySubCrafts) {
+        this.secondarySubCrafts = secondarySubCrafts;
+    }
+
+    public List<String> getLanguages() {
+        return languages != null ? languages : new ArrayList<>();
+    }
+
+    public void setLanguages(List<String> languages) {
+        this.languages = languages;
+    }
+
+    public List<String> getWorkTypes() {
+        return workTypes != null ? workTypes : new ArrayList<>();
+    }
+
+    public void setWorkTypes(List<String> workTypes) {
+        this.workTypes = workTypes;
     }
 
     public String getName() {

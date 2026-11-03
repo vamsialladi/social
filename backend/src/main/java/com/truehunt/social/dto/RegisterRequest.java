@@ -14,6 +14,7 @@ public class RegisterRequest {
 
     private String phone;
     private String phoneNumber;
+    private String professionalPhone;
     private String password;
     private String role; // "TALENT" or "PRODUCER" / "STUDIO"
     private String primaryCraft;
@@ -70,6 +71,14 @@ public class RegisterRequest {
 
     public void setPhoneNumber(String phoneNumber) {
         this.phoneNumber = phoneNumber;
+    }
+
+    public String getProfessionalPhone() {
+        return professionalPhone;
+    }
+
+    public void setProfessionalPhone(String professionalPhone) {
+        this.professionalPhone = professionalPhone;
     }
 
     public String getPassword() {
