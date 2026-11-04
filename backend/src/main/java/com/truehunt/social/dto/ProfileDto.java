@@ -20,6 +20,7 @@ public class ProfileDto {
     private String industry;
     private String location;
     private String bio;
+    private String highlights;
     private String avatar;
     private String profileImageUrl;
     private String coverImage;
@@ -32,6 +33,7 @@ public class ProfileDto {
     private String showreel;
 
     private String phone;
+    private String professionalPhone;
     private String email;
     private String address;
     private String dateOfBirth;
@@ -49,6 +51,7 @@ public class ProfileDto {
     private Boolean isOwner = false;
 
     private List<String> skills = new ArrayList<>();
+    private List<String> talents = new ArrayList<>();
     private List<String> languages = new ArrayList<>();
     private List<String> secondaryCrafts = new ArrayList<>();
     private List<String> secondarySubCrafts = new ArrayList<>();
@@ -244,6 +247,57 @@ public class ProfileDto {
         this.phone = phone;
     }
 
+    public String getPhoneNumber() {
+        return phone;
+    }
+
+    public void setPhoneNumber(String phoneNumber) {
+        this.phone = phoneNumber;
+    }
+
+    public String getProfessionalPhone() {
+        return (professionalPhone != null && !professionalPhone.isBlank()) ? professionalPhone : phone;
+    }
+
+    public void setProfessionalPhone(String professionalPhone) {
+        this.professionalPhone = professionalPhone;
+    }
+
+    public String getFullName() {
+        return name;
+    }
+
+    public void setFullName(String fullName) {
+        this.name = fullName;
+    }
+
+    public String getCraft() {
+        return primaryCraft;
+    }
+
+    public void setCraft(String craft) {
+        this.primaryCraft = craft;
+    }
+
+    public String getHighlights() {
+        return (highlights != null && !highlights.isBlank()) ? highlights : bio;
+    }
+
+    public void setHighlights(String highlights) {
+        this.highlights = highlights;
+        if (this.bio == null || this.bio.isBlank()) {
+            this.bio = highlights;
+        }
+    }
+
+    public String getExperienceYears() {
+        return experience;
+    }
+
+    public void setExperienceYears(String experienceYears) {
+        this.experience = experienceYears;
+    }
+
     public String getEmail() {
         return email;
     }
@@ -357,11 +411,25 @@ public class ProfileDto {
     }
 
     public List<String> getSkills() {
-        return skills;
+        return (skills != null && !skills.isEmpty()) ? skills : talents;
     }
 
     public void setSkills(List<String> skills) {
         this.skills = skills;
+        if (this.talents == null || this.talents.isEmpty()) {
+            this.talents = skills;
+        }
+    }
+
+    public List<String> getTalents() {
+        return (talents != null && !talents.isEmpty()) ? talents : skills;
+    }
+
+    public void setTalents(List<String> talents) {
+        this.talents = talents;
+        if (this.skills == null || this.skills.isEmpty()) {
+            this.skills = talents;
+        }
     }
 
     public List<String> getLanguages() {

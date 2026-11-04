@@ -112,6 +112,14 @@ public class ProfileService {
             opt = findAccountByPublicUserId(id)
                     .flatMap(account -> profileRepository.findByEmail(account.getEmail()));
         }
+        if (opt.isEmpty()) {
+            opt = profileRepository.findByEmail(id);
+        }
+        if (opt.isEmpty()) {
+            try {
+                opt = profileRepository.findById(Long.parseLong(id));
+            } catch (Exception ignored) {}
+        }
 
         if (opt.isEmpty()) {
             throw new ResourceNotFoundException("Profile", "id", id);
@@ -135,6 +143,7 @@ public class ProfileService {
         if (req.getAvailability() != null) profile.setAvailability(req.getAvailability());
         if (req.getPhone() != null) profile.setPhone(req.getPhone());
         if (req.getPhoneNumber() != null && !req.getPhoneNumber().isBlank()) profile.setPhone(req.getPhoneNumber());
+        if (req.getProfessionalPhone() != null) profile.setProfessionalPhone(req.getProfessionalPhone());
         if (req.getEmail() != null) profile.setEmail(req.getEmail());
         if (req.getExperience() != null) profile.setExperience(req.getExperience());
         if (req.getPrimaryCraft() != null) profile.setPrimaryCraft(req.getPrimaryCraft());
@@ -149,7 +158,7 @@ public class ProfileService {
         if (req.getSkinTone() != null) profile.setSkinTone(req.getSkinTone());
         if (req.getAddress() != null) profile.setAddress(req.getAddress());
         if (req.getLocation() != null && !req.getLocation().isBlank()) profile.setAddress(req.getLocation());
-        if (req.getBio() != null) profile.setHighlights(req.getBio());
+        if (req.getBio() != null) profile.setBio(req.getBio());
         if (req.getHighlights() != null && !req.getHighlights().isBlank()) profile.setHighlights(req.getHighlights());
         if (req.getOtherLanguage() != null) profile.setOtherLanguage(req.getOtherLanguage());
         if (req.getProfileImageUrl() != null) profile.setProfileImageUrl(req.getProfileImageUrl());
@@ -177,11 +186,22 @@ public class ProfileService {
                 m.put("id", e.getId() != null ? e.getId() : "exp-" + UUID.randomUUID().toString().substring(0, 8));
                 m.put("title", e.getTitle());
                 m.put("company", e.getCompany());
+                m.put("projectName", e.getProjectName());
+                m.put("organizationName", e.getOrganizationName());
+                m.put("organizationLogoUrl", e.getOrganizationLogoUrl() != null ? e.getOrganizationLogoUrl() : e.getCompanyLogoUrl());
+                m.put("companyLogoUrl", e.getCompanyLogoUrl() != null ? e.getCompanyLogoUrl() : e.getOrganizationLogoUrl());
+                m.put("featuredOnProfile", e.getFeaturedOnProfile() != null ? e.getFeaturedOnProfile() : false);
+                m.put("workedAs", e.getWorkedAs());
                 m.put("location", e.getLocation());
                 m.put("startDate", e.getStartDate());
                 m.put("endDate", e.getEndDate());
                 m.put("isCurrent", e.getIsCurrent());
                 m.put("description", e.getDescription());
+                m.put("highlights", e.getHighlights());
+                m.put("employmentType", e.getEmploymentType());
+                if (e.getAttachment() != null) {
+                    m.put("attachment", e.getAttachment());
+                }
                 exps.add(m);
             }
             profile.setExperiences(exps);
@@ -260,6 +280,12 @@ public class ProfileService {
         expMap.put("projectName", exp.getProjectName());
         expMap.put("organizationName", exp.getOrganizationName());
         expMap.put("workedAs", exp.getWorkedAs());
+        expMap.put("organizationLogoUrl", exp.getOrganizationLogoUrl() != null ? exp.getOrganizationLogoUrl() : exp.getCompanyLogoUrl());
+        expMap.put("companyLogoUrl", exp.getCompanyLogoUrl() != null ? exp.getCompanyLogoUrl() : exp.getOrganizationLogoUrl());
+        expMap.put("featuredOnProfile", exp.getFeaturedOnProfile() != null ? exp.getFeaturedOnProfile() : false);
+        if (exp.getAttachment() != null) {
+            expMap.put("attachment", exp.getAttachment());
+        }
 
         List<Map<String, Object>> experiences = new ArrayList<>(profile.getExperiences());
         experiences.add(0, expMap);
@@ -287,6 +313,19 @@ public class ProfileService {
                 if (exp.getEndDate() != null) updated.put("endDate", exp.getEndDate());
                 if (exp.getIsCurrent() != null) updated.put("isCurrent", exp.getIsCurrent());
                 if (exp.getDescription() != null) updated.put("description", exp.getDescription());
+                if (exp.getHighlights() != null) updated.put("highlights", exp.getHighlights());
+                if (exp.getProjectName() != null) updated.put("projectName", exp.getProjectName());
+                if (exp.getOrganizationName() != null) updated.put("organizationName", exp.getOrganizationName());
+                if (exp.getWorkedAs() != null) updated.put("workedAs", exp.getWorkedAs());
+                if (exp.getOrganizationLogoUrl() != null) {
+                    updated.put("organizationLogoUrl", exp.getOrganizationLogoUrl());
+                    updated.put("companyLogoUrl", exp.getOrganizationLogoUrl());
+                } else if (exp.getCompanyLogoUrl() != null) {
+                    updated.put("companyLogoUrl", exp.getCompanyLogoUrl());
+                    updated.put("organizationLogoUrl", exp.getCompanyLogoUrl());
+                }
+                if (exp.getFeaturedOnProfile() != null) updated.put("featuredOnProfile", exp.getFeaturedOnProfile());
+                if (exp.getAttachment() != null) updated.put("attachment", exp.getAttachment());
                 experiences.set(i, updated);
                 found = true;
                 break;
@@ -559,11 +598,14 @@ public class ProfileService {
         dto.setReferId(entity.getUserId());
         dto.setName(entity.getName());
         dto.setPhone(entity.getPhone());
+        dto.setProfessionalPhone(entity.getProfessionalPhone() != null ? entity.getProfessionalPhone() : entity.getPhone());
         dto.setEmail(entity.getEmail());
         dto.setAddress(entity.getAddress());
         dto.setLocation(entity.getAddress() != null && !entity.getAddress().isBlank() ? entity.getAddress() : "Hyderabad, India");
-        dto.setBio(entity.getHighlights() != null && !entity.getHighlights().isBlank() ? entity.getHighlights() :
+        String bioVal = (entity.getBio() != null && !entity.getBio().isBlank()) ? entity.getBio() : entity.getHighlights();
+        dto.setBio(bioVal != null && !bioVal.isBlank() ? bioVal :
                 "Cinema professional dedicated to quality filmmaking, innovative storytelling, and industry collaboration.");
+        dto.setHighlights(dto.getBio());
         dto.setDateOfBirth(entity.getDateOfBirth());
         dto.setExperience(entity.getExperience() != null ? entity.getExperience() : "5 Years");
         dto.setPrimaryCraft(entity.getPrimaryCraft() != null ? entity.getPrimaryCraft() : "Direction");
@@ -599,6 +641,7 @@ public class ProfileService {
             skills.add(entity.getPrimaryCraft());
         }
         dto.setSkills(skills);
+        dto.setTalents(skills);
         dto.setLanguages(entity.getLanguages());
         dto.setSecondaryCrafts(entity.getSecondaryCrafts());
         dto.setSecondarySubCrafts(entity.getSecondarySubCrafts());
@@ -611,12 +654,27 @@ public class ProfileService {
         for (Map<String, Object> expMap : entity.getExperiences()) {
             ExperienceDto exp = new ExperienceDto();
             exp.setId((String) expMap.get("id"));
-            exp.setTitle((String) expMap.getOrDefault("title", expMap.getOrDefault("workedAs", expMap.get("projectName"))));
-            exp.setCompany((String) expMap.getOrDefault("company", expMap.get("organizationName")));
+            String title = (String) expMap.getOrDefault("title", expMap.getOrDefault("workedAs", expMap.get("projectName")));
+            String comp = (String) expMap.getOrDefault("company", expMap.get("organizationName"));
+            exp.setTitle(title);
+            exp.setCompany(comp);
+            exp.setProjectName((String) expMap.getOrDefault("projectName", title));
+            exp.setOrganizationName((String) expMap.getOrDefault("organizationName", comp));
+            exp.setWorkedAs((String) expMap.getOrDefault("workedAs", title));
             exp.setLocation((String) expMap.get("location"));
             exp.setStartDate((String) expMap.get("startDate"));
             exp.setEndDate((String) expMap.get("endDate"));
             exp.setDescription((String) expMap.getOrDefault("description", expMap.get("highlights")));
+            exp.setHighlights((String) expMap.getOrDefault("highlights", expMap.get("description")));
+            exp.setEmploymentType((String) expMap.get("employmentType"));
+            String logo = (String) expMap.getOrDefault("organizationLogoUrl", expMap.get("companyLogoUrl"));
+            exp.setOrganizationLogoUrl(logo);
+            exp.setCompanyLogoUrl(logo);
+            Object featured = expMap.get("featuredOnProfile");
+            exp.setFeaturedOnProfile(featured instanceof Boolean ? (Boolean) featured : Boolean.parseBoolean(String.valueOf(featured)));
+            if (expMap.get("attachment") instanceof Map) {
+                exp.setAttachment((Map<String, Object>) expMap.get("attachment"));
+            }
             expDtos.add(exp);
         }
         dto.setExperiences(expDtos);

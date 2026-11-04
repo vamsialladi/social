@@ -3,6 +3,8 @@ package com.truehunt.social.dto;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 
+import java.util.Map;
+
 @JsonInclude(JsonInclude.Include.NON_NULL)
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class ExperienceDto {
@@ -17,6 +19,9 @@ public class ExperienceDto {
     private String description;
     private String highlights;
     private String companyLogoUrl;
+    private String organizationLogoUrl;
+    private Boolean featuredOnProfile = false;
+    private Map<String, Object> attachment;
 
     // Alternative field aliases for social backward compatibility
     private String projectName;
@@ -114,11 +119,43 @@ public class ExperienceDto {
     }
 
     public String getCompanyLogoUrl() {
-        return companyLogoUrl;
+        if (companyLogoUrl != null && !companyLogoUrl.isBlank()) return companyLogoUrl;
+        return organizationLogoUrl;
     }
 
     public void setCompanyLogoUrl(String companyLogoUrl) {
         this.companyLogoUrl = companyLogoUrl;
+        if (this.organizationLogoUrl == null || this.organizationLogoUrl.isBlank()) {
+            this.organizationLogoUrl = companyLogoUrl;
+        }
+    }
+
+    public String getOrganizationLogoUrl() {
+        if (organizationLogoUrl != null && !organizationLogoUrl.isBlank()) return organizationLogoUrl;
+        return companyLogoUrl;
+    }
+
+    public void setOrganizationLogoUrl(String organizationLogoUrl) {
+        this.organizationLogoUrl = organizationLogoUrl;
+        if (this.companyLogoUrl == null || this.companyLogoUrl.isBlank()) {
+            this.companyLogoUrl = organizationLogoUrl;
+        }
+    }
+
+    public Boolean getFeaturedOnProfile() {
+        return featuredOnProfile != null ? featuredOnProfile : false;
+    }
+
+    public void setFeaturedOnProfile(Boolean featuredOnProfile) {
+        this.featuredOnProfile = featuredOnProfile;
+    }
+
+    public Map<String, Object> getAttachment() {
+        return attachment;
+    }
+
+    public void setAttachment(Map<String, Object> attachment) {
+        this.attachment = attachment;
     }
 
     public String getProjectName() {

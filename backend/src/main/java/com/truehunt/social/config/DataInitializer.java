@@ -97,12 +97,14 @@ public class DataInitializer {
                 profile.setUserId("me");
                 profile.setName("Chandrabose Alladi");
                 profile.setPhone("+91 9876543210");
+                profile.setProfessionalPhone("+91 9876543210");
                 profile.setEmail("pro@truehunt.in");
                 profile.setExperience("5 Years");
                 profile.setPrimaryCraft("Cast (Actors)");
                 profile.setSubCraft("Lead Actor");
                 profile.setHeadline("Lead Actor | Method Acting & Action Specialist");
                 profile.setAddress("Hyderabad, Telangana, India");
+                profile.setFacialHair("Clean Shaven");
                 profile.setLanguages(List.of("Telugu", "English", "Hindi"));
                 profile.setOtherLanguage("");
                 profile.setTalents(List.of("Lead Actor", "Method Acting", "Action Stunts", "Voice Modulation"));
@@ -111,6 +113,7 @@ public class DataInitializer {
                 profile.setCoverImageUrl("https://images.unsplash.com/photo-1485846234645-a62644f84728?auto=format&fit=crop&w=1200&q=80");
                 profile.setVideoUrls(List.of("https://www.youtube.com/watch?v=sample1"));
                 profile.setHighlights("Cinema professional and lead actor dedicated to high-impact Indian cinema, disciplined on-set execution, and multi-lingual storytelling.");
+                profile.setBio(profile.getHighlights());
 
                 // Experiences
                 Map<String, Object> exp1 = new HashMap<>();
@@ -125,6 +128,9 @@ public class DataInitializer {
                 exp1.put("projectName", "Cinema Scope Production");
                 exp1.put("organizationName", "Northstar Films");
                 exp1.put("workedAs", "Lead Actor");
+                exp1.put("organizationLogoUrl", "https://www.google.com/s2/favicons?domain=netflix.com&sz=128");
+                exp1.put("companyLogoUrl", "https://www.google.com/s2/favicons?domain=netflix.com&sz=128");
+                exp1.put("featuredOnProfile", true);
                 profile.setExperiences(List.of(exp1));
 
                 // Educations

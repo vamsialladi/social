@@ -11,4 +11,5 @@ public interface ConversationRepository extends JpaRepository<ConversationEntity
     List<ConversationEntity> findAllByOrderByUpdatedAtDesc();
     List<ConversationEntity> findAllByMailboxOrderByUpdatedAtDesc(String mailbox);
     List<ConversationEntity> findAllByMailboxIgnoreCaseOrderByUpdatedAtDesc(String mailbox);
+    java.util.Optional<ConversationEntity> findFirstByNameIgnoreCase(String name);
 }

@@ -48,6 +48,7 @@ public class MediaService {
             result.put("url", fileUrl);
             result.put("fileName", originalName);
             result.put("size", file.getSize());
+            result.put("sizeBytes", file.getSize());
             result.put("contentType", file.getContentType());
             result.put("category", category != null ? category : "general");
             return result;

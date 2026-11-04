@@ -59,8 +59,18 @@ public class PostService {
         post.setType(req.getType() != null ? req.getType().toLowerCase() : "post");
         post.setContent(req.getContent());
         post.setTitle(req.getTitle());
-        post.setMediaUrl(req.getMediaUrl());
-        post.setMediaType(req.getMediaType());
+        if (req.getMedia() != null) {
+            post.setMedia(req.getMedia());
+            if (req.getMediaUrl() == null && req.getMedia().get("url") != null) {
+                post.setMediaUrl(String.valueOf(req.getMedia().get("url")));
+            }
+            if (req.getMediaType() == null && req.getMedia().get("type") != null) {
+                post.setMediaType(String.valueOf(req.getMedia().get("type")));
+            }
+        } else {
+            post.setMediaUrl(req.getMediaUrl());
+            post.setMediaType(req.getMediaType());
+        }
         post.setCreatedAt(LocalDateTime.now());
 
         if (req.getOpportunityDetails() != null) {
@@ -94,6 +104,7 @@ public class PostService {
         postRepository.save(post);
 
         Map<String, Object> res = new HashMap<>();
+        res.put("id", id);
         res.put("postId", id);
         res.put("liked", post.isLiked());
         res.put("likesCount", post.getLikesCount());
@@ -116,15 +127,12 @@ public class PostService {
         post.addComment("Cinema Professional", text);
         postRepository.save(post);
 
-        Map<String, Object> comment = new HashMap<>();
-        comment.put("id", "c-" + System.currentTimeMillis());
-        comment.put("authorName", "Cinema Professional");
-        comment.put("text", text);
-        comment.put("createdAt", "Just now");
-        comment.put("postId", id);
-        comment.put("commentsCount", post.getCommentsCount());
-        comment.put("comments", post.getComments());
-        return comment;
+        Map<String, Object> res = post.toDto();
+        res.put("id", id);
+        res.put("postId", id);
+        res.put("commentsCount", post.getCommentsCount());
+        res.put("comments", post.getComments());
+        return res;
     }
 
     @Transactional
@@ -149,7 +157,9 @@ public class PostService {
 
         Map<String, Object> res = new HashMap<>();
         res.put("id", id);
+        res.put("postId", id);
         res.put("applied", post.isApplied());
+        res.put("applicationsCount", post.getApplicationsCount());
         res.put("message", "Application submitted successfully.");
         return res;
     }

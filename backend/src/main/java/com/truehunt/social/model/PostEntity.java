@@ -203,9 +203,10 @@ public class PostEntity {
         dto.put("type", type != null ? type : "post");
         dto.put("title", title != null ? title : "");
         dto.put("content", content != null ? content : "");
-        dto.put("media", getMedia());
-        dto.put("mediaUrl", mediaUrl);
-        dto.put("mediaType", mediaType);
+        Map<String, Object> mediaObj = getMedia();
+        dto.put("media", mediaObj);
+        dto.put("mediaUrl", mediaUrl != null ? mediaUrl : (mediaObj != null ? mediaObj.get("url") : null));
+        dto.put("mediaType", mediaType != null ? mediaType : (mediaObj != null ? mediaObj.get("type") : null));
         dto.put("likesCount", likesCount);
         dto.put("commentsCount", commentsCount);
         dto.put("applicationsCount", applicationsCount);

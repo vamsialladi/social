@@ -28,6 +28,7 @@ public class ProfileEntity {
     private String websiteUrl;
     private String availability;
     private String phone;
+    private String professionalPhone;
     private String email;
     private String experience;
     private String primaryCraft;
@@ -36,6 +37,10 @@ public class ProfileEntity {
     @Lob
     @Column(columnDefinition = "TEXT")
     private String highlights;
+
+    @Lob
+    @Column(columnDefinition = "TEXT")
+    private String bio;
 
     @Lob
     @Column(columnDefinition = "TEXT")
@@ -131,6 +136,9 @@ public class ProfileEntity {
     public String getPhone() { return phone; }
     public void setPhone(String phone) { this.phone = phone; }
 
+    public String getProfessionalPhone() { return professionalPhone; }
+    public void setProfessionalPhone(String professionalPhone) { this.professionalPhone = professionalPhone; }
+
     public String getEmail() { return email; }
     public void setEmail(String email) { this.email = email; }
 
@@ -143,8 +151,21 @@ public class ProfileEntity {
     public String getSubCraft() { return subCraft; }
     public void setSubCraft(String subCraft) { this.subCraft = subCraft; }
 
-    public String getHighlights() { return highlights != null ? highlights : ""; }
-    public void setHighlights(String highlights) { this.highlights = highlights; }
+    public String getHighlights() { return (highlights != null && !highlights.isBlank()) ? highlights : (bio != null ? bio : ""); }
+    public void setHighlights(String highlights) {
+        this.highlights = highlights;
+        if (this.bio == null || this.bio.isBlank()) {
+            this.bio = highlights;
+        }
+    }
+
+    public String getBio() { return (bio != null && !bio.isBlank()) ? bio : (highlights != null ? highlights : ""); }
+    public void setBio(String bio) {
+        this.bio = bio;
+        if (this.highlights == null || this.highlights.isBlank()) {
+            this.highlights = bio;
+        }
+    }
 
     public String getDateOfBirth() { return dateOfBirth; }
     public void setDateOfBirth(String dateOfBirth) { this.dateOfBirth = dateOfBirth; }
@@ -286,51 +307,84 @@ public class ProfileEntity {
 
     public Map<String, Object> toDto() {
         Map<String, Object> dto = new HashMap<>();
-        dto.put("id", userId);
-        dto.put("userId", userId);
-        dto.put("name", name);
-        dto.put("role", role != null ? role : primaryCraft);
-        dto.put("category", category != null ? category : primaryCraft);
-        dto.put("company", company);
-        dto.put("industry", industry);
-        dto.put("websiteUrl", websiteUrl);
-        dto.put("availability", availability);
-        dto.put("phone", phone);
-        dto.put("email", email);
-        dto.put("experience", experience);
-        dto.put("primaryCraft", primaryCraft);
-        dto.put("subCraft", subCraft);
+        String uid = (userId != null && !userId.isBlank()) ? userId : (id != null ? String.valueOf(id) : "me");
+        dto.put("id", uid);
+        dto.put("userId", uid);
+        dto.put("referId", uid);
+        dto.put("name", name != null ? name : "");
+        dto.put("fullName", name != null ? name : "");
+
+        String resolvedRole = (role != null && !role.isBlank()) ? role
+                : ((subCraft != null && !subCraft.isBlank()) ? subCraft
+                : ((primaryCraft != null && !primaryCraft.isBlank()) ? primaryCraft : "Cinema Professional"));
+        dto.put("role", resolvedRole);
+
+        String resolvedCategory = (category != null && !category.isBlank()) ? category
+                : ((primaryCraft != null && !primaryCraft.isBlank()) ? primaryCraft : "Film Industry");
+        dto.put("category", resolvedCategory);
+        dto.put("craft", primaryCraft != null ? primaryCraft : "");
+        dto.put("primaryCraft", primaryCraft != null ? primaryCraft : "");
+        dto.put("subCraft", subCraft != null ? subCraft : "");
+
+        dto.put("company", company != null ? company : "");
+        dto.put("industry", industry != null ? industry : "");
+        dto.put("websiteUrl", websiteUrl != null ? websiteUrl : "");
+        dto.put("availability", (availability != null && !availability.isBlank()) ? availability : "Available for New Projects");
+        dto.put("phone", phone != null ? phone : "");
+        dto.put("phoneNumber", phone != null ? phone : "");
+        dto.put("professionalPhone", professionalPhone != null ? professionalPhone : "");
+        dto.put("email", email != null ? email : "");
+        dto.put("experience", experience != null ? experience : "");
+        dto.put("experienceYears", experience != null ? experience : "");
+
         dto.put("secondaryCrafts", getSecondaryCrafts());
         dto.put("secondarySubCrafts", getSecondarySubCrafts());
-        dto.put("dateOfBirth", dateOfBirth);
-        dto.put("height", height);
-        dto.put("weight", weight);
-        dto.put("bodyBuild", bodyBuild);
-        dto.put("gender", gender);
-        dto.put("skinTone", skinTone);
-        dto.put("address", address);
+        dto.put("dateOfBirth", dateOfBirth != null ? dateOfBirth : "");
+        dto.put("height", height != null ? height : "");
+        dto.put("weight", weight != null ? weight : "");
+        dto.put("bodyBuild", bodyBuild != null ? bodyBuild : "");
+        dto.put("gender", gender != null ? gender : "");
+        dto.put("facialHair", facialHair != null ? facialHair : "");
+        dto.put("skinTone", skinTone != null ? skinTone : "");
+        dto.put("address", address != null ? address : "");
+        dto.put("location", (address != null && !address.isBlank()) ? address : "Hyderabad, India");
+
+        String resolvedBio = (bio != null && !bio.isBlank()) ? bio : (highlights != null ? highlights : "");
+        dto.put("bio", resolvedBio);
+        dto.put("highlights", resolvedBio);
+
         dto.put("languages", getLanguages());
-        dto.put("otherLanguage", otherLanguage);
+        dto.put("otherLanguage", otherLanguage != null ? otherLanguage : "");
         dto.put("talents", getTalents());
         dto.put("workTypes", getWorkTypes());
-        dto.put("profileImageUrl", profileImageUrl);
-        dto.put("coverImageUrl", coverImageUrl);
+
+        List<String> allSkills = new ArrayList<>(getTalents());
+        if (allSkills.isEmpty() && primaryCraft != null && !primaryCraft.isBlank()) {
+            allSkills.add(primaryCraft);
+        }
+        dto.put("skills", allSkills);
+
+        dto.put("profileImageUrl", profileImageUrl != null ? profileImageUrl : "");
+        dto.put("avatar", profileImageUrl != null ? profileImageUrl : "");
+        dto.put("coverImageUrl", coverImageUrl != null ? coverImageUrl : "");
+        dto.put("coverImage", coverImageUrl != null ? coverImageUrl : "");
+
         dto.put("videoUrls", getVideoUrls());
         dto.put("videos", getVideos());
         dto.put("experiences", getExperiences());
         dto.put("educations", getEducations());
         dto.put("projects", getProjects());
-        dto.put("skills", getTalents());
-        dto.put("role", primaryCraft != null ? primaryCraft : "Cinema Professional");
-        dto.put("category", primaryCraft != null ? primaryCraft : "Film Industry");
-        dto.put("headline", headline != null && !headline.isBlank() ? headline :
-                (primaryCraft != null ? primaryCraft + " | Cinema Professional" : "Cinema Professional"));
-        dto.put("location", address != null ? address : "Hyderabad, India");
-        dto.put("bio", highlights != null && !highlights.isBlank() ? highlights : "Cinema professional on TrueHunt.");
-        dto.put("availability", "Available for New Projects");
+
+        String resolvedHeadline = (headline != null && !headline.isBlank()) ? headline
+                : (primaryCraft != null ? primaryCraft + " | Cinema Professional" : "Cinema Professional");
+        dto.put("headline", resolvedHeadline);
+
         dto.put("verified", true);
         dto.put("connectionsCount", 128);
         dto.put("followersCount", 430);
+        dto.put("isOwner", true);
+        dto.put("isConnected", false);
+        dto.put("isFollowing", false);
         return dto;
     }
 }

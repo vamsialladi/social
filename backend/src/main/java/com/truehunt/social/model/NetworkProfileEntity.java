@@ -18,6 +18,8 @@ public class NetworkProfileEntity {
     private String location;
     private String mutualConnections;
     private String avatarClass = "network-avatar-coral";
+    @Column(length = 2048)
+    private String profileImageUrl;
     private boolean connected = false;
     private boolean following = false;
 
@@ -32,6 +34,18 @@ public class NetworkProfileEntity {
         this.location = location;
         this.mutualConnections = mutualConnections;
         this.avatarClass = avatarClass;
+    }
+
+    public NetworkProfileEntity(String id, String name, String initials, String status, String role, String location, String mutualConnections, String avatarClass, String profileImageUrl) {
+        this.id = id;
+        this.name = name;
+        this.initials = initials;
+        this.status = status;
+        this.role = role;
+        this.location = location;
+        this.mutualConnections = mutualConnections;
+        this.avatarClass = avatarClass;
+        this.profileImageUrl = profileImageUrl;
     }
 
     public String getId() { return id; }
@@ -58,6 +72,9 @@ public class NetworkProfileEntity {
     public String getAvatarClass() { return avatarClass; }
     public void setAvatarClass(String avatarClass) { this.avatarClass = avatarClass; }
 
+    public String getProfileImageUrl() { return profileImageUrl; }
+    public void setProfileImageUrl(String profileImageUrl) { this.profileImageUrl = profileImageUrl; }
+
     public boolean isConnected() { return connected; }
     public void setConnected(boolean connected) { this.connected = connected; }
 
@@ -67,6 +84,7 @@ public class NetworkProfileEntity {
     public Map<String, Object> toDto() {
         Map<String, Object> dto = new HashMap<>();
         dto.put("id", id);
+        dto.put("userId", id);
         dto.put("name", name != null ? name : "");
         dto.put("initials", initials != null ? initials : "");
         dto.put("status", status != null ? status : "active");
@@ -74,8 +92,12 @@ public class NetworkProfileEntity {
         dto.put("location", location != null ? location : "");
         dto.put("mutualConnections", mutualConnections != null ? mutualConnections : "");
         dto.put("avatarClass", avatarClass != null ? avatarClass : "network-avatar-coral");
+        dto.put("profileImageUrl", profileImageUrl != null ? profileImageUrl : "");
+        dto.put("avatar", profileImageUrl != null ? profileImageUrl : "");
         dto.put("isConnected", connected);
+        dto.put("connected", connected);
         dto.put("isFollowing", following);
+        dto.put("following", following);
         return dto;
     }
 }

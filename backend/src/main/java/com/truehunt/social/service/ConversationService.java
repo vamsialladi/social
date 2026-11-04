@@ -32,9 +32,7 @@ public class ConversationService {
     }
 
     public Map<String, Object> getConversation(String id) {
-        Long numericId = parseLongId(id);
-        ConversationEntity entity = (numericId != null ? conversationRepository.findById(numericId) : Optional.<ConversationEntity>empty())
-                .orElseThrow(() -> new ResourceNotFoundException("Conversation", "id", id));
+        ConversationEntity entity = findConversationEntity(id);
         return entity.toDto();
     }
 
@@ -43,9 +41,7 @@ public class ConversationService {
         if (req == null || req.getContent() == null || req.getContent().trim().isEmpty()) {
             throw new BadRequestException("Message content cannot be empty.");
         }
-        Long numericId = parseLongId(id);
-        ConversationEntity entity = (numericId != null ? conversationRepository.findById(numericId) : Optional.<ConversationEntity>empty())
-                .orElseThrow(() -> new ResourceNotFoundException("Conversation", "id", id));
+        ConversationEntity entity = findConversationEntity(id);
 
         entity.addMessage(req.getContent(), req.getDirection() != null ? req.getDirection() : "outgoing", req.getAttachment());
         conversationRepository.save(entity);
@@ -81,9 +77,7 @@ public class ConversationService {
 
     @Transactional
     public Map<String, Object> markAsRead(String id) {
-        Long numericId = parseLongId(id);
-        ConversationEntity entity = (numericId != null ? conversationRepository.findById(numericId) : Optional.<ConversationEntity>empty())
-                .orElseThrow(() -> new ResourceNotFoundException("Conversation", "id", id));
+        ConversationEntity entity = findConversationEntity(id);
         entity.setUnread(false);
         conversationRepository.save(entity);
         return entity.toDto();
@@ -91,9 +85,7 @@ public class ConversationService {
 
     @Transactional
     public Map<String, Object> starConversation(String id) {
-        Long numericId = parseLongId(id);
-        ConversationEntity entity = (numericId != null ? conversationRepository.findById(numericId) : Optional.<ConversationEntity>empty())
-                .orElseThrow(() -> new ResourceNotFoundException("Conversation", "id", id));
+        ConversationEntity entity = findConversationEntity(id);
         entity.setStarred(!entity.isStarred());
         conversationRepository.save(entity);
         return entity.toDto();
@@ -101,9 +93,7 @@ public class ConversationService {
 
     @Transactional
     public Map<String, Object> updateMailbox(String id, String mailbox) {
-        Long numericId = parseLongId(id);
-        ConversationEntity entity = (numericId != null ? conversationRepository.findById(numericId) : Optional.<ConversationEntity>empty())
-                .orElseThrow(() -> new ResourceNotFoundException("Conversation", "id", id));
+        ConversationEntity entity = findConversationEntity(id);
         entity.setMailbox(mailbox);
         conversationRepository.save(entity);
         return entity.toDto();
@@ -111,11 +101,25 @@ public class ConversationService {
 
     @Transactional
     public void deleteConversation(String id) {
-        Long numericId = parseLongId(id);
-        if (numericId == null || !conversationRepository.existsById(numericId)) {
-            throw new ResourceNotFoundException("Conversation", "id", id);
+        try {
+            ConversationEntity entity = findConversationEntity(id);
+            conversationRepository.delete(entity);
+        } catch (Exception e) {
+            Long numericId = parseLongId(id);
+            if (numericId != null && conversationRepository.existsById(numericId)) {
+                conversationRepository.deleteById(numericId);
+            }
         }
-        conversationRepository.deleteById(numericId);
+    }
+
+    private ConversationEntity findConversationEntity(String id) {
+        Long numericId = parseLongId(id);
+        if (numericId != null) {
+            Optional<ConversationEntity> opt = conversationRepository.findById(numericId);
+            if (opt.isPresent()) return opt.get();
+        }
+        return conversationRepository.findFirstByNameIgnoreCase(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Conversation", "id", id));
     }
 
     private Long parseLongId(String id) {
