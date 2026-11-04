@@ -21,6 +21,12 @@ public class ProfileEntity {
 
     private String name;
     private String headline;
+    private String role;
+    private String category;
+    private String company;
+    private String industry;
+    private String websiteUrl;
+    private String availability;
     private String phone;
     private String email;
     private String experience;
@@ -103,6 +109,24 @@ public class ProfileEntity {
 
     public String getHeadline() { return headline; }
     public void setHeadline(String headline) { this.headline = headline; }
+
+    public String getRole() { return role; }
+    public void setRole(String role) { this.role = role; }
+
+    public String getCategory() { return category; }
+    public void setCategory(String category) { this.category = category; }
+
+    public String getCompany() { return company; }
+    public void setCompany(String company) { this.company = company; }
+
+    public String getIndustry() { return industry; }
+    public void setIndustry(String industry) { this.industry = industry; }
+
+    public String getWebsiteUrl() { return websiteUrl; }
+    public void setWebsiteUrl(String websiteUrl) { this.websiteUrl = websiteUrl; }
+
+    public String getAvailability() { return availability; }
+    public void setAvailability(String availability) { this.availability = availability; }
 
     public String getPhone() { return phone; }
     public void setPhone(String phone) { this.phone = phone; }
@@ -265,6 +289,12 @@ public class ProfileEntity {
         dto.put("id", userId);
         dto.put("userId", userId);
         dto.put("name", name);
+        dto.put("role", role != null ? role : primaryCraft);
+        dto.put("category", category != null ? category : primaryCraft);
+        dto.put("company", company);
+        dto.put("industry", industry);
+        dto.put("websiteUrl", websiteUrl);
+        dto.put("availability", availability);
         dto.put("phone", phone);
         dto.put("email", email);
         dto.put("experience", experience);

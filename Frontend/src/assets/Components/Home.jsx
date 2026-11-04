@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { UsersRound, X } from 'lucide-react'
 import './Home.css'
 import Article from './Article.jsx'
 import api from '../../api'
@@ -20,8 +21,12 @@ function Home({
   setActiveNavigation,
   hidden,
   onViewProfile,
+  onViewConnection,
 }) {
   const [posts, setPosts] = useState([])
+  const [connectedProfiles, setConnectedProfiles] = useState([])
+  const [connectionsError, setConnectionsError] = useState('')
+  const [isConnectionsOpen, setIsConnectionsOpen] = useState(false)
   const [isWritingArticle, setIsWritingArticle] = useState(false)
   const [draft, setDraft] = useState('')
   const [draftType, setDraftType] = useState('post')
@@ -55,6 +60,27 @@ function Home({
       }
     }
     loadPosts()
+  }, [activeNavigation])
+
+  useEffect(() => {
+    if (activeNavigation !== 'home') return undefined
+
+    let isCurrent = true
+    async function loadConnections() {
+      setConnectionsError('')
+      try {
+        const data = await api.getConnectedProfiles()
+        if (isCurrent) setConnectedProfiles(Array.isArray(data) ? data : [])
+      } catch (error) {
+        console.error('Failed to load connections:', error)
+        if (isCurrent) setConnectionsError('Could not load your connections. Please try again.')
+      }
+    }
+
+    loadConnections()
+    return () => {
+      isCurrent = false
+    }
   }, [activeNavigation])
 
   function selectMedia(event) {
@@ -276,6 +302,20 @@ function Home({
               )}
             </div>
           </section>
+          <button
+            className="home-card home-connections-card"
+            type="button"
+            onClick={() => setIsConnectionsOpen(true)}
+            aria-haspopup="dialog"
+          >
+            <span className="home-connections-icon"><UsersRound size={20} aria-hidden="true" /></span>
+            <span className="home-connections-copy">
+              <strong>Connections</strong>
+              <small>View your professional network</small>
+            </span>
+            <span className="home-connections-count">{connectedProfiles.length}</span>
+          </button>
+          {connectionsError && <p className="home-connections-error" role="alert">{connectionsError}</p>}
         </aside>
 
         <div className="home-feed-column">
@@ -559,6 +599,76 @@ function Home({
         </aside>
       </div>
     </section>
+    {isConnectionsOpen && (
+      <div
+        className="home-connections-backdrop"
+        onMouseDown={(event) => {
+          if (event.target === event.currentTarget) setIsConnectionsOpen(false)
+        }}
+      >
+        <section
+          className="home-connections-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="home-connections-title"
+        >
+          <header className="home-connections-dialog-header">
+            <div>
+              <h2 id="home-connections-title">Your connections</h2>
+              <p>{connectedProfiles.length} people in your network</p>
+            </div>
+            <button
+              type="button"
+              className="home-connections-close"
+              aria-label="Close connections"
+              onClick={() => setIsConnectionsOpen(false)}
+            >
+              <X size={20} aria-hidden="true" />
+            </button>
+          </header>
+          {connectedProfiles.length ? (
+            <ul className="home-connections-list">
+              {connectedProfiles.map((profile) => {
+                const profileName = profile.name || 'TrueHunt member'
+                const profileImage = profile.profileImageUrl || profile.avatar || ''
+                const initials = profile.initials || profileName
+                  .split(/\s+/)
+                  .map((part) => part[0])
+                  .join('')
+                  .slice(0, 2)
+
+                return (
+                  <li key={profile.id || profile.userId || profileName}>
+                    <button
+                      type="button"
+                      className="home-connection-person"
+                      onClick={() => {
+                        setIsConnectionsOpen(false)
+                        onViewConnection?.({
+                          ...profile,
+                          userId: profile.userId || profile.id || '',
+                          profileImageUrl: profileImage,
+                        })
+                      }}
+                    >
+                      <span className={`home-avatar home-connection-avatar${profileImage ? '' : ' is-placeholder'}`}>
+                        {profileImage ? <img src={profileImage} alt="" /> : initials}
+                      </span>
+                      <span className="home-connection-person-name">{profileName}</span>
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+          ) : (
+            <div className="home-connections-empty">
+              <UsersRound size={24} aria-hidden="true" />
+              <p>No connections yet.</p>
+            </div>
+          )}
+        </section>
+      </div>
+    )}
     <Article
       profileDetails={profileDetails}
       profilePreview={profilePreview}

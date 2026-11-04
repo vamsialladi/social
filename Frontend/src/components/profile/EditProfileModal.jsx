@@ -252,6 +252,19 @@ export default function EditProfileModal({ profile, onClose, onSave }) {
             </div>
           </div>
 
+          <div className="form-group" style={{ marginBottom: '16px' }}>
+            <label className="form-label" style={{ fontSize: '12px', fontWeight: 600 }}>
+              Industry
+            </label>
+            <input
+              type="text"
+              className="form-control"
+              placeholder="e.g. Motion Pictures & Film"
+              value={formData.industry}
+              onChange={(e) => setFormData({ ...formData, industry: e.target.value })}
+            />
+          </div>
+
           {/* Location & Industry */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
             <div className="form-group" style={{ margin: 0 }}>

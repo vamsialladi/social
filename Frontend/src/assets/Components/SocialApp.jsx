@@ -10,6 +10,7 @@ import Home from './Home'
 import NetworkPage from './NetworkPage'
 import Endorsement from './Endorsement'
 import ProfilePage, { emptyProfileDetails } from './ProfilePage'
+import ConnectionsPage from './ConnectionsPage'
 import Settings from './Settings'
 import { useAuth } from '../../context/AuthContext'
 
@@ -20,6 +21,7 @@ const navigationHashes = {
   endorsement: 'endorsement',
   opportunities: 'opportunities',
   profile: 'profile',
+  connections: 'connections',
   settings: 'settings',
   'account-settings': 'account-settings',
   business: 'business',
@@ -251,6 +253,20 @@ function getNavigationFromHash() {
     .find(([, route]) => route === hash)?.[0]
 
   return navigation || (hash === 'artist-profile' ? 'profile' : 'home')
+}
+
+function getNavigationFromLocation(pathname) {
+  if (pathname.endsWith('/connections')) return 'connections'
+  if (pathname.endsWith('/profile')) return 'profile'
+  return getNavigationFromHash()
+}
+
+function getProfilePath(name) {
+  const profileSlug = String(name || '').trim().toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+
+  return profileSlug ? `/${encodeURIComponent(profileSlug)}/profile` : '/social/profile'
 }
 
 function NavigationIcon({ name }) {
@@ -1192,7 +1208,9 @@ export default function SocialApp() {
   const location = useLocation()
   const navigate = useNavigate()
   const [activeNavigation, setActiveNavigationState] = useState(() => (
-    location.state?.connectTalent?.name ? 'profile' : getNavigationFromHash()
+    location.state?.connectTalent?.name
+      ? 'profile'
+      : getNavigationFromLocation(location.pathname)
   ))
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false)
   const [viewingCandidateProfile, setViewingCandidateProfile] = useState(() => {
@@ -1262,7 +1280,8 @@ export default function SocialApp() {
 
   function showMyProfile() {
     setViewingCandidateProfile(null)
-    setActiveNavigation('profile')
+    setActiveNavigationState('profile')
+    navigate(getProfilePath(profileDetails.name || user?.name))
   }
 
   function showCandidateProfile(candidateProfile) {
@@ -1283,7 +1302,7 @@ export default function SocialApp() {
 
   useEffect(() => {
     function restoreNavigation() {
-      setActiveNavigationState(getNavigationFromHash())
+      setActiveNavigationState(getNavigationFromLocation(window.location.pathname))
     }
 
     window.addEventListener('popstate', restoreNavigation)
@@ -1346,6 +1365,7 @@ export default function SocialApp() {
         setActiveNavigation={setActiveNavigation}
         hidden={!['home', 'opportunities'].includes(activeNavigation)}
         onViewProfile={showMyProfile}
+        onViewConnection={showCandidateProfile}
       />
 
       <div hidden={activeNavigation !== 'network'}>
@@ -1368,6 +1388,9 @@ export default function SocialApp() {
           onManageNotifications={() => setActiveNavigation('settings')}
         />
       </div>
+      <div hidden={activeNavigation !== 'connections'}>
+        <ConnectionsPage onBack={() => setActiveNavigation('profile')} />
+      </div>
       <div hidden={activeNavigation !== 'profile'}>
         <ProfilePage
           isOwner={!viewingCandidateProfile && isAuthenticated}
@@ -1387,6 +1410,7 @@ export default function SocialApp() {
           }}
           profilePreview={viewingCandidateProfile?.profileImageUrl || viewingCandidateProfile?.avatar || profilePreview}
           setProfilePreview={setProfilePreview}
+          onViewConnections={() => setActiveNavigation('connections')}
           onMessage={(recipient) => {
             setNetworkConversation({
               profile: recipient,

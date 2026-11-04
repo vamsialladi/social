@@ -331,6 +331,34 @@ export default function ProfileHeader({ profile, isOwner, onEditProfile, onConne
                 {profile.experience}
               </span>
             )}
+            {profile?.role ? (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                <Briefcase size={14} />
+                {profile.role}
+              </span>
+            ) : isOwner ? (
+              <span
+                onClick={onEditProfile}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: 'var(--color-text-muted)', cursor: 'pointer', fontStyle: 'italic' }}
+                title="Click to add your role"
+              >
+                <Briefcase size={14} /> Add role
+              </span>
+            ) : null}
+            {profile?.industry ? (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                <Sparkles size={14} />
+                {profile.industry}
+              </span>
+            ) : isOwner ? (
+              <span
+                onClick={onEditProfile}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: 'var(--color-text-muted)', cursor: 'pointer', fontStyle: 'italic' }}
+                title="Click to add your industry"
+              >
+                <Sparkles size={14} /> Add industry
+              </span>
+            ) : null}
             {profile?.websiteUrl ? (
               <a 
                 href={profile.websiteUrl} 
@@ -356,6 +384,42 @@ export default function ProfileHeader({ profile, isOwner, onEditProfile, onConne
               </span>
             )}
           </div>
+
+          {(profile?.height || profile?.weight || profile?.skinTone || profile?.facialHair) && (
+            <div
+              aria-label="Profile appearance details"
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: '8px 16px',
+                marginBottom: '14px',
+                fontSize: '13px',
+                color: 'var(--color-text-secondary)'
+              }}
+            >
+              {profile?.height && <span>Height: {profile.height} cm</span>}
+              {profile?.weight && <span>Weight: {profile.weight} kg</span>}
+              {profile?.skinTone && <span>Skin tone: {profile.skinTone}</span>}
+              {profile?.facialHair && <span>Facial hair: {profile.facialHair}</span>}
+            </div>
+          )}
+
+          {(profile?.bio || isOwner) && (
+            <p
+              style={{
+                fontSize: '14px',
+                color: profile?.bio ? 'var(--color-text-secondary)' : 'var(--color-text-muted)',
+                lineHeight: 1.5,
+                margin: '0 0 14px 0',
+                whiteSpace: 'pre-line',
+                cursor: isOwner && !profile?.bio ? 'pointer' : 'default',
+                fontStyle: isOwner && !profile?.bio ? 'italic' : 'normal'
+              }}
+              onClick={isOwner && !profile?.bio ? onEditProfile : undefined}
+            >
+              {profile?.bio || 'Add your professional biography'}
+            </p>
+          )}
 
           {/* Connections & Followers Count */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '13px', paddingTop: '4px', borderTop: '1px solid var(--color-border-subtle)' }}>

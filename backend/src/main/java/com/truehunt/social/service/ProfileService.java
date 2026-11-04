@@ -127,6 +127,12 @@ public class ProfileService {
         if (req.getName() != null) profile.setName(req.getName());
         if (req.getFullName() != null && !req.getFullName().isBlank()) profile.setName(req.getFullName());
         if (req.getHeadline() != null && !req.getHeadline().isBlank()) profile.setHeadline(req.getHeadline());
+        if (req.getRole() != null) profile.setRole(req.getRole());
+        if (req.getCategory() != null) profile.setCategory(req.getCategory());
+        if (req.getCompany() != null) profile.setCompany(req.getCompany());
+        if (req.getIndustry() != null) profile.setIndustry(req.getIndustry());
+        if (req.getWebsiteUrl() != null) profile.setWebsiteUrl(req.getWebsiteUrl());
+        if (req.getAvailability() != null) profile.setAvailability(req.getAvailability());
         if (req.getPhone() != null) profile.setPhone(req.getPhone());
         if (req.getPhoneNumber() != null && !req.getPhoneNumber().isBlank()) profile.setPhone(req.getPhoneNumber());
         if (req.getEmail() != null) profile.setEmail(req.getEmail());
@@ -565,8 +571,13 @@ public class ProfileService {
         dto.setHeadline(entity.getHeadline() != null && !entity.getHeadline().isBlank()
                 ? entity.getHeadline()
                 : (entity.getPrimaryCraft() != null ? entity.getPrimaryCraft() + " | Cinema Industry Professional" : "Cinema Professional"));
-        dto.setRole(entity.getPrimaryCraft() != null ? entity.getPrimaryCraft() : "Cinema Professional");
-        dto.setCategory(entity.getPrimaryCraft() != null ? entity.getPrimaryCraft() : "Film Industry");
+        dto.setRole(entity.getRole() != null ? entity.getRole() :
+                (entity.getPrimaryCraft() != null ? entity.getPrimaryCraft() : "Cinema Professional"));
+        dto.setCategory(entity.getCategory() != null ? entity.getCategory() :
+                (entity.getPrimaryCraft() != null ? entity.getPrimaryCraft() : "Film Industry"));
+        dto.setCompany(entity.getCompany());
+        dto.setIndustry(entity.getIndustry());
+        dto.setWebsiteUrl(entity.getWebsiteUrl());
         dto.setHeight(entity.getHeight());
         dto.setWeight(entity.getWeight());
         dto.setBodyBuild(entity.getBodyBuild());
@@ -578,7 +589,7 @@ public class ProfileService {
         dto.setProfileImageUrl(entity.getProfileImageUrl());
         dto.setCoverImage(entity.getCoverImageUrl());
         dto.setCoverImageUrl(entity.getCoverImageUrl());
-        dto.setAvailability("Available for New Projects");
+        dto.setAvailability(entity.getAvailability() != null ? entity.getAvailability() : "Available for New Projects");
         dto.setVerified(true);
         dto.setConnectionsCount(128);
         dto.setFollowersCount(430);

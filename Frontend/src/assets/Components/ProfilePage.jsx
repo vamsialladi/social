@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Building2, Check, UserPlus } from 'lucide-react'
+import { Building2, Check, ChevronRight, UserPlus } from 'lucide-react'
 import './StylePage.css'
 import api from '../../api'
 import { EXPERIENCE_OPTIONS, REGISTRATION_CRAFTS, SUB_CRAFTS_BY_PRIMARY_CRAFT } from '../../services/mockData'
@@ -10,6 +10,7 @@ export const emptyProfileDetails = {
   phone: '',
   professionalPhone: '',
   email: '',
+  bio: '',
   experience: '',
   primaryCraft: '',
   subCraft: '',
@@ -34,6 +35,9 @@ export const emptyProfileDetails = {
 
 const MAX_VIDEO_SIZE = 5 * 1024 * 1024
 const MAX_VIDEO_DURATION = 3 * 60
+const MAX_ABOUT_WORDS = 300
+const PROFILE_IMAGE_CROP_SIZE = 360
+const PROFILE_IMAGE_OUTPUT_SIZE = 512
 const PHONE_ACCESS_EVENT = 'truehunt-professional-phone-access-changed'
 const CINEMA_ORGANIZATIONS = [
   { name: 'Netflix', domain: 'netflix.com' },
@@ -290,9 +294,9 @@ function getProfileCompletion(profileDetails, hasProfileImage) {
 }
 
 const languages = [
-  'English',
   'Telugu',
   'Hindi',
+  'English',
   'Tamil',
   'Kannada',
   'Malayalam',
@@ -304,12 +308,13 @@ const languages = [
 const talents = REGISTRATION_CRAFTS
 
 const workTypes = [
+  'series',
   'Cinema',
-  'Web series',
-  'Short films',
+  'webseries',
+  'shortflim',
   'Reels',
   'Advertisements',
-  'Serials',
+  'others'
 ]
 
 function SelectionGroup({ label, options, selected, onChange }) {
@@ -366,10 +371,24 @@ function ProfilePage({
   profilePreview,
   setProfilePreview,
   onMessage,
+  onViewConnections,
 }) {
   const [profilePic, setProfilePic] = useState(null)
   const [isProfileImageRemoved, setIsProfileImageRemoved] = useState(false)
+  const [pendingProfileCrop, setPendingProfileCrop] = useState(null)
+  const [cropImageDimensions, setCropImageDimensions] = useState(null)
+  const [cropStageSize, setCropStageSize] = useState(PROFILE_IMAGE_CROP_SIZE)
+  const [cropFrame, setCropFrame] = useState({
+    x: 0,
+    y: 0,
+    size: PROFILE_IMAGE_CROP_SIZE,
+  })
+  const [cropZoom, setCropZoom] = useState(1)
+  const [cropPosition, setCropPosition] = useState({ x: 0, y: 0 })
   const profilePictureInput = useRef(null)
+  const cropStageRef = useRef(null)
+  const cropImageRef = useRef(null)
+  const cropInteractionRef = useRef(null)
   const [selectedLanguages, setSelectedLanguages] = useState([])
   const [otherLanguageDraft, setOtherLanguageDraft] = useState('')
   const [selectedTalents, setSelectedTalents] = useState([])
@@ -382,7 +401,10 @@ function ProfilePage({
   const [videoUrlError, setVideoUrlError] = useState('')
   const [savedVideoUrls, setSavedVideoUrls] = useState([])
   const [validationError, setValidationError] = useState('')
+  const [aboutDraft, setAboutDraft] = useState(profileDetails.bio || '')
+  const [isSavingAbout, setIsSavingAbout] = useState(false)
   const [isSubmitted, setIsSubmitted] = useState(false)
+  const [isSubmittingProfile, setIsSubmittingProfile] = useState(false)
   const [profileFormKey, setProfileFormKey] = useState(0)
   const [isEditingProfile, setIsEditingProfile] = useState(false)
   const [dateOfBirthDraft, setDateOfBirthDraft] = useState('')
@@ -405,6 +427,7 @@ function ProfilePage({
     profileId: String(profileDetails.userId || profileDetails.id || ''),
     connected: Boolean(profileDetails.isConnected),
   })
+  const [connectedProfiles, setConnectedProfiles] = useState(null)
   const [followState, setFollowState] = useState({
     profileId: String(profileDetails.userId || profileDetails.id || ''),
     followed: Boolean(profileDetails.isFollowing),
@@ -422,7 +445,15 @@ function ProfilePage({
   const currentPhoneRequest = phoneAccessRequests.find((request) => (
     request.requesterId === currentUserId
   ))
-  const hasProfessionalPhoneAccess = isOwner || currentPhoneRequest?.status === 'approved'
+  const isOwnerView = isOwner
+  const connectionCount = isOwnerView
+    ? connectedProfiles?.length ?? profileDetails.connectionsCount
+    : profileDetails.connectionsCount
+  const numericConnectionCount = Number(connectionCount)
+  const formattedConnectionCount = Number.isFinite(numericConnectionCount)
+    ? numericConnectionCount >= 500 ? '500+' : numericConnectionCount
+    : null
+  const hasProfessionalPhoneAccess = isOwnerView || currentPhoneRequest?.status === 'approved'
   const experienceBeingEdited = (profileDetails.experiences || [])
     .find((experience) => experience.id === editingExperienceId)
   const experiences = profileDetails.experiences || []
@@ -436,7 +467,7 @@ function ProfilePage({
   const preferredProfileExperience = experiences.find((experience) => (
     experience.featuredOnProfile
     && String(experience.organizationName || experience.company || '').trim()
-  )) || latestExperienceWithOrganization
+  ))
   const profileOrganization = preferredProfileExperience
     ? {
         name: String(
@@ -537,6 +568,22 @@ function ProfilePage({
   const displayedProfileImage = isProfileImageRemoved
     ? ''
     : profilePreview || profileDetails.profileImageUrl || ''
+  const cropBaseScale = cropImageDimensions
+    ? Math.max(
+        cropStageSize / cropImageDimensions.width,
+        cropStageSize / cropImageDimensions.height,
+      )
+    : 1
+  const cropImageWidth = (cropImageDimensions?.width || 0) * cropBaseScale * cropZoom
+  const cropImageHeight = (cropImageDimensions?.height || 0) * cropBaseScale * cropZoom
+  const cropImageLeft = Math.min(
+    cropFrame.x,
+    Math.max(cropFrame.x + cropFrame.size - cropImageWidth, cropPosition.x),
+  )
+  const cropImageTop = Math.min(
+    cropFrame.y,
+    Math.max(cropFrame.y + cropFrame.size - cropImageHeight, cropPosition.y),
+  )
   const profileCompletion = getProfileCompletion(profileDetails, Boolean(displayedProfileImage))
   const isProfileActionsOpen = openProfileActionsFor === targetProfileId
   const isProfileConnected = connectionState.profileId === targetProfileId
@@ -552,6 +599,27 @@ function ProfilePage({
     ? relationshipErrorState.message
     : ''
   const canMessageProfile = isProfileConnected || isProfileFollowed
+
+  useEffect(() => {
+    if (!isOwnerView) return undefined
+
+    let isCurrent = true
+    async function loadConnectionsCount() {
+      try {
+        const profiles = await api.getConnectedProfiles()
+        if (isCurrent && Array.isArray(profiles)) {
+          setConnectedProfiles(profiles)
+        }
+      } catch (error) {
+        console.error('Failed to load profile connections count:', error)
+      }
+    }
+
+    loadConnectionsCount()
+    return () => {
+      isCurrent = false
+    }
+  }, [isOwnerView])
 
   async function connectToProfile() {
     if (!targetProfileId || relationshipAction) return
@@ -600,6 +668,19 @@ function ProfilePage({
   }, [profileDetails.profileImageUrl, profilePreview, isProfileImageRemoved, setProfilePreview])
 
   useEffect(() => {
+    const stage = cropStageRef.current
+    if (!pendingProfileCrop || !stage) return undefined
+
+    const updateStageSize = () => {
+      setCropStageSize(stage.getBoundingClientRect().width)
+    }
+    updateStageSize()
+    const observer = new ResizeObserver(updateStageSize)
+    observer.observe(stage)
+    return () => observer.disconnect()
+  }, [pendingProfileCrop])
+
+  useEffect(() => {
     return () => {
       if (profilePreview && profilePreview.startsWith('blob:')) URL.revokeObjectURL(profilePreview)
     }
@@ -616,11 +697,157 @@ function ProfilePage({
 
   function handleProfileChange(event) {
     const file = event.target.files?.[0] ?? null
+    event.target.value = ''
     if (!file) return
 
-    setProfilePic(file)
-    setIsProfileImageRemoved(false)
-    setProfilePreview(URL.createObjectURL(file))
+    setValidationError('')
+    if (pendingProfileCrop?.url) URL.revokeObjectURL(pendingProfileCrop.url)
+    setCropImageDimensions(null)
+    setCropFrame({ x: 0, y: 0, size: cropStageSize })
+    setCropZoom(1)
+    setPendingProfileCrop({ file, url: URL.createObjectURL(file) })
+  }
+
+  function cancelProfileCrop() {
+    if (pendingProfileCrop?.url) URL.revokeObjectURL(pendingProfileCrop.url)
+    setPendingProfileCrop(null)
+    setCropImageDimensions(null)
+    setCropPosition({ x: 0, y: 0 })
+    setCropFrame({ x: 0, y: 0, size: cropStageSize })
+  }
+
+  async function applyProfileCrop() {
+    const image = cropImageRef.current
+    if (!pendingProfileCrop || !image || !cropImageDimensions) return
+
+    const scale = cropBaseScale * cropZoom
+    const sourceSize = cropFrame.size / scale
+    const sourceX = (cropFrame.x - cropImageLeft) / scale
+    const sourceY = (cropFrame.y - cropImageTop) / scale
+    const canvas = document.createElement('canvas')
+    canvas.width = PROFILE_IMAGE_OUTPUT_SIZE
+    canvas.height = PROFILE_IMAGE_OUTPUT_SIZE
+    const context = canvas.getContext('2d')
+    if (!context) {
+      setValidationError('Could not crop the image. Please try another photo.')
+      return
+    }
+
+    context.drawImage(
+      image,
+      sourceX,
+      sourceY,
+      sourceSize,
+      sourceSize,
+      0,
+      0,
+      PROFILE_IMAGE_OUTPUT_SIZE,
+      PROFILE_IMAGE_OUTPUT_SIZE,
+    )
+
+    try {
+      const croppedBlob = await new Promise((resolve, reject) => {
+        canvas.toBlob(
+          (blob) => (blob ? resolve(blob) : reject(new Error('Could not create cropped image'))),
+          'image/jpeg',
+          0.92,
+        )
+      })
+      const croppedName = pendingProfileCrop.file.name.replace(/\.[^.]+$/, '') || 'profile-photo'
+      const croppedFile = new File([croppedBlob], `${croppedName}-cropped.jpg`, { type: 'image/jpeg' })
+      setProfilePic(croppedFile)
+      setIsProfileImageRemoved(false)
+      setProfilePreview(URL.createObjectURL(croppedFile))
+      cancelProfileCrop()
+    } catch (error) {
+      console.error('Could not crop profile image:', error)
+      setValidationError('Could not crop the image. Please try again.')
+    }
+  }
+
+  function handleCropPointerDown(event) {
+    if (!cropImageDimensions) return
+    event.currentTarget.setPointerCapture(event.pointerId)
+    const handle = event.target.closest('[data-crop-handle]')?.dataset.cropHandle || ''
+    cropInteractionRef.current = {
+      mode: handle ? 'resize' : (event.target.closest('.profile-image-crop-selection') ? 'move-frame' : 'move-image'),
+      handle,
+      pointerX: event.clientX,
+      pointerY: event.clientY,
+      imageLeft: cropImageLeft,
+      imageTop: cropImageTop,
+      frame: cropFrame,
+    }
+  }
+
+  function handleCropPointerMove(event) {
+    const interaction = cropInteractionRef.current
+    if (!interaction) return
+    const rect = cropStageRef.current?.getBoundingClientRect()
+    if (!rect) return
+    const scale = cropStageSize / rect.width
+    const dx = (event.clientX - interaction.pointerX) * scale
+    const dy = (event.clientY - interaction.pointerY) * scale
+
+    if (interaction.mode === 'move-image') {
+      setCropPosition({
+        x: interaction.imageLeft + dx,
+        y: interaction.imageTop + dy,
+      })
+      return
+    }
+
+    if (interaction.mode === 'move-frame') {
+      const { frame } = interaction
+      setCropFrame({
+        ...frame,
+        x: Math.min(cropStageSize - frame.size, Math.max(0, frame.x + dx)),
+        y: Math.min(cropStageSize - frame.size, Math.max(0, frame.y + dy)),
+      })
+      return
+    }
+
+    const { frame, handle } = interaction
+    const left = handle.includes('left')
+    const right = handle.includes('right')
+    const top = handle.includes('top')
+    const bottom = handle.includes('bottom')
+    const horizontalDelta = left ? -dx : right ? dx : 0
+    const verticalDelta = top ? -dy : bottom ? dy : 0
+    const sizeDelta = (horizontalDelta + verticalDelta) / (horizontalDelta && verticalDelta ? 2 : 1)
+    const maxSize = Math.min(
+      left ? frame.x + frame.size : cropStageSize - frame.x,
+      top ? frame.y + frame.size : cropStageSize - frame.y,
+    )
+    const size = Math.min(maxSize, Math.max(cropStageSize * 0.25, frame.size + sizeDelta))
+    setCropFrame({
+      x: left ? frame.x + frame.size - size : frame.x,
+      y: top ? frame.y + frame.size - size : frame.y,
+      size,
+    })
+  }
+
+  function handleCropPointerUp() {
+    cropInteractionRef.current = null
+  }
+
+  function handleCropImageLoad(event) {
+    const { naturalWidth, naturalHeight } = event.currentTarget
+    const stageSize = cropStageRef.current?.getBoundingClientRect().width || PROFILE_IMAGE_CROP_SIZE
+    const frameSize = stageSize * 0.84
+    const frameOffset = (stageSize - frameSize) / 2
+    const baseScale = Math.max(
+      stageSize / naturalWidth,
+      stageSize / naturalHeight,
+    )
+    setCropStageSize(stageSize)
+    setCropFrame({ x: frameOffset, y: frameOffset, size: frameSize })
+    setCropImageDimensions({ width: naturalWidth, height: naturalHeight })
+    setCropZoom(1)
+    setCropPosition({
+      x: (stageSize - naturalWidth * baseScale) / 2,
+      y: (stageSize - naturalHeight * baseScale) / 2,
+    })
   }
 
   function removeProfileImage(event) {
@@ -633,6 +860,7 @@ function ProfilePage({
   }
 
   function closeProfileEditor() {
+    cancelProfileCrop()
     if (profilePreview?.startsWith('blob:')) URL.revokeObjectURL(profilePreview)
     setProfilePic(null)
     setProfilePreview(profileDetails.profileImageUrl || '')
@@ -768,6 +996,7 @@ function ProfilePage({
     setVideoUrlInput('')
     setVideoUrlError('')
     setValidationError('')
+    setAboutDraft(profileDetails.bio || '')
     setUploadedVideos([null, null, null])
     setEditingSection(sectionId)
   }
@@ -786,7 +1015,28 @@ function ProfilePage({
   async function saveSectionEditor() {
     let nextDetails = { ...profileDetails }
 
-    if (editingSection === 'talents') {
+    if (editingSection === 'about') {
+      const aboutWords = aboutDraft.trim().match(/\S+/g) || []
+      if (aboutWords.length > MAX_ABOUT_WORDS) {
+        setValidationError(`About can contain up to ${MAX_ABOUT_WORDS} words.`)
+        return
+      }
+
+      nextDetails.bio = aboutDraft.trim()
+      setIsSavingAbout(true)
+      setValidationError('')
+      try {
+        await api.updateProfile(nextDetails)
+        setProfileDetails(nextDetails)
+        setEditingSection('')
+      } catch (error) {
+        console.error('Failed to save profile About section:', error)
+        setValidationError('Could not save your About section. Please try again.')
+      } finally {
+        setIsSavingAbout(false)
+      }
+      return
+    } else if (editingSection === 'talents') {
       nextDetails.primaryCraft = primaryCraft
       nextDetails.subCraft = selectedSubCraft
       nextDetails.secondaryCrafts = selectedTalents
@@ -852,6 +1102,7 @@ function ProfilePage({
   }
 
   function handleEditProfile() {
+    if (!isOwnerView) return
     setEditingSection('')
     setSelectedLanguages(profileDetails.languages)
     setOtherLanguageDraft(profileDetails.otherLanguage)
@@ -1034,6 +1285,7 @@ function ProfilePage({
 
   async function handleSubmit(event) {
     event.preventDefault()
+    if (isSubmittingProfile) return
     setValidationError('')
     setIsSubmitted(false)
 
@@ -1055,49 +1307,53 @@ function ProfilePage({
       return
     }
 
-    const formData = new FormData(form)
-    let profileImageUrl = isProfileImageRemoved ? '' : profileDetails.profileImageUrl || ''
-
-    if (profilePic) {
-      try {
-        const uploaded = await api.uploadMedia(profilePic)
-        profileImageUrl = uploaded.url
-        setProfilePreview(uploaded.url)
-      } catch (err) {
-        console.warn('Profile picture upload note:', err)
-      }
-    }
-
-    const nextDetails = {
-      ...profileDetails,
-      userId: profileDetails.userId || 'me',
-      name: formData.get('name') || '',
-      phone: formData.get('phone')?.trim() || '',
-      professionalPhone: formData.get('professionalPhone')?.trim() || '',
-      email: formData.get('email')?.trim() || '',
-      experience: formData.get('experience') || '',
-      dateOfBirth: formData.get('dateOfBirth') || '',
-      height: formData.get('height') || '',
-      weight: formData.get('weight') || '',
-      bodyBuild: formData.get('bodyBuild') || '',
-      gender: formData.get('gender') || '',
-      facialHair: formData.get('facialHair') || '',
-      skinTone: formData.get('skinTone') || '',
-      address: formData.get('address') || '',
-      languages: selectedLanguages,
-      otherLanguage: selectedLanguages.includes('Other') ? otherLanguageDraft.trim() : '',
-      profileImageUrl,
-    }
-
-    setProfileDetails(nextDetails)
-    setIsProfileImageRemoved(false)
+    setIsSubmittingProfile(true)
     try {
-      await api.updateProfile(nextDetails)
-    } catch (err) {
-      console.warn('Failed to save profile to backend:', err)
-    }
+      const formData = new FormData(form)
+      let profileImageUrl = isProfileImageRemoved ? '' : profileDetails.profileImageUrl || ''
 
-    setIsEditingProfile(false)
+      if (profilePic) {
+        try {
+          const uploaded = await api.uploadMedia(profilePic)
+          profileImageUrl = uploaded.url
+          setProfilePreview(uploaded.url)
+        } catch (err) {
+          console.warn('Profile picture upload note:', err)
+        }
+      }
+
+      const nextDetails = {
+        ...profileDetails,
+        userId: profileDetails.userId || 'me',
+        name: formData.get('name') || '',
+        phone: formData.get('phone')?.trim() || '',
+        professionalPhone: formData.get('professionalPhone')?.trim() || '',
+        email: formData.get('email')?.trim() || '',
+        experience: formData.get('experience') || '',
+        dateOfBirth: formData.get('dateOfBirth') || '',
+        height: formData.get('height') || '',
+        weight: formData.get('weight') || '',
+        bodyBuild: formData.get('bodyBuild') || '',
+        gender: formData.get('gender') || '',
+        facialHair: formData.get('facialHair') || '',
+        skinTone: formData.get('skinTone') || '',
+        address: formData.get('address') || '',
+        languages: selectedLanguages,
+        otherLanguage: selectedLanguages.includes('Other') ? otherLanguageDraft.trim() : '',
+        profileImageUrl,
+      }
+
+      setProfileDetails(nextDetails)
+      setIsProfileImageRemoved(false)
+      await api.updateProfile(nextDetails)
+
+      setIsEditingProfile(false)
+    } catch (err) {
+      console.error('Failed to save profile:', err)
+      setValidationError('Could not save your profile. Please try again.')
+    } finally {
+      setIsSubmittingProfile(false)
+    }
   }
 
   return (
@@ -1122,10 +1378,19 @@ function ProfilePage({
           </div>
           <div className="artist-identity">
             <div
-              className={`artist-avatar-progress${isOwner ? '' : ' is-readonly'}`}
+              className={`artist-avatar-progress${isOwnerView ? '' : ' is-readonly'}`}
               style={{ '--profile-completion': `${profileCompletion}%` }}
-              role={isOwner ? 'img' : undefined}
-              aria-label={isOwner ? `Profile ${profileCompletion}% complete` : undefined}
+              role={isOwnerView ? 'button' : undefined}
+              aria-label={isOwnerView ? 'Edit profile photo' : undefined}
+              onClick={isOwnerView ? handleEditProfile : undefined}
+              onKeyDown={isOwnerView ? (event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault()
+                  handleEditProfile()
+                }
+              } : undefined}
+              tabIndex={isOwnerView ? 0 : undefined}
+              title={isOwnerView ? 'Click to edit your profile' : undefined}
             >
               {displayedProfileImage
                 ? <img className="artist-avatar" src={displayedProfileImage} alt={`${profileDetails.name || 'Artist'}'s profile`} />
@@ -1137,12 +1402,12 @@ function ProfilePage({
                     </svg>
                   </div>
                 )}
-              {isOwner && <span className="artist-avatar-progress-label">{profileCompletion}%</span>}
+              {isOwnerView && <span className="artist-avatar-progress-label">{profileCompletion}%</span>}
             </div>
             <div className="artist-identity-content">
               <div className="artist-name-row">
                 <h2 id="preview-title">{profileDetails.name || 'Your name'}</h2>
-                {!isOwner && (
+                {!isOwnerView && (
                   <div className="profile-relationship-menu" ref={profileActionsRef}>
                     <button
                       className="profile-actions-trigger"
@@ -1188,6 +1453,25 @@ function ProfilePage({
                     )}
                   </div>
                 )}
+                {profileOrganization && (
+                  <div className="profile-organization-list" aria-label="Preferred organization">
+                    <div className="profile-organization-item">
+                      <span className="experience-organization-logo" aria-hidden="true">
+                        <Building2 size={13} />
+                        {profileOrganization.logoUrl && (
+                          <img
+                            src={profileOrganization.logoUrl}
+                            alt=""
+                            onError={(event) => {
+                              event.currentTarget.hidden = true
+                            }}
+                          />
+                        )}
+                      </span>
+                      <span>{profileOrganization.name}</span>
+                    </div>
+                  </div>
+                )}
               </div>
               <p className="artist-headline">
                 {profileDetails.talents.length > 0
@@ -1206,24 +1490,38 @@ function ProfilePage({
                     : `${profileDetails.experience} years of experience`)
                   : 'Add your experience in Edit profile'}
               </p>
-              {profileOrganization && (
-                <div className="profile-organization-list" aria-label="Preferred organization">
-                  <div className="profile-organization-item">
-                    <span className="experience-organization-logo" aria-hidden="true">
-                      <Building2 size={13} />
-                      {profileOrganization.logoUrl && (
-                        <img
-                          src={profileOrganization.logoUrl}
-                          alt=""
-                          onError={(event) => {
-                            event.currentTarget.hidden = true
-                          }}
-                        />
-                      )}
-                    </span>
-                    <span>{profileOrganization.name}</span>
-                  </div>
-                </div>
+              {(profileDetails.height || profileDetails.weight || profileDetails.skinTone || profileDetails.facialHair) && (
+                <dl className="profile-appearance-details" aria-label="Appearance details">
+                  {profileDetails.height && (
+                    <div><dt>Height</dt><dd>{profileDetails.height} cm</dd></div>
+                  )}
+                  {profileDetails.weight && (
+                    <div><dt>Weight</dt><dd>{profileDetails.weight} kg</dd></div>
+                  )}
+                  {profileDetails.skinTone && (
+                    <div><dt>Skin tone</dt><dd>{profileDetails.skinTone}</dd></div>
+                  )}
+                  {profileDetails.facialHair && (
+                    <div><dt>Facial hair</dt><dd>{profileDetails.facialHair}</dd></div>
+                  )}
+                </dl>
+              )}
+              {formattedConnectionCount !== null && (
+                isOwnerView ? (
+                  <button
+                    className="profile-connections-link"
+                    type="button"
+                    onClick={onViewConnections}
+                    aria-label={`View ${formattedConnectionCount} connections`}
+                  >
+                    {formattedConnectionCount} connections
+                    <ChevronRight size={17} aria-hidden="true" />
+                  </button>
+                ) : (
+                  <p className="profile-connections-count">
+                    {formattedConnectionCount} connections
+                  </p>
+                )
               )}
             </div>
             <div className="identity-actions">
@@ -1237,7 +1535,7 @@ function ProfilePage({
               >
                 Contact
               </button>
-              {!isOwner && canMessageProfile && (
+              {!isOwnerView && canMessageProfile && (
                 <button
                   className="identity-contact-button"
                   type="button"
@@ -1250,7 +1548,7 @@ function ProfilePage({
                   Message
                 </button>
               )}
-              {isOwner && (
+              {isOwnerView && (
                 <button
                   className="identity-edit-button"
                   type="button"
@@ -1264,7 +1562,7 @@ function ProfilePage({
           <div className="artist-content">
             <div className="artist-main">
               <section className="artist-section">
-                <PreviewSectionHeading isOwner={isOwner} onEdit={openSectionEditor} sectionId="workTypes">
+                <PreviewSectionHeading isOwner={isOwnerView} onEdit={openSectionEditor} sectionId="workTypes">
                   Worked in
                 </PreviewSectionHeading>
                 {(profileDetails.workTypes || []).length > 0 ? (
@@ -1273,7 +1571,7 @@ function ProfilePage({
                   </div>
                 ) : (
                   <p className="profile-empty-hint">
-                    {isOwner ? 'Select Edit to add your previous work types.' : 'No previous work types added yet.'}
+                    {isOwnerView ? 'Select Edit to add your previous work types.' : 'No previous work types added yet.'}
                   </p>
                 )}
                 {editingSection === 'workTypes' && (
@@ -1309,8 +1607,60 @@ function ProfilePage({
                 </div>
               </section>
 
+              <section className="artist-section profile-about-section" id="artist-about">
+                <PreviewSectionHeading isOwner={isOwnerView} onEdit={openSectionEditor} sectionId="about">
+                  About
+                </PreviewSectionHeading>
+                {profileDetails.bio?.trim() ? (
+                  <p className="profile-about-content">{profileDetails.bio}</p>
+                ) : (
+                  <p className="profile-empty-hint">
+                    {isOwnerView ? 'Add an introduction about yourself.' : 'No About information added yet.'}
+                  </p>
+                )}
+                {editingSection === 'about' && (
+                  <div className="preview-inline-editor profile-about-editor">
+                    <label className="form-field" htmlFor="profile-about-text">
+                      About you
+                      <textarea
+                        id="profile-about-text"
+                        rows={5}
+                        value={aboutDraft}
+                        maxLength={5000}
+                        aria-describedby="profile-about-word-count"
+                        onChange={(event) => {
+                          const words = event.target.value.trim().match(/\S+/g) || []
+                          if (words.length > MAX_ABOUT_WORDS) {
+                            setAboutDraft(words.slice(0, MAX_ABOUT_WORDS).join(' '))
+                            setValidationError(`About is limited to ${MAX_ABOUT_WORDS} words.`)
+                            return
+                          }
+                          setAboutDraft(event.target.value)
+                          setValidationError('')
+                        }}
+                        placeholder="Write a short introduction about your experience, skills, and creative work."
+                      />
+                    </label>
+                    <div className="profile-about-editor-footer">
+                      <span id="profile-about-word-count" aria-live="polite">
+                        {(aboutDraft.trim().match(/\S+/g) || []).length}/{MAX_ABOUT_WORDS} words
+                      </span>
+                      {validationError && <p className="submit-error" role="alert">{validationError}</p>}
+                    </div>
+                    <div className="language-edit-actions">
+                      <button className="secondary-button" type="button" onClick={closeSectionEditor} disabled={isSavingAbout}>
+                        Cancel
+                      </button>
+                      <button className="contact-button" type="button" onClick={saveSectionEditor} disabled={isSavingAbout}>
+                        {isSavingAbout ? 'Saving…' : 'Save'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </section>
+
               <section className="artist-section">
-                <PreviewSectionHeading isOwner={isOwner} onEdit={openSectionEditor} sectionId="talents">
+                <PreviewSectionHeading isOwner={isOwnerView} onEdit={openSectionEditor} sectionId="talents">
                   Crafts
                 </PreviewSectionHeading>
                 <div className="profile-craft-summary">
@@ -1407,7 +1757,7 @@ function ProfilePage({
               </section>
 
               <section className="artist-section" id="artist-languages">
-                <PreviewSectionHeading isOwner={isOwner} onEdit={openSectionEditor} sectionId="languages">
+                <PreviewSectionHeading isOwner={isOwnerView} onEdit={openSectionEditor} sectionId="languages">
                   Languages
                 </PreviewSectionHeading>
                 {profileDetails.languages.length > 0 ? (
@@ -1422,7 +1772,7 @@ function ProfilePage({
                   </div>
                 ) : (
                   <p className="profile-empty-hint">
-                    {isOwner ? 'Add languages in Edit profile.' : 'No languages added yet.'}
+                    {isOwnerView ? 'Add languages in Edit profile.' : 'No languages added yet.'}
                   </p>
                 )}
                 {editingSection === 'languages' && (
@@ -1454,7 +1804,7 @@ function ProfilePage({
               </section>
 
               <section className="artist-section" id="artist-demo-videos">
-                <PreviewSectionHeading isOwner={isOwner} onEdit={openSectionEditor} sectionId="videos">
+                <PreviewSectionHeading isOwner={isOwnerView} onEdit={openSectionEditor} sectionId="videos">
                   Demo videos
                 </PreviewSectionHeading>
                 {profileDetails.videos.length > 0 ? <div className="demo-video-list">
@@ -1473,7 +1823,7 @@ function ProfilePage({
                       </div>
                     )
                   })}
-                </div> : <p className="profile-empty-hint">Select Edit to add demo videos.</p>}
+                </div> : <p className="profile-empty-hint">Select Edit to add demo videos max 5MB or 3 miniutes.</p>}
                 {editingSection === 'videos' && (
                   <div className="preview-inline-editor">
                     {profileDetails.videos.map((video, index) => (
@@ -1522,7 +1872,7 @@ function ProfilePage({
               <section className="artist-section experience-section" id="artist-experience">
                 <div className="experience-section-heading">
                   <h3>Experience</h3>
-                  {isOwner && (
+                  {isOwnerView && (
                     <button
                       className="language-edit-button"
                       type="button"
@@ -1571,7 +1921,7 @@ function ProfilePage({
                               )}
                             </div>
                           </div>
-                          {isOwner && (
+                          {isOwnerView && (
                             <button
                               className="language-edit-button"
                               type="button"
@@ -1610,12 +1960,12 @@ function ProfilePage({
                   </div>
                 ) : (
                   <p className="profile-empty-hint">
-                    {isOwner ? 'Add a movie or project to your experience.' : 'No experience added yet.'}
+                    {isOwnerView ? 'Add a movie or project to your experience.' : 'No experience added yet.'}
                   </p>
                 )}
               </section>
               <section className="artist-section" id="artist-video-links">
-                <PreviewSectionHeading isOwner={isOwner} onEdit={openSectionEditor} sectionId="videoLinks">
+                <PreviewSectionHeading isOwner={isOwnerView} onEdit={openSectionEditor} sectionId="videoLinks">
                   Video links
                 </PreviewSectionHeading>
                 {profileDetails.videoUrls.length > 0 ? (
@@ -1913,7 +2263,7 @@ function ProfilePage({
             <div className="reference-modal-heading">
               <div>
                 <span className="eyebrow">CONTACT ARTIST</span>
-                <h2 id="reference-modal-title">{isOwner ? 'Your contact details' : 'Professional phone access'}</h2>
+                <h2 id="reference-modal-title">{isOwnerView ? 'Your contact details' : 'Professional phone access'}</h2>
               </div>
               <button
                 className="profile-modal-close"
@@ -1924,7 +2274,7 @@ function ProfilePage({
                 ×
               </button>
             </div>
-            {isOwner ? (
+            {isOwnerView ? (
               <div className="reference-modal-success" role="status">
                 <p>Contact details for {profileDetails.name || 'this artist'}:</p>
                 <dl className="reference-contact-details">
@@ -2085,7 +2435,7 @@ function ProfilePage({
         key={profileFormKey}
         className={`profile-form${isEditingProfile ? ' profile-modal-form' : ''}`}
         onSubmit={handleSubmit}
-        hidden={!isOwner || !isEditingProfile}
+        hidden={!isOwnerView || !isEditingProfile}
       >
         {isEditingProfile && (
           <div className="profile-modal-heading">
@@ -2362,9 +2712,108 @@ function ProfilePage({
             {isSubmitted && <p className="submit-success">Your profile is ready. Thanks for reaching out!</p>}
             {!validationError && !isSubmitted && <p>Your details help us connect you with the right opportunities.</p>}
           </div>
-          <button className="submit-button" type="submit">Submit</button>
+          <button className="submit-button" type="submit" disabled={isSubmittingProfile}>
+            {isSubmittingProfile && <span className="submit-spinner" aria-hidden="true" />}
+            {isSubmittingProfile ? 'Saving…' : 'Submit'}
+          </button>
         </footer>
       </form>
+      {pendingProfileCrop && (
+        <div
+          className="profile-image-crop-backdrop"
+          onClick={cancelProfileCrop}
+        >
+          <section
+            className="profile-image-crop-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="profile-image-crop-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="profile-image-crop-heading">
+              <div>
+                <span className="eyebrow">PROFILE PHOTO</span>
+                <h2 id="profile-image-crop-title">Crop your photo</h2>
+                <p>Drag the photo or crop frame, resize it with the handles, and adjust zoom.</p>
+              </div>
+              <button type="button" className="profile-modal-close" onClick={cancelProfileCrop} aria-label="Cancel crop">
+                ×
+              </button>
+            </div>
+            <div
+              ref={cropStageRef}
+              className="profile-image-crop-stage"
+              onPointerDown={handleCropPointerDown}
+              onPointerMove={handleCropPointerMove}
+              onPointerUp={handleCropPointerUp}
+              onPointerCancel={handleCropPointerUp}
+              onLostPointerCapture={handleCropPointerUp}
+              aria-label="Drag the photo or crop frame to adjust the image"
+            >
+              <img
+                ref={cropImageRef}
+                src={pendingProfileCrop.url}
+                alt="Crop preview"
+                onLoad={handleCropImageLoad}
+                draggable="false"
+                style={{
+                  width: cropImageWidth,
+                  height: cropImageHeight,
+                  left: cropImageLeft,
+                  top: cropImageTop,
+                }}
+              />
+              <div
+                className="profile-image-crop-selection"
+                aria-hidden="true"
+                style={{
+                  left: cropFrame.x,
+                  top: cropFrame.y,
+                  width: cropFrame.size,
+                  height: cropFrame.size,
+                }}
+              >
+                <div className="profile-image-crop-grid">
+                  <span className="profile-image-crop-grid-line is-vertical" />
+                  <span className="profile-image-crop-grid-line is-vertical" />
+                  <span className="profile-image-crop-grid-line is-horizontal" />
+                  <span className="profile-image-crop-grid-line is-horizontal" />
+                </div>
+                <span className="profile-image-crop-handle is-top-left" data-crop-handle="top-left" />
+                <span className="profile-image-crop-handle is-top-right" data-crop-handle="top-right" />
+                <span className="profile-image-crop-handle is-bottom-left" data-crop-handle="bottom-left" />
+                <span className="profile-image-crop-handle is-bottom-right" data-crop-handle="bottom-right" />
+                <span className="profile-image-crop-edge-handle is-top" data-crop-handle="top" />
+                <span className="profile-image-crop-edge-handle is-right" data-crop-handle="right" />
+                <span className="profile-image-crop-edge-handle is-bottom" data-crop-handle="bottom" />
+                <span className="profile-image-crop-edge-handle is-left" data-crop-handle="left" />
+              </div>
+            </div>
+            <label className="profile-image-crop-zoom">
+              Zoom
+              <input
+                type="range"
+                min="1"
+                max="3"
+                step="0.01"
+                value={cropZoom}
+                onChange={(event) => setCropZoom(Number(event.target.value))}
+              />
+            </label>
+            <div className="profile-image-crop-actions">
+              <button className="secondary-button" type="button" onClick={cancelProfileCrop}>Cancel</button>
+              <button
+                className="contact-button"
+                type="button"
+                onClick={applyProfileCrop}
+                disabled={!cropImageDimensions}
+              >
+                Use photo
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   )
 }

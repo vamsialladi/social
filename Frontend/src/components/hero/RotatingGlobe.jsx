@@ -4,10 +4,7 @@ import * as THREE from 'three';
 import { WORLDWIDE_IMAGES } from './worldwide';
 
 const IMAGE_MARKER_RADIUS = 0.055;
-const INITIAL_MARKER_IMAGE_COUNT = 24;
-const MARKER_IMAGE_BATCH_SIZE = 12;
-const MAX_CONCURRENT_MARKER_IMAGES = 8;
-const MARKER_IMAGE_BATCH_DELAY_MS = 5;
+const MAX_CONCURRENT_MARKER_IMAGE_LOADS = 12;
 const FALLBACK_MARKER_IMAGES = [
   'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=300&q=80',
   'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=300&q=80',
@@ -30,10 +27,11 @@ function cropTextureToSquare(texture) {
   texture.needsUpdate = true;
 }
 
-export default function RotatingGlobe({ size = 380, isRotating = true }) {
+export default function RotatingGlobe({ size = 580, isRotating = true }) {
   const mountRef = useRef(null);
   const frameIdRef = useRef(null);
   const [selectedProfile, setSelectedProfile] = useState(null);
+  const [isSelectedProfileImageLoaded, setIsSelectedProfileImageLoaded] = useState(false);
 
   useEffect(() => {
     const container = mountRef.current;
@@ -110,9 +108,7 @@ export default function RotatingGlobe({ size = 380, isRotating = true }) {
     const imageMarkers = WORLDWIDE_IMAGES;
     const markerImageQueue = [];
     let nextMarkerImage = 0;
-    let markerImageBatchEnd = Math.min(INITIAL_MARKER_IMAGE_COUNT, imageMarkers.length);
     let activeMarkerImageLoads = 0;
-    let markerImageLoadTimer = null;
     const markerNormals = imageMarkers.map(({ latitude, longitude }) => {
       const lat = THREE.MathUtils.degToRad(latitude);
       const lon = THREE.MathUtils.degToRad(longitude);
@@ -163,8 +159,8 @@ export default function RotatingGlobe({ size = 380, isRotating = true }) {
       if (isDisposed) return;
 
       while (
-        activeMarkerImageLoads < MAX_CONCURRENT_MARKER_IMAGES
-        && nextMarkerImage < markerImageBatchEnd
+        activeMarkerImageLoads < MAX_CONCURRENT_MARKER_IMAGE_LOADS
+        && nextMarkerImage < markerImageQueue.length
       ) {
         const { name, image, index, markerMaterial } = markerImageQueue[nextMarkerImage];
         nextMarkerImage += 1;
@@ -223,22 +219,6 @@ export default function RotatingGlobe({ size = 380, isRotating = true }) {
         );
         markerTexture.colorSpace = THREE.SRGBColorSpace;
       }
-
-      if (
-        activeMarkerImageLoads === 0
-        && nextMarkerImage === markerImageBatchEnd
-        && nextMarkerImage < markerImageQueue.length
-        && markerImageLoadTimer === null
-      ) {
-        markerImageLoadTimer = window.setTimeout(() => {
-          markerImageLoadTimer = null;
-          markerImageBatchEnd = Math.min(
-            nextMarkerImage + MARKER_IMAGE_BATCH_SIZE,
-            markerImageQueue.length
-          );
-          pumpMarkerImageQueue();
-        }, MARKER_IMAGE_BATCH_DELAY_MS);
-      }
     };
     pumpMarkerImageQueue();
 
@@ -254,6 +234,7 @@ export default function RotatingGlobe({ size = 380, isRotating = true }) {
       const globeHit = raycaster.intersectObject(globeMesh, false)[0];
       if (markerHit && (!globeHit || markerHit.distance < globeHit.distance)) {
         setSelectedProfile(markerHit.object.userData.profile);
+        setIsSelectedProfileImageLoaded(false);
       } else {
         setSelectedProfile(null);
       }
@@ -400,7 +381,6 @@ export default function RotatingGlobe({ size = 380, isRotating = true }) {
     // 9. Cleanup on unmount
     return () => {
       isDisposed = true;
-      window.clearTimeout(markerImageLoadTimer);
       renderer.domElement.removeEventListener('click', handleMarkerClick);
       if (frameIdRef.current) cancelAnimationFrame(frameIdRef.current);
       if (renderer) {
@@ -457,16 +437,16 @@ export default function RotatingGlobe({ size = 380, isRotating = true }) {
             <X size={16} />
           </button>
           <img
-            className={`globe-profile-image ${loaded ? "loaded" : "hidden"}`}
+            className={`globe-profile-image ${isSelectedProfileImageLoaded ? "loaded" : "hidden"}`}
             src={selectedProfile.image}
             alt={selectedProfile.name}
             loading="lazy"
             decoding="async"
-            onLoad={() => setLoaded(true)}
+            onLoad={() => setIsSelectedProfileImageLoaded(true)}
             onError={(event) => {
               event.currentTarget.onerror = null;
               event.currentTarget.src = FALLBACK_MARKER_IMAGES[0];
-              setLoaded(false);
+              setIsSelectedProfileImageLoaded(false);
             }}
           />
           <div className="globe-profile-label">Cinema talent</div>

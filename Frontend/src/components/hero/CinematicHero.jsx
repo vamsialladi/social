@@ -386,7 +386,7 @@ export default function CinematicHero() {
           {/* Central 3D Earth Globe (Rotates continuously on vertical axis) */}
           <div className="globe-center-pod">
             <RotatingGlobe
-              size={Math.floor(Math.min(600, stageSize.width * 0.62, stageSize.height * 0.94))}
+              size={Math.floor(Math.min(600, stageSize.width * 0.66, stageSize.height * 0.99))}
               isRotating={true}
             />
           </div>

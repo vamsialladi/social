@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { NavLink, Link, useNavigate, useLocation } from 'react-router-dom';
 import {
   Film,
@@ -12,14 +12,114 @@ import {
   X,
   User,
   LogOut,
-  Phone
+  Phone,
+  Languages
 } from 'lucide-react';
 import TrueHuntLogo from '../common/TrueHuntLogo';
 import { useAuth } from '../../context/AuthContext';
+import './Navbar.css';
+
+function LanguageSelector({ selectedLanguage, onChange }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const selectorRef = useRef(null);
+  const triggerRef = useRef(null);
+  const optionRefs = useRef([]);
+  const languages = ['Telugu', 'Hindi', 'English', 'Kannada', 'Tamil'];
+
+  useEffect(() => {
+    if (!isOpen) return undefined;
+
+    function dismissOnOutsideClick(event) {
+      if (!selectorRef.current?.contains(event.target)) setIsOpen(false);
+    }
+
+    document.addEventListener('pointerdown', dismissOnOutsideClick);
+    return () => document.removeEventListener('pointerdown', dismissOnOutsideClick);
+  }, [isOpen]);
+
+  function openMenu() {
+    setIsOpen(true);
+    requestAnimationFrame(() => {
+      const selectedIndex = languages.indexOf(selectedLanguage);
+      optionRefs.current[selectedIndex]?.focus();
+    });
+  }
+
+  function chooseLanguage(language) {
+    onChange(language);
+    setIsOpen(false);
+    triggerRef.current?.focus();
+  }
+
+  function handleOptionKeyDown(event, index) {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      const direction = event.key === 'ArrowDown' ? 1 : -1;
+      const nextIndex = (index + direction + languages.length) % languages.length;
+      optionRefs.current[nextIndex]?.focus();
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      setIsOpen(false);
+      triggerRef.current?.focus();
+    }
+  }
+
+  return (
+    <div className={`navbar-language-selector${isOpen ? ' is-open' : ''}`} ref={selectorRef}>
+      <button
+        className="navbar-language-trigger"
+        type="button"
+        ref={triggerRef}
+        aria-label={`Language: ${selectedLanguage}`}
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+        onClick={() => (isOpen ? setIsOpen(false) : openMenu())}
+        onKeyDown={(event) => {
+          if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            event.preventDefault();
+            openMenu();
+          }
+        }}
+      >
+        <Languages size={17} aria-hidden="true" />
+        <span className="navbar-language-label">Language</span>
+        <span className="navbar-language-current">{selectedLanguage}</span>
+        <span className="navbar-language-chevron" aria-hidden="true" />
+      </button>
+      {isOpen && (
+        <div className="navbar-language-menu" role="listbox" aria-label="Choose a language">
+          {languages.map((language, index) => (
+            <button
+              className="navbar-language-option"
+              type="button"
+              role="option"
+              aria-selected={selectedLanguage === language}
+              key={language}
+              ref={(element) => {
+                optionRefs.current[index] = element;
+              }}
+              onClick={() => chooseLanguage(language)}
+              onKeyDown={(event) => handleOptionKeyDown(event, index)}
+            >
+              <span>{language}</span>
+              {selectedLanguage === language && <span className="navbar-language-check" aria-hidden="true">✓</span>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function Navbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [selectedLanguage, setSelectedLanguage] = useState(() => {
+    const savedLanguage = localStorage.getItem('truehunt_language');
+    return ['Telugu', 'Hindi', 'English', 'Kannada', 'Tamil'].includes(savedLanguage)
+      ? savedLanguage
+      : 'English';
+  });
   const { user, logout, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -47,6 +147,11 @@ export default function Navbar() {
     { name: 'LCM App', path: '/lcm-app', icon: Smartphone },
     { name: 'Get Support', path: '/get-support', icon: HelpCircle },
   ];
+
+  function updateLanguage(language) {
+    setSelectedLanguage(language);
+    localStorage.setItem('truehunt_language', language);
+  }
 
   return (
     <header
@@ -135,6 +240,7 @@ export default function Navbar() {
           style={{ display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}
           className="desktop-auth-actions"
         >
+          <LanguageSelector selectedLanguage={selectedLanguage} onChange={updateLanguage} />
           {isAuthenticated && user ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <Link
@@ -322,6 +428,8 @@ export default function Navbar() {
           </div>
 
           <div style={{ height: '1px', backgroundColor: 'var(--color-border)', margin: '6px 0' }} />
+
+          <LanguageSelector selectedLanguage={selectedLanguage} onChange={updateLanguage} />
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             {isAuthenticated && user ? (

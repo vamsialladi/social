@@ -71,6 +71,9 @@ export default function CraftCarousel({
                 src={currentCraft.image}
                 alt={currentCraft.name}
                 className="craft-circle-img"
+                loading="eager"
+                decoding="async"
+                fetchPriority="high"
                 onError={(e) => {
                   e.currentTarget.style.display = 'none';
                 }}

@@ -87,6 +87,7 @@ export default function App() {
             </Route>
 
             {/* Existing Social Frontend Platform (Isolated & Fully Functional) */}
+            <Route path=":profileName/profile" element={<SocialApp />} />
             <Route path="social" element={<SocialApp />} />
             <Route path="social/*" element={<SocialApp />} />
           </Routes>

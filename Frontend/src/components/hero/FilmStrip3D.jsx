@@ -21,10 +21,10 @@ export default function FilmStrip3D({
 }) {
   const N = crafts.length || 24;
   const CX = width / 2;
-  const CY = height / 2 + 10;
-  const RX = Math.min(width * 0.44, 420);
+  const CY = height / 2 ;
+  const RX = Math.min(width * 0.35, 340);
   const RY = Math.min(height * 0.26, 140);
-  const TILT = -0.16; // -9 degrees downward inclination angle for 3D perspective
+  const TILT = -0.01;
 
   // Generates SVG elliptical arcs for the golden film band
   const createArc = (rx, ry, strokeWidth, strokeColor, dashArray, sweepFlag) => {
@@ -201,6 +201,8 @@ export default function FilmStrip3D({
                       borderRadius: '50%',
                       display: 'block'
                     }}
+                    loading="eager"
+                    decoding="async"
                     onError={(e) => {
                       e.currentTarget.style.display = 'none';
                     }}

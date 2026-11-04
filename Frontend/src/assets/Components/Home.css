@@ -50,6 +50,166 @@
   outline-offset: 2px;
 }
 
+.home-connections-card {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  color: var(--home-ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.home-connections-card:hover,
+.home-connections-card:focus-visible {
+  border-color: #9ebad2;
+  outline: none;
+}
+
+.home-connections-icon {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  place-items: center;
+  border-radius: 50%;
+  background: #eaf3fb;
+  color: var(--home-blue);
+}
+
+.home-connections-copy {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.home-connections-copy strong {
+  font-size: 14px;
+}
+
+.home-connections-copy small {
+  color: var(--home-muted);
+  font-size: 11px;
+}
+
+.home-connections-count {
+  margin-left: auto;
+  color: var(--home-blue);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.home-connections-error {
+  margin: 0;
+  color: #b42318;
+  font-size: 12px;
+}
+
+.home-connections-backdrop {
+  position: fixed;
+  z-index: 1200;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(15, 23, 42, 0.52);
+}
+
+.home-connections-dialog {
+  width: min(100%, 440px);
+  max-height: min(80vh, 640px);
+  overflow: auto;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.24);
+}
+
+.home-connections-dialog-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 20px;
+  border-bottom: 1px solid var(--home-line);
+}
+
+.home-connections-dialog-header h2 {
+  margin: 0;
+  font-size: 19px;
+}
+
+.home-connections-dialog-header p {
+  margin: 5px 0 0;
+  color: var(--home-muted);
+  font-size: 13px;
+}
+
+.home-connections-close {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: #f3f4f6;
+  color: #374151;
+  cursor: pointer;
+}
+
+.home-connections-list {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 8px;
+  list-style: none;
+}
+
+.home-connection-person {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 9px;
+  background: #fff;
+  color: var(--home-ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.home-connection-person:hover,
+.home-connection-person:focus-visible {
+  outline: none;
+  background: #f4f7fa;
+}
+
+.home-connection-avatar {
+  width: 42px;
+  height: 42px;
+  flex-basis: 42px;
+  font-size: 14px;
+}
+
+.home-connection-person-name {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.home-connections-empty {
+  display: grid;
+  min-height: 150px;
+  place-content: center;
+  justify-items: center;
+  gap: 8px;
+  color: var(--home-muted);
+  font-size: 14px;
+}
+
+.home-connections-empty p {
+  margin: 0;
+}
+
 .home-profile-cover {
   height: 76px;
   background: #fff url("/Logo.png") center / contain no-repeat;
