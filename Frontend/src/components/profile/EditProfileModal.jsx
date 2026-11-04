@@ -63,7 +63,8 @@ export default function EditProfileModal({ profile, onClose, onSave }) {
     'Music',
     'Dance & Choreography',
     'Production Management',
-    'Makeup & Costume',
+    'Makeup',
+    'Costume',
     'VFX & Animation'
   ];
 

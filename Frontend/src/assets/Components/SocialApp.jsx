@@ -38,7 +38,7 @@ const cinemaTypesByCraft = {
   ],
   'Art Director': [
     'Production Designer', 'Art Director', 'Assistant Art Director', 'Set Designer',
-    'Set Decorator', 'Prop Designer', 'Prop Master', 'Set Construction Supervisor',
+    'Set Decorator', 'sketch Artist','Set Construction Supervisor',
     'Model Maker', 'Concept Artist', 'Art Illustrator', 'Location Art Designer',
     'Graphic Art Designer', 'Set Painter',
   ],
@@ -61,11 +61,10 @@ const cinemaTypesByCraft = {
     'Video Assist Operator', 'Digital Imaging Technician (DIT)',
   ],
   Choreographer: [
-    'Dance Choreographer', 'Assistant Choreographer', 'Classical Dance Choreographer',
-    'Western Dance Choreographer', 'Folk Dance Choreographer', 'Hip-Hop Choreographer',
-    'Contemporary Dance Choreographer', 'Group Dance Choreographer',
-    'Wedding Song Choreographer', 'Background Dancers Coordinator', 'Dance Trainer',
-    'Movement Coach',
+    'Main Camera Operator', 'Assistant Camera Operator', 'First AC / Focus Puller', 'Second AC',
+    'Camera Assistant', 'Steadicam Operator', 'Gimbal Operator', 'Drone Camera Operator',
+    'Jib Operator', 'Crane Camera Operator', 'Underwater Camera Operator', 'Camera Technician',
+    'Video Assist Operator', 'Digital Imaging Technician (DIT)',
   ],
   'Cinematographer (DOP)': [
     'Director of Photography', 'Associate Cinematographer', 'Assistant Cinematographer',
@@ -201,7 +200,8 @@ Object.assign(cinemaTypesByCraft, {
   Music: cinemaTypesByCraft['Music Composer'],
   'Dance & Choreography': cinemaTypesByCraft.Choreographer,
   'Production Management': combineCraftRoles('Producer', 'Production Executive'),
-  'Makeup & Costume': combineCraftRoles('Makeup & Hair Stylist', 'Costume Designer'),
+  'Makeup': combineCraftRoles('Makeup & Hair Stylist'),
+  'Costume': combineCraftRoles('Costume Designer'),
 })
 
 const cinemaTypeFiltersByCraft = Object.fromEntries(
@@ -1204,7 +1204,7 @@ function Navigation({
 }
 
 export default function SocialApp() {
-  const { isAuthenticated, user } = useAuth()
+  const { isAuthenticated, user, logout } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
   const [activeNavigation, setActiveNavigationState] = useState(() => (
@@ -1428,6 +1428,7 @@ export default function SocialApp() {
           onEditProfile={showMyProfile}
           theme={theme}
           onThemeChange={setTheme}
+          onAccountDeleted={logout}
         />
       )}
 

@@ -5,12 +5,6 @@ import { WORLDWIDE_IMAGES } from './worldwide';
 
 const IMAGE_MARKER_RADIUS = 0.055;
 const MAX_CONCURRENT_MARKER_IMAGE_LOADS = 12;
-const FALLBACK_MARKER_IMAGES = [
-  'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=300&q=80',
-  'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=300&q=80',
-  'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=300&q=80',
-  'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80'
-];
 
 function cropTextureToSquare(texture) {
   const { width, height } = texture.image;
@@ -109,6 +103,8 @@ export default function RotatingGlobe({ size = 580, isRotating = true }) {
     const markerImageQueue = [];
     let nextMarkerImage = 0;
     let activeMarkerImageLoads = 0;
+    let completedMarkerImages = 0;
+    let areMarkerImagesLoaded = false;
     const markerNormals = imageMarkers.map(({ latitude, longitude }) => {
       const lat = THREE.MathUtils.degToRad(latitude);
       const lon = THREE.MathUtils.degToRad(longitude);
@@ -155,6 +151,8 @@ export default function RotatingGlobe({ size = 580, isRotating = true }) {
       earthGroup.add(markerGroup);
     });
 
+    areMarkerImagesLoaded = markerImageQueue.length === 0;
+
     const pumpMarkerImageQueue = () => {
       if (isDisposed) return;
 
@@ -168,6 +166,8 @@ export default function RotatingGlobe({ size = 580, isRotating = true }) {
 
         const finishLoading = () => {
           activeMarkerImageLoads -= 1;
+          completedMarkerImages += 1;
+          areMarkerImagesLoaded = completedMarkerImages === markerImageQueue.length;
           pumpMarkerImageQueue();
         };
         const markerTexture = textureLoader.load(
@@ -368,11 +368,11 @@ export default function RotatingGlobe({ size = 580, isRotating = true }) {
       frameIdRef.current = requestAnimationFrame(animate);
 
       // Continuous rotation around Y axis
-      if (isRotating && earthGroup) {
+      if (isRotating && areMarkerImagesLoaded && earthGroup) {
         earthGroup.rotation.y += 0.0075;
+        particles.rotation.y += 0.001;
       }
 
-      particles.rotation.y += 0.001;
       renderer.render(scene, camera);
     };
 

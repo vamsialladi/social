@@ -23,7 +23,8 @@ export const FILM_CRAFTS = [
   { id: 'music', title: 'Music', count: '2,600+', icon: 'Music', desc: 'Music directors, lyricists, singers & programmers' },
   { id: 'dance', title: 'Dance & Choreography', count: '1,450+', icon: 'Sparkles', desc: 'Choreographers, movement directors & troupes' },
   { id: 'production', title: 'Production Management', count: '2,750+', icon: 'Briefcase', desc: 'Executive producers, line producers & coordinators' },
-  { id: 'makeup-costume', title: 'Makeup & Costume', count: '1,950+', icon: 'Shirt', desc: 'Costume designers, stylists & SFX makeup' },
+  { id: 'makeup', title: 'Makeup', count: '1,640+', icon: 'Shirt', desc: 'Beauty styling, grooming and character transformation' },
+  { id: 'costume', title: 'Costume', count: '1,430+', icon: 'Shirt', desc: 'Wardrobe design, fittings, styling and continuity planning' },
   { id: 'vfx-animation', title: 'VFX & Animation', count: '3,400+', icon: 'Layers', desc: '3D artists, compositors, rotoscope & CGI' },
   { id: 'art-director', title: 'Art Director', count: '1,380+', icon: 'Palette', desc: 'Set design, visual world-building & art department leadership' },
   { id: 'assistant-director', title: 'Assistant Director', count: '2,940+', icon: 'Video', desc: 'Production coordination, scheduling, floor management & continuity' },
@@ -495,7 +496,7 @@ export const LATEST_OPPORTUNITIES = [
   {
     id: 'job-6',
     title: 'Costume Designer & Stylist — Period Drama',
-    roleCategory: 'Makeup & Costume',
+    roleCategory: 'Costume',
     productionCompany: 'Heritage Filmworks',
     location: 'Jaipur & Jodhpur',
     type: 'Full Production Contract',

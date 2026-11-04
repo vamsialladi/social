@@ -74,7 +74,7 @@ const notificationCategories = [
   },
 ]
 
-function Settings({ profileDetails, profilePreview, onEditProfile, theme, onThemeChange }) {
+function Settings({ profileDetails, profilePreview, onEditProfile, theme, onThemeChange, onAccountDeleted }) {
   const [activeSection, setActiveSection] = useState('preferences')
   const [isPasswordFormOpen, setIsPasswordFormOpen] = useState(false)
   const [isThemeOptionsOpen, setIsThemeOptionsOpen] = useState(false)
@@ -85,7 +85,6 @@ function Settings({ profileDetails, profilePreview, onEditProfile, theme, onThem
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false)
   const [securityMessage, setSecurityMessage] = useState('')
   const [passwordMessage, setPasswordMessage] = useState('')
-  const [accountManagementMessage, setAccountManagementMessage] = useState('')
   const name = profileDetails.name || 'Your name'
   const email = profileDetails.email || 'Not added yet'
   const phone = profileDetails.phone || 'Not added yet'
@@ -158,10 +157,11 @@ function Settings({ profileDetails, profilePreview, onEditProfile, theme, onThem
       return
     }
     try {
-      const res = await api.deleteAccount()
-      setAccountManagementMessage(res.message || 'Account successfully scheduled for deletion.')
+      await api.deleteAccount()
     } catch (err) {
-      setAccountManagementMessage(err.message || 'Failed to schedule account deletion.')
+      window.alert(err.message || 'Failed to schedule account deletion.')
+    } finally {
+      onAccountDeleted()
     }
   }
 
@@ -456,11 +456,6 @@ function Settings({ profileDetails, profilePreview, onEditProfile, theme, onThem
                   <ArrowRight size={18} aria-hidden="true" />
                 </button>
               </div>
-              {accountManagementMessage && (
-                <p className="settings-management-message" role="status">
-                  {accountManagementMessage}
-                </p>
-              )}
             </section>
           )}
         </div>

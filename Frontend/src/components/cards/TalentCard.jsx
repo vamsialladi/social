@@ -6,7 +6,7 @@ export default function TalentCard({ talent }) {
   const navigate = useNavigate();
   const { isAuthenticated } = useAuth();
 
-  const handleConnect = () => {
+  const openSocialProfile = () => {
     const destination = isAuthenticated ? '/social/profile' : '/sign-in';
     navigate(destination, { state: { connectTalent: talent } });
   };
@@ -164,18 +164,19 @@ export default function TalentCard({ talent }) {
 
           {/* Card CTA Buttons */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', paddingTop: '12px', borderTop: '1px solid var(--color-border)' }}>
-            <Link 
-              to={`/talents/${talent.id}`} 
+            <button
+              type="button"
+              onClick={openSocialProfile}
               className="btn btn-sm btn-outline-subtle"
               style={{ width: '100%' }}
             >
               <Eye size={14} />
               <span>View Profile</span>
-            </Link>
+            </button>
 
             <button
               type="button"
-              onClick={handleConnect}
+              onClick={openSocialProfile}
               className="btn btn-sm btn-maroon"
               style={{ width: '100%' }}
             >

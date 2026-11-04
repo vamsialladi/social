@@ -13,7 +13,7 @@ export const CINEMA_24_CRAFTS = [
     tagline: 'Live Your Character',
     desc: 'Embody captivating characters and convey powerful human emotions on screen.',
     icon: '🎭',
-    image: 'https://commons.wikimedia.org/wiki/Special:FilePath/Prabhas_by_Gage_Skidmore.jpg?width=250',
+    image: 'https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d8/Ram_Charan_2024.jpg/250px-Ram_Charan_2024.jpg?utm_source=commons.wikimedia.org&utm_campaign=index&utm_content=thumbnail',
     targetCraft: 'Acting'
   },
   {
