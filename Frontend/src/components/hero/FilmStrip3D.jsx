@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import CRAFT_ADDITIONAL_IMAGES from './craftImages';
 
 /**
  * ============================================================================
@@ -14,6 +15,7 @@ import { useMemo } from 'react';
 export default function FilmStrip3D({
   crafts = [],
   rotationOffset = 0,
+  photoSlideIndex = 0,
   onSelectCraft,
   onCraftClick,
   width = 960,
@@ -145,6 +147,11 @@ export default function FilmStrip3D({
       >
         {framesData.map((item) => {
           const { craft, index, x, y, rotAngle, scale, zIndex, opacity, isCenter } = item;
+          const gallery = [
+            { person: `${craft.name} featured professional`, image: craft.image },
+            ...(CRAFT_ADDITIONAL_IMAGES[craft.name] || []),
+          ];
+          const photo = gallery[photoSlideIndex % gallery.length];
           
           return (
             <div
@@ -190,10 +197,11 @@ export default function FilmStrip3D({
                 }}
               >
                 {/* Circular Craft Image */}
-                {craft.image ? (
+                {photo.image ? (
                   <img
-                    src={craft.image}
-                    alt={craft.name}
+                    src={photo.image}
+                    alt={`${photo.person} — ${craft.name}`}
+                    title={`${photo.person} — ${craft.name}`}
                     style={{
                       width: '100%',
                       height: '100%',

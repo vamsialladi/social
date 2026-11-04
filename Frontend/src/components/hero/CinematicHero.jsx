@@ -6,7 +6,7 @@ import FilmStrip3D from './FilmStrip3D';
 import CraftCarousel from './CraftCarousel';
 import './CinematicHero.css';
 
-export const CINEMA_24_CRAFTS = [
+const CINEMA_24_CRAFTS = [
   {
     name: 'Acting',
     shortName: 'ACTING',
@@ -31,7 +31,7 @@ export const CINEMA_24_CRAFTS = [
     tagline: 'Feel the Rhythm',
     desc: 'Express storytelling through graceful choreography and electrifying energy.',
     icon: '💃',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/96/Farah_Khan_at_Lakme_Fashion_Week_2025.jpg/250px-Farah_Khan_at_Lakme_Fashion_Week_2025.jpg',
+    image: 'https://thumb.wikimedia.org/wikipedia/commons/thumb/5/5d/Prabhudeva_at_Wanted_press_meet.jpg/250px-Prabhudeva_at_Wanted_press_meet.jpg',
     targetCraft: 'Choreographer'
   },
   {
@@ -226,6 +226,7 @@ export const CINEMA_24_CRAFTS = [
 ];
 export default function CinematicHero() {
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [photoSlideIndex, setPhotoSlideIndex] = useState(0);
   const [isCardVisible, setIsCardVisible] = useState(false);
   const initialRotationOffset = Math.PI / 2;
   const [rotationOffset, setRotationOffset] = useState(initialRotationOffset);
@@ -243,6 +244,14 @@ export default function CinematicHero() {
   });
   const animFrameId = useRef(null);
   const cardHideTimeoutRef = useRef(null);
+
+  useEffect(() => {
+    const slideshowTimer = window.setInterval(() => {
+      setPhotoSlideIndex((index) => index + 1);
+    }, 5000);
+
+    return () => window.clearInterval(slideshowTimer);
+  }, []);
 
   const revealCard = useCallback(() => {
     setIsCardVisible(true);
@@ -395,6 +404,7 @@ export default function CinematicHero() {
           <FilmStrip3D
             crafts={CINEMA_24_CRAFTS}
             rotationOffset={rotationOffset}
+            photoSlideIndex={photoSlideIndex}
             onSelectCraft={handleSelectCraft}
             onCraftClick={handleCraftClick}
             width={stageSize.width}
@@ -405,6 +415,7 @@ export default function CinematicHero() {
           <CraftCarousel
             crafts={CINEMA_24_CRAFTS}
             currentIndex={currentIndex}
+            photoSlideIndex={photoSlideIndex}
             isCardVisible={isCardVisible}
             onPrev={handlePrev}
             onNext={handleNext}

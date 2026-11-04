@@ -2,6 +2,31 @@ import {
   ChevronLeft, 
   ChevronRight
 } from 'lucide-react';
+import CRAFT_ADDITIONAL_IMAGES from './craftImages';
+
+function CraftSlideshowPhoto({ craft, photoSlideIndex }) {
+  const gallery = [
+    { person: `${craft.name} featured professional`, image: craft.image },
+    ...(CRAFT_ADDITIONAL_IMAGES[craft.name] || []),
+  ];
+  const currentPhoto = gallery[photoSlideIndex % gallery.length];
+
+  return (
+    <img
+      src={currentPhoto?.image}
+      alt={`${currentPhoto?.person} — ${craft.name}`}
+      className="craft-circle-img"
+      loading="eager"
+      decoding="async"
+      fetchPriority="high"
+      title={`${currentPhoto?.person} — ${craft.name}`}
+      aria-label={`${currentPhoto?.person}, ${craft.name}. Changes every 5 seconds.`}
+      onError={(event) => {
+        event.currentTarget.style.display = 'none';
+      }}
+    />
+  );
+}
 
 /**
  * ============================================================================
@@ -17,6 +42,7 @@ import {
 export default function CraftCarousel({
   crafts = [],
   currentIndex = 0,
+  photoSlideIndex = 0,
   isCardVisible = false,
   onPrev,
   onNext,
@@ -67,17 +93,12 @@ export default function CraftCarousel({
             <div className="craft-circle-media circle-center">
               <div className="craft-film-sprocket-ring" />
               <div className="craft-circle-gold-halo" />
-              <img
-                src={currentCraft.image}
-                alt={currentCraft.name}
-                className="craft-circle-img"
-                loading="eager"
-                decoding="async"
-                fetchPriority="high"
-                onError={(e) => {
-                  e.currentTarget.style.display = 'none';
-                }}
-              />
+              {currentCraft && (
+                <CraftSlideshowPhoto
+                  craft={currentCraft}
+                  photoSlideIndex={photoSlideIndex}
+                />
+              )}
               <div className="craft-circle-overlay-shimmer" />
             </div>
 
