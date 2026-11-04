@@ -24,7 +24,7 @@ function LanguageSelector({ selectedLanguage, onChange }) {
   const selectorRef = useRef(null);
   const triggerRef = useRef(null);
   const optionRefs = useRef([]);
-  const languages = ['Telugu', 'Hindi', 'English', 'Kannada', 'Tamil'];
+  const languages = ['Telugu / తెలుగు', 'Hindi / हिन्दी ', 'English', 'Kannada / ಕನ್ನಡ', 'Tamil /தமிழ்'];
 
   useEffect(() => {
     if (!isOpen) return undefined;
