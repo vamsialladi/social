@@ -119,12 +119,18 @@ function createProfileConversation(conversation) {
   if (!name) return null
 
   const id = `profile-${conversation.id || name.toLowerCase()}`
+  const avatar = conversation.profileImageUrl || conversation.avatar || ''
   return {
     id,
     name,
     initials: name.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase(),
     color: 'purple',
-    avatar: conversation.avatar || '',
+    avatar,
+    profile: {
+      ...conversation,
+      userId: conversation.userId || conversation.user_id || conversation.id || conversation._id || '',
+      profileImageUrl: avatar,
+    },
     preview: 'Start a conversation',
     date: 'Now',
     category: 'Connections',
@@ -136,7 +142,7 @@ function createProfileConversation(conversation) {
   }
 }
 
-function Messages({ conversationToOpen, openConversationRef }) {
+function Messages({ conversationToOpen, openConversationRef, onProfileSelect }) {
   const initialProfileConversation = createProfileConversation(conversationToOpen)
   const initialExistingConversation = initialProfileConversation && initialMessages.find((message) => (
     message.id === initialProfileConversation.id
@@ -145,7 +151,17 @@ function Messages({ conversationToOpen, openConversationRef }) {
   const [messages, setMessages] = useState(() => (
     initialProfileConversation && !initialExistingConversation
       ? [initialProfileConversation, ...initialMessages]
-      : initialMessages
+      : initialProfileConversation
+        ? initialMessages.map((message) => (
+          message.id === initialExistingConversation.id
+            ? {
+              ...message,
+              avatar: initialProfileConversation.avatar || message.avatar,
+              profile: initialProfileConversation.profile,
+            }
+            : message
+        ))
+        : initialMessages
   ))
   const [selectedId, setSelectedId] = useState(
     initialExistingConversation?.id || initialProfileConversation?.id || initialMessages[0].id,
@@ -177,13 +193,22 @@ function Messages({ conversationToOpen, openConversationRef }) {
       || message.name.trim().toLowerCase() === profileConversation.name.toLowerCase()
     ))
 
-    if (!existingConversation) {
-      setMessages((currentMessages) => (
-        currentMessages.some((message) => message.id === profileConversation.id)
-          ? currentMessages
-          : [profileConversation, ...currentMessages]
+    setMessages((currentMessages) => {
+      const currentMatch = currentMessages.find((message) => (
+        message.id === profileConversation.id
+        || message.name.trim().toLowerCase() === profileConversation.name.toLowerCase()
       ))
-    }
+      if (!currentMatch) return [profileConversation, ...currentMessages]
+      return currentMessages.map((message) => (
+        message === currentMatch
+          ? {
+            ...message,
+            avatar: profileConversation.avatar || message.avatar,
+            profile: profileConversation.profile,
+          }
+          : message
+      ))
+    })
 
     setSelectedId(existingConversation?.id || profileConversation.id)
     setActiveCategory('')
@@ -242,6 +267,13 @@ function Messages({ conversationToOpen, openConversationRef }) {
     window.addEventListener('resize', handleResize)
     return () => window.removeEventListener('resize', handleResize)
   }, [])
+
+  function openMessageProfile(message) {
+    onProfileSelect?.(message.profile || {
+      name: message.name,
+      profileImageUrl: message.avatar || '',
+    })
+  }
 
   function handleSelectMessage(id) {
     if (window.innerWidth <= 740) {
@@ -416,23 +448,39 @@ function Messages({ conversationToOpen, openConversationRef }) {
         <div className={`messages-content${isMobileDetailOpen ? ' is-detail-open' : ''}`}>
           <aside className="messages-list" aria-label="Conversation list">
             {visibleMessages.length ? visibleMessages.map((message) => (
-              <button
+              <div
                 className={`message-preview${selectedId === message.id ? ' is-active' : ''}${message.unread ? ' is-unread' : ''}`}
-                type="button"
                 key={message.id}
-                onClick={() => handleSelectMessage(message.id)}
               >
-                <span className={`message-avatar avatar-${message.color}`} aria-hidden="true">
-                  {message.initials}
-                </span>
-                <span className="message-preview-copy">
+                <button
+                  className={`message-avatar message-profile-button avatar-${message.color}`}
+                  type="button"
+                  aria-label={`View ${message.name}'s profile`}
+                  onClick={() => openMessageProfile(message)}
+                >
+                  <span aria-hidden="true">{message.initials}</span>
+                  {message.avatar && (
+                    <img
+                      src={message.avatar}
+                      alt=""
+                      onError={(event) => {
+                        event.currentTarget.hidden = true
+                      }}
+                    />
+                  )}
+                </button>
+                <button
+                  className="message-preview-copy"
+                  type="button"
+                  onClick={() => handleSelectMessage(message.id)}
+                >
                   <span className="message-preview-heading">
                     <strong>{message.name}</strong>
                     <time>{message.date}</time>
                   </span>
                   <span className="message-preview-text">{message.preview}</span>
-                </span>
-              </button>
+                </button>
+              </div>
             )) : (
               <p className="messages-empty">No messages match your filters.</p>
             )}
@@ -468,9 +516,23 @@ function Messages({ conversationToOpen, openConversationRef }) {
                     </div>
                   )}
                   <div className="message-contact">
-                    <span className={`message-avatar avatar-${selectedMessage.color}`} aria-hidden="true">
-                      {selectedMessage.initials}
-                    </span>
+                    <button
+                      className={`message-avatar message-profile-button avatar-${selectedMessage.color}`}
+                      type="button"
+                      aria-label={`View ${selectedMessage.name}'s profile`}
+                      onClick={() => openMessageProfile(selectedMessage)}
+                    >
+                      <span aria-hidden="true">{selectedMessage.initials}</span>
+                      {selectedMessage.avatar && (
+                        <img
+                          src={selectedMessage.avatar}
+                          alt=""
+                          onError={(event) => {
+                            event.currentTarget.hidden = true
+                          }}
+                        />
+                      )}
+                    </button>
                     <div>
                       <h2>{selectedMessage.name}</h2>
                       <p>{selectedMessage.sponsored

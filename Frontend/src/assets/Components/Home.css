@@ -504,6 +504,33 @@
   gap: 10px;
 }
 
+.home-post-author-avatar,
+.home-post-author-name {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.home-post-author-avatar {
+  display: grid;
+  flex: 0 0 auto;
+  border-radius: 50%;
+}
+
+.home-post-author-avatar:focus-visible,
+.home-post-author-name:focus-visible {
+  outline: 2px solid #0a66c2;
+  outline-offset: 3px;
+}
+
+.home-post-author-name:hover strong {
+  text-decoration: underline;
+}
+
 .home-post-header > div:last-child {
   display: grid;
   gap: 2px;

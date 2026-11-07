@@ -1281,13 +1281,40 @@ export default function SocialApp() {
   }
 
   function showCandidateProfile(candidateProfile) {
-    setViewingCandidateProfile({
+    const candidateId = String(
+      candidateProfile.userId
+        || candidateProfile.user_id
+        || candidateProfile.id
+        || candidateProfile._id
+        || '',
+    )
+    const selectedCandidate = {
       ...emptyProfileDetails,
       ...candidateProfile,
-      userId: candidateProfile.userId || candidateProfile.user_id || candidateProfile.id || candidateProfile._id || '',
+      userId: candidateId,
       profileImageUrl: candidateProfile.profileImageUrl || candidateProfile.avatar || '',
-    })
-    setActiveNavigation('profile')
+    }
+    setViewingCandidateProfile(selectedCandidate)
+    setActiveNavigationState('profile')
+    navigate('/social/profile', { state: { connectTalent: selectedCandidate } })
+
+    if (candidateId) {
+      api.getProfileById(candidateId).then((profile) => {
+        if (!profile) return
+        setViewingCandidateProfile((currentProfile) => (
+          String(currentProfile?.userId || currentProfile?.id || '') === candidateId
+            ? {
+                ...currentProfile,
+                ...profile,
+                userId: profile.userId || candidateId,
+                profileImageUrl: profile.profileImageUrl || profile.avatar || currentProfile.profileImageUrl,
+              }
+            : currentProfile
+        ))
+      }).catch((error) => {
+        console.warn('Could not load the complete profile:', error)
+      })
+    }
   }
 
   useEffect(() => {
@@ -1375,7 +1402,14 @@ export default function SocialApp() {
 
       <div hidden={activeNavigation !== 'network'}>
         <NetworkPage
-          currentUserId={user?.userId || user?.id || profileDetails.userId || profileDetails.id}
+          currentUserIdentifiers={[
+            user?.userId,
+            user?.id,
+            user?.email,
+            profileDetails.userId,
+            profileDetails.id,
+            profileDetails.email,
+          ]}
           onProfileSelect={showCandidateProfile}
           onMessage={(recipient) => {
             openConversationRef.current?.(recipient)
@@ -1387,6 +1421,7 @@ export default function SocialApp() {
         <Messages
           conversationToOpen={location.state?.openConversation}
           openConversationRef={openConversationRef}
+          onProfileSelect={showCandidateProfile}
         />
       </div>
       <div hidden={activeNavigation !== 'endorsement'}>
@@ -1398,7 +1433,10 @@ export default function SocialApp() {
         />
       </div>
       <div hidden={activeNavigation !== 'connections'}>
-        <ConnectionsPage onBack={() => setActiveNavigation('profile')} />
+        <ConnectionsPage
+          onBack={() => setActiveNavigation('profile')}
+          onProfileSelect={showCandidateProfile}
+        />
       </div>
       <div hidden={activeNavigation !== 'profile'}>
         <ProfilePage

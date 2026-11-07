@@ -9,6 +9,7 @@ import java.util.List;
 @Repository
 public interface PostRepository extends JpaRepository<PostEntity, Long> {
     List<PostEntity> findAllByOrderByCreatedAtDesc();
+    List<PostEntity> findAllByAuthorIdOrderByCreatedAtDesc(String authorId);
     List<PostEntity> findAllByTypeOrderByCreatedAtDesc(String type);
     List<PostEntity> findAllByTypeIgnoreCaseOrderByCreatedAtDesc(String type);
     List<PostEntity> findAllByTypeNotOrderByCreatedAtDesc(String type);

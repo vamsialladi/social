@@ -705,3 +705,22 @@ img {
     width: 100%;
   }
 }
+
+button:not(:disabled):active {
+  animation: social-button-press 180ms ease-out;
+}
+
+@keyframes social-button-press {
+  45% {
+    scale: 0.94;
+  }
+  100% {
+    scale: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  button:not(:disabled):active {
+    animation: none;
+  }
+}

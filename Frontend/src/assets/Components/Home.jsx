@@ -153,6 +153,28 @@ function Home({
     }
   }, [activeNavigation])
 
+  useEffect(() => {
+    function handleConnectionChanged(event) {
+      const { connected, profile } = event.detail || {}
+      const profileId = String(
+        profile?.userId || profile?.id || profile?.user_id || profile?._id || '',
+      )
+      if (!profileId) return
+
+      setConnectedProfiles((current) => {
+        const matchesProfile = (item) => String(
+          item.userId || item.id || item.user_id || item._id || '',
+        ) === profileId
+        if (!connected) return current.filter((item) => !matchesProfile(item))
+        if (current.some(matchesProfile)) return current
+        return [...current, { ...profile, id: profileId, userId: profile.userId || profileId }]
+      })
+    }
+
+    window.addEventListener('truehunt-connection-changed', handleConnectionChanged)
+    return () => window.removeEventListener('truehunt-connection-changed', handleConnectionChanged)
+  }, [])
+
   function selectMedia(event) {
     const file = event.target.files?.[0]
     event.target.value = ''
@@ -360,11 +382,45 @@ function Home({
     const ownIds = [currentUserId, profileDetails.userId, profileDetails.id, profileDetails.email]
       .filter(Boolean)
       .map((id) => String(id).trim().toLowerCase())
-    if (authorId && ownIds.includes(authorId)) return true
+    if (authorId && authorId !== 'me' && ownIds.includes(authorId)) return true
 
     const authorName = String(post.authorName || '').trim().toLowerCase()
     const ownName = String(profileDetails.name || '').trim().toLowerCase()
     return Boolean(authorName && ownName && authorName === ownName)
+  }
+
+  function viewPostAuthor(post) {
+    if (isOwnPost(post)) {
+      onViewProfile?.()
+      return
+    }
+
+    const authorId = String(post.authorId || '').trim()
+    const authorName = String(post.authorName || '').trim()
+    const authorProfile = profileDirectory.find((profile) => (
+      authorId && authorId.toLowerCase() !== 'me'
+      && String(profile.userId || profile.id || profile.referId || '').trim().toLowerCase()
+        === authorId.toLowerCase()
+    )) || profileDirectory.find((profile) => (
+      authorName && String(profile.name || '').trim().toLowerCase() === authorName.toLowerCase()
+    ))
+    const profileId = authorProfile?.userId
+      || authorProfile?.id
+      || authorProfile?.referId
+      || (authorId.toLowerCase() === 'me' ? '' : authorId)
+    const authorAvatar = authorProfile?.profileImageUrl
+      || authorProfile?.avatar
+      || post.authorAvatar
+      || ''
+
+    onViewConnection?.({
+      ...authorProfile,
+      id: authorProfile?.id || profileId,
+      userId: profileId,
+      name: authorProfile?.name || authorName || 'TrueHunt member',
+      profileImageUrl: authorAvatar,
+      avatar: authorAvatar,
+    })
   }
 
   async function handleCommentSubmit(event, postId) {
@@ -581,16 +637,30 @@ function Home({
             <div className="home-post-list">
               {visiblePosts.map((post) => {
                 const authorAvatar = getPostAuthorAvatar(post)
+                const authorName = post.authorName || name
                 return (
                 <article className="home-card home-post" key={post.id}>
                   <header className="home-post-header">
-                    <div className={`home-avatar${authorAvatar ? '' : ' is-placeholder'}`} aria-hidden="true">
-                      {authorAvatar
-                        ? <img src={authorAvatar} alt="" />
-                        : <ProfileAvatarPlaceholder />}
-                    </div>
+                    <button
+                      className="home-post-author-avatar"
+                      type="button"
+                      aria-label={`View ${authorName}'s profile`}
+                      onClick={() => viewPostAuthor(post)}
+                    >
+                      <span className={`home-avatar${authorAvatar ? '' : ' is-placeholder'}`} aria-hidden="true">
+                        {authorAvatar
+                          ? <img src={authorAvatar} alt="" />
+                          : <ProfileAvatarPlaceholder />}
+                      </span>
+                    </button>
                     <div>
-                      <strong>{post.authorName || name}</strong>
+                      <button
+                        className="home-post-author-name"
+                        type="button"
+                        onClick={() => viewPostAuthor(post)}
+                      >
+                        <strong>{authorName}</strong>
+                      </button>
                       {post.authorHeadline && (
                         <span>{post.authorHeadline}</span>
                       )}

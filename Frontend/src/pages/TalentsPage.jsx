@@ -4,8 +4,10 @@ import { Search, SlidersHorizontal, Users, X, RotateCcw } from 'lucide-react';
 import TalentCard from '../components/cards/TalentCard';
 import { FEATURED_TALENTS, FILM_CRAFTS } from '../services/mockData';
 import { api } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
 export default function TalentsPage() {
+  const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const [talents, setTalents] = useState(FEATURED_TALENTS);
   const [loading, setLoading] = useState(false);
@@ -52,8 +54,21 @@ export default function TalentsPage() {
   };
 
   const locationsList = ['All', 'Mumbai', 'Hyderabad', 'Chennai', 'Bengaluru', 'Kolkata', 'Pune', 'Kochi'];
+  const currentUserIdentifiers = new Set(
+    [user?.userId, user?.id, user?._id, user?.email]
+      .filter(Boolean)
+      .map((identifier) => String(identifier).trim().toLowerCase()),
+  );
 
   const filteredTalents = talents.filter(t => {
+    const talentIdentifiers = [
+      t.userId,
+      t.user_id,
+      t.id,
+      t._id,
+      t.email,
+    ].filter(Boolean).map((identifier) => String(identifier).trim().toLowerCase());
+    if (talentIdentifiers.some((identifier) => currentUserIdentifiers.has(identifier))) return false;
     if (onlyVerified && !t.verified) return false;
     if (experienceLevel !== 'All') {
       const years = parseInt(t.experience);

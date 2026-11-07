@@ -194,6 +194,32 @@
   padding: 19px;
 }
 
+.network-connections-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 16px;
+  padding: 7px 11px;
+  border: 1px solid var(--network-line);
+  border-radius: 999px;
+  background: #fff;
+  color: #55515a;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.network-connections-back:hover {
+  background: #f6f5f7;
+  color: #28262e;
+}
+
+.network-connections-back:focus-visible {
+  outline: 2px solid #0a66c2;
+  outline-offset: 2px;
+}
+
 .network-connections-empty {
   display: grid;
   justify-items: center;
@@ -247,6 +273,12 @@
   font-size: 11px;
 }
 
+.network-connection-error {
+  margin: 0 0 12px;
+  color: #a53d2b;
+  font-size: 12px;
+}
+
 .network-profile-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -263,8 +295,45 @@
 }
 
 .network-profile-cover {
+  position: relative;
+  overflow: hidden;
   height: 74px;
   background-image: radial-gradient(circle at 70% 20%, rgba(255, 255, 255, 0.56) 0 28px, transparent 29px);
+}
+
+.network-profile-cover > img,
+.network-profile-cover > video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  object-fit: cover;
+}
+
+.network-profile-cover > video {
+  object-position: center 85%;
+}
+
+.network-profile-cover-brand {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  pointer-events: none;
+  text-shadow: 0 1px 5px rgba(0, 0, 0, 0.45);
+}
+
+.network-profile-cover-brand > img {
+  width: 25px;
+  height: 25px;
+  object-fit: contain;
 }
 
 .network-avatar-coral {
@@ -278,6 +347,8 @@
 }
 
 .network-profile-avatar {
+  position: relative;
+  isolation: isolate;
   display: grid;
   width: 72px;
   height: 72px;
@@ -301,12 +372,16 @@
 }
 
 .network-profile-avatar > img {
+  position: absolute;
+  inset: 0;
   display: block;
   width: 100%;
   height: 100%;
   max-width: none;
-  border-radius: 50%;
+  border-radius: inherit;
+  clip-path: circle(50%);
   object-fit: cover;
+  object-position: center;
 }
 
 .network-profile-avatar-wrap {
@@ -410,6 +485,11 @@
   color: #68646d;
 }
 
+.network-profile-actions button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
 .network-message-button {
   min-height: 32px;
   margin-top: 7px;
@@ -507,9 +587,15 @@
   }
 
   .network-manage-item {
+    min-height: 48px;
     gap: 7px;
     padding: 0 10px;
     font-size: 11px;
+  }
+
+  .network-manage-item span {
+    min-width: 0;
+    overflow-wrap: anywhere;
   }
 
   .network-manage-item svg {
@@ -535,26 +621,31 @@
   }
 
   .network-profile-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .network-profile-cover {
+    height: 88px;
   }
 
   .network-profile-content {
-    padding: 0 9px 11px;
+    padding: 0 14px 14px;
   }
 
   .network-profile-content h3 {
-    font-size: 12px;
+    font-size: 15px;
   }
 
   .network-profile-role,
   .network-profile-location {
-    font-size: 10px;
+    font-size: 12px;
   }
-}
 
-@media (max-width: 380px) {
-  .network-profile-grid {
-    grid-template-columns: 1fr;
+  .network-profile-actions .network-connect-button,
+  .network-profile-actions .network-follow-button,
+  .network-message-button {
+    min-height: 40px;
+    font-size: 12px;
   }
 }

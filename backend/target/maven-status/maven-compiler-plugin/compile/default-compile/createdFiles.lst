@@ -25,8 +25,10 @@ com\truehunt\social\config\DataInitializer.class
 com\truehunt\social\model\ProfileEntity$6.class
 com\truehunt\social\dto\ReferenceCheckRequest.class
 com\truehunt\social\repository\UserAccountRepository.class
+com\truehunt\social\model\UserProfileRelationshipEntity.class
 com\truehunt\social\exception\ApiException.class
 com\truehunt\social\controller\EntertainmentController.class
+com\truehunt\social\repository\UserProfileRelationshipRepository.class
 com\truehunt\social\dto\RiskDto.class
 com\truehunt\social\model\ProfileEntity$3.class
 com\truehunt\social\model\PostEntity.class

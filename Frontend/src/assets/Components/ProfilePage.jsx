@@ -96,10 +96,39 @@ function getOrganizationLogoUrl(organizationName, experiences = []) {
 
 function OrganizationPicker({ options, value, onChange }) {
   const [isOpen, setIsOpen] = useState(false)
+  const [isOtherSelected, setIsOtherSelected] = useState(false)
   const matchingOptions = options.filter((option) => (
     !value.trim() || option.name.toLowerCase().includes(value.trim().toLowerCase())
   ))
   const matchingLogo = getOrganizationLogoUrl(value, options)
+
+  if (isOtherSelected) {
+    return (
+      <div className="organization-picker">
+        <input
+          id="experience-organization"
+          name="organizationName"
+          type="text"
+          value={value}
+          placeholder="Enter organization name"
+          autoComplete="organization"
+          onChange={(event) => onChange(event.target.value)}
+          required
+        />
+        <button
+          className="organization-picker-option"
+          type="button"
+          onClick={() => {
+            onChange('')
+            setIsOtherSelected(false)
+            setIsOpen(true)
+          }}
+        >
+          Choose from organizations
+        </button>
+      </div>
+    )
+  }
 
   return (
     <div
@@ -132,7 +161,7 @@ function OrganizationPicker({ options, value, onChange }) {
         }}
         required
       />
-      {isOpen && matchingOptions.length > 0 && (
+      {isOpen && (
         <div className="organization-picker-options" role="listbox" aria-label="Organizations">
           {matchingOptions.map((option) => (
             <button
@@ -162,6 +191,20 @@ function OrganizationPicker({ options, value, onChange }) {
               <span>{option.name}</span>
             </button>
           ))}
+          <button
+            className="organization-picker-option"
+            type="button"
+            role="option"
+            aria-selected={false}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => {
+              onChange('')
+              setIsOtherSelected(true)
+              setIsOpen(false)
+            }}
+          >
+            Other
+          </button>
         </div>
       )}
       {value.trim() && (
@@ -440,6 +483,7 @@ function ProfilePage({
   const [selectedSubCraft, setSelectedSubCraft] = useState('')
   const [secondaryCraftToAdd, setSecondaryCraftToAdd] = useState('')
   const [selectedWorkTypes, setSelectedWorkTypes] = useState([])
+  const [otherWorkTypeDraft, setOtherWorkTypeDraft] = useState('')
   const [uploadedVideos, setUploadedVideos] = useState([null, null, null])
   const uploadedVideoUrls = useRef([])
   const [videoUrlInput, setVideoUrlInput] = useState('')
@@ -682,6 +726,47 @@ function ProfilePage({
   const canMessageProfile = isProfileConnected || isProfileFollowed
 
   useEffect(() => {
+    function syncConnectionState(event) {
+      const { connected, profile } = event.detail || {}
+      const changedProfileId = String(
+        profile?.userId || profile?.id || profile?.user_id || profile?._id || '',
+      )
+      if (!changedProfileId) return
+      if (changedProfileId === targetProfileId) {
+        setConnectionState({ profileId: targetProfileId, connected: Boolean(connected) })
+      }
+
+      setConnectedProfiles((current) => {
+        const currentProfiles = current || []
+        const matchesProfile = (item) => String(
+          item.userId || item.id || item.user_id || item._id || '',
+        ) === changedProfileId
+        if (!connected) return currentProfiles.filter((item) => !matchesProfile(item))
+        if (currentProfiles.some(matchesProfile)) return currentProfiles
+        return [...currentProfiles, { ...profile, id: changedProfileId, userId: changedProfileId }]
+      })
+    }
+
+    window.addEventListener('truehunt-connection-changed', syncConnectionState)
+    return () => window.removeEventListener('truehunt-connection-changed', syncConnectionState)
+  }, [isOwnerView, targetProfileId])
+
+  useEffect(() => {
+    function syncFollowState(event) {
+      const { following, profile } = event.detail || {}
+      const changedProfileId = String(
+        profile?.userId || profile?.id || profile?.user_id || profile?._id || '',
+      )
+      if (changedProfileId === targetProfileId) {
+        setFollowState({ profileId: targetProfileId, followed: Boolean(following) })
+      }
+    }
+
+    window.addEventListener('truehunt-follow-changed', syncFollowState)
+    return () => window.removeEventListener('truehunt-follow-changed', syncFollowState)
+  }, [targetProfileId])
+
+  useEffect(() => {
     if (!isOwnerView) return undefined
 
     let isCurrent = true
@@ -860,20 +945,30 @@ function ProfilePage({
     }
   }
 
-  async function connectToProfile() {
+  async function toggleProfileConnection() {
     if (!targetProfileId || relationshipAction) return
 
     setRelationshipActionState({ profileId: targetProfileId, action: 'connect' })
     setRelationshipErrorState({ profileId: targetProfileId, message: '' })
     try {
       await api.toggleConnection(targetProfileId)
-      setConnectionState({ profileId: targetProfileId, connected: true })
-      setOpenProfileActionsFor(null)
+      const connected = !isProfileConnected
+      const profile = {
+        ...profileDetails,
+        id: targetProfileId,
+        userId: targetProfileId,
+      }
+      setConnectionState({ profileId: targetProfileId, connected })
+      window.dispatchEvent(new CustomEvent('truehunt-connection-changed', {
+        detail: { connected, profile },
+      }))
     } catch (error) {
-      console.error('Could not connect to profile:', error)
+      console.error('Could not update profile connection:', error)
       setRelationshipErrorState({
         profileId: targetProfileId,
-        message: 'Could not send the connection request. Please try again.',
+        message: isProfileConnected
+          ? 'Could not remove this connection. Please try again.'
+          : 'Could not send the connection request. Please try again.',
       })
     } finally {
       setRelationshipActionState({ profileId: targetProfileId, action: '' })
@@ -886,14 +981,25 @@ function ProfilePage({
     setRelationshipActionState({ profileId: targetProfileId, action: 'follow' })
     setRelationshipErrorState({ profileId: targetProfileId, message: '' })
     try {
-      await api.toggleFollow(targetProfileId)
-      setFollowState({ profileId: targetProfileId, followed: true })
+      const result = await api.toggleFollow(targetProfileId)
+      const followed = typeof result?.following === 'boolean'
+        ? result.following
+        : !isProfileFollowed
+      setFollowState({ profileId: targetProfileId, followed })
       setOpenProfileActionsFor('')
+      window.dispatchEvent(new CustomEvent('truehunt-follow-changed', {
+        detail: {
+          following: followed,
+          profile: { ...profileDetails, id: targetProfileId, userId: targetProfileId },
+        },
+      }))
     } catch (error) {
-      console.error('Could not follow profile:', error)
+      console.error('Could not update profile follow state:', error)
       setRelationshipErrorState({
         profileId: targetProfileId,
-        message: 'Could not follow this profile. Please try again.',
+        message: isProfileFollowed
+          ? 'Could not unfollow this profile. Please try again.'
+          : 'Could not follow this profile. Please try again.',
       })
     } finally {
       setRelationshipActionState({ profileId: targetProfileId, action: '' })
@@ -1230,7 +1336,10 @@ function ProfilePage({
       subCraftOptions.includes(profileDetails.subCraft) ? profileDetails.subCraft : '',
     )
     setSecondaryCraftToAdd('')
-    setSelectedWorkTypes(profileDetails.workTypes || [])
+    const savedWorkTypes = profileDetails.workTypes || []
+    const savedCustomWorkType = savedWorkTypes.find((workType) => workType.startsWith('Other: '))
+    setSelectedWorkTypes(savedWorkTypes.filter((workType) => !workType.startsWith('Other: ')))
+    setOtherWorkTypeDraft(savedCustomWorkType?.slice('Other: '.length) || '')
     setSavedVideoUrls(profileDetails.videoUrls)
     setVideoUrlInput('')
     setVideoUrlError('')
@@ -1251,6 +1360,17 @@ function ProfilePage({
     setSecondaryCraftToAdd('')
   }
 
+  async function persistProfileDetails(nextDetails) {
+    const savedDetails = await api.updateProfile(nextDetails)
+    const persistedDetails = {
+      ...nextDetails,
+      ...savedDetails,
+      posts: nextDetails.posts,
+    }
+    setProfileDetails(persistedDetails)
+    return persistedDetails
+  }
+
   async function saveSectionEditor() {
     let nextDetails = { ...profileDetails }
 
@@ -1265,8 +1385,7 @@ function ProfilePage({
       setIsSavingAbout(true)
       setValidationError('')
       try {
-        await api.updateProfile(nextDetails)
-        setProfileDetails(nextDetails)
+        await persistProfileDetails(nextDetails)
         setEditingSection('')
       } catch (error) {
         console.error('Failed to save profile About section:', error)
@@ -1281,7 +1400,13 @@ function ProfilePage({
       nextDetails.secondaryCrafts = selectedTalents
       nextDetails.talents = [...(primaryCraft ? [primaryCraft] : []), ...selectedTalents]
     } else if (editingSection === 'workTypes') {
-      nextDetails.workTypes = selectedWorkTypes
+      const customWorkType = otherWorkTypeDraft.trim()
+      nextDetails.workTypes = [
+        ...selectedWorkTypes,
+        ...(selectedWorkTypes.includes('others') && customWorkType
+          ? [`Other: ${customWorkType}`]
+          : []),
+      ]
     } else if (editingSection === 'languages') {
       nextDetails.languages = selectedLanguages
       nextDetails.otherLanguage = selectedLanguages.includes('Other') ? otherLanguageDraft.trim() : ''
@@ -1331,8 +1456,7 @@ function ProfilePage({
     }
 
     try {
-      await api.updateProfile(nextDetails)
-      setProfileDetails(nextDetails)
+      await persistProfileDetails(nextDetails)
       setEditingSection('')
       setValidationError('')
     } catch (error) {
@@ -1492,8 +1616,7 @@ function ProfilePage({
         }))
       }
       const nextDetails = { ...profileDetails, experiences: updatedExperiences }
-      await api.updateProfile(nextDetails)
-      setProfileDetails(nextDetails)
+      await persistProfileDetails(nextDetails)
       setIsExperienceModalOpen(false)
       setEditingExperienceId(null)
     } catch (err) {
@@ -1507,20 +1630,23 @@ function ProfilePage({
   async function handleExperienceDelete() {
     if (editingExperienceId === null) return
 
+    setIsSavingExperience(true)
+    setExperienceSaveError('')
     const updatedExperiences = (profileDetails.experiences || []).filter(
       (experience) => experience.id !== editingExperienceId,
     )
 
     const nextDetails = { ...profileDetails, experiences: updatedExperiences }
-    setProfileDetails(nextDetails)
     try {
-      await api.updateProfile(nextDetails)
+      await persistProfileDetails(nextDetails)
+      setIsExperienceModalOpen(false)
+      setEditingExperienceId(null)
     } catch (err) {
-      console.warn('Failed to delete experience from backend:', err)
+      console.error('Failed to delete experience from backend:', err)
+      setExperienceSaveError('Could not delete this experience. Please try again.')
+    } finally {
+      setIsSavingExperience(false)
     }
-
-    setIsExperienceModalOpen(false)
-    setEditingExperienceId(null)
   }
 
   async function handleSubmit(event) {
@@ -1556,7 +1682,7 @@ function ProfilePage({
         try {
           const uploaded = await api.uploadMedia(profilePic)
           profileImageUrl = uploaded.url
-          setProfilePreview(uploaded.url)
+          profileImageUrl = uploaded.url
         } catch (err) {
           console.warn('Profile picture upload note:', err)
         }
@@ -1583,9 +1709,9 @@ function ProfilePage({
         profileImageUrl,
       }
 
-      setProfileDetails(nextDetails)
+      const savedDetails = await persistProfileDetails(nextDetails)
+      setProfilePreview(savedDetails.profileImageUrl || profileImageUrl)
       setIsProfileImageRemoved(false)
-      await api.updateProfile(nextDetails)
 
       setIsEditingProfile(false)
     } catch (err) {
@@ -1689,21 +1815,29 @@ function ProfilePage({
                           className={`profile-relationship-action${isProfileConnected ? ' is-active' : ''}`}
                           type="button"
                           aria-pressed={isProfileConnected}
-                          disabled={isProfileConnected || relationshipAction !== '' || !targetProfileId}
-                          onClick={connectToProfile}
+                          disabled={relationshipAction !== '' || !targetProfileId}
+                          onClick={toggleProfileConnection}
                         >
                           {isProfileConnected ? <Check size={17} /> : <UserPlus size={17} />}
-                          <span>{isProfileConnected ? 'Connected' : relationshipAction === 'connect' ? 'Connecting…' : 'Connect'}</span>
+                          <span>
+                            {relationshipAction === 'connect'
+                              ? isProfileConnected ? 'Removing connection…' : 'Connecting…'
+                              : isProfileConnected ? 'Remove connection' : 'Connect'}
+                          </span>
                         </button>
                         <button
                           className={`profile-relationship-action${isProfileFollowed ? ' is-active' : ''}`}
                           type="button"
                           aria-pressed={isProfileFollowed}
-                          disabled={isProfileFollowed || relationshipAction !== '' || !targetProfileId}
+                          disabled={relationshipAction !== '' || !targetProfileId}
                           onClick={followProfile}
                         >
                           {isProfileFollowed ? <Check size={17} /> : <UserPlus size={17} />}
-                          <span>{isProfileFollowed ? 'Following' : relationshipAction === 'follow' ? 'Following…' : 'Follow'}</span>
+                          <span>
+                            {relationshipAction === 'follow'
+                              ? isProfileFollowed ? 'Unfollowing…' : 'Following…'
+                              : isProfileFollowed ? 'Unfollow' : 'Follow'}
+                          </span>
                         </button>
                         {relationshipError && <p className="profile-relationship-error" role="alert">{relationshipError}</p>}
                       </div>
@@ -1732,7 +1866,7 @@ function ProfilePage({
               </div>
               <p className="artist-headline">
                 {profileDetails.talents.length > 0
-                  ? profileDetails.talents.join(' · ')
+                  ? profileDetails.talents.join('  |  ')
                   : 'Add your talents in Edit profile'}
               </p>
               <p className="artist-location">
@@ -1818,6 +1952,87 @@ function ProfilePage({
           </div>
           <div className="artist-content">
             <div className="artist-main">
+              {(profileDetails.experience || profileDetails.languages.length > 0 || profileDetails.videos.length > 0) && (
+                <section className="artist-section insights-section" id="artist-highlights">
+                  <h3>Profile highlights</h3>
+                  <div className="insights-grid">
+                    {profileDetails.experience && (
+                      <div className="insight-item">
+                        <span className="insight-icon" aria-hidden="true">✦</span>
+                        <div>
+                          <strong>{profileDetails.experience.toLowerCase() === 'fresher' || profileDetails.experience.toLowerCase().includes('year') ? profileDetails.experience : `${profileDetails.experience} years`}</strong>
+                          <span>Experience</span>
+                        </div>
+                      </div>
+                    )}
+                    {profileDetails.languages.length > 0 && (
+                      <div className="insight-item">
+                        <span className="insight-icon" aria-hidden="true">◎</span>
+                        <div><strong>{profileDetails.languages.length}</strong><span>Languages</span></div>
+                      </div>
+                    )}
+                    {profileDetails.videos.length > 0 && (
+                      <div className="insight-item">
+                        <span className="insight-icon" aria-hidden="true">▶</span>
+                        <div><strong>{profileDetails.videos.length}</strong><span>Demo videos</span></div>
+                      </div>
+                    )}
+                  </div>
+                </section>
+              )}
+
+              <section className="artist-section profile-about-section" id="artist-about">
+                <PreviewSectionHeading isOwner={isOwnerView} onEdit={openSectionEditor} sectionId="about">
+                  About
+                </PreviewSectionHeading>
+                {profileDetails.bio?.trim() ? (
+                  <p className="profile-about-content">{profileDetails.bio}</p>
+                ) : (
+                  <p className="profile-empty-hint">
+                    {isOwnerView ? 'Add an introduction about yourself.' : 'No About information added yet.'}
+                  </p>
+                )}
+                {editingSection === 'about' && (
+                  <div className="preview-inline-editor profile-about-editor">
+                    <label className="form-field" htmlFor="profile-about-text">
+                      About you
+                      <textarea
+                        id="profile-about-text"
+                        rows={5}
+                        value={aboutDraft}
+                        maxLength={5000}
+                        aria-describedby="profile-about-word-count"
+                        onChange={(event) => {
+                          const words = event.target.value.trim().match(/\S+/g) || []
+                          if (words.length > MAX_ABOUT_WORDS) {
+                            setAboutDraft(words.slice(0, MAX_ABOUT_WORDS).join(' '))
+                            setValidationError(`About is limited to ${MAX_ABOUT_WORDS} words.`)
+                            return
+                          }
+                          setAboutDraft(event.target.value)
+                          setValidationError('')
+                        }}
+                        placeholder="Write a short introduction about your experience, skills, and creative work."
+                      />
+                    </label>
+                    <div className="profile-about-editor-footer">
+                      <span id="profile-about-word-count" aria-live="polite">
+                        {(aboutDraft.trim().match(/\S+/g) || []).length}/{MAX_ABOUT_WORDS} words
+                      </span>
+                      {validationError && <p className="submit-error" role="alert">{validationError}</p>}
+                    </div>
+                    <div className="language-edit-actions">
+                      <button className="secondary-button" type="button" onClick={closeSectionEditor} disabled={isSavingAbout}>
+                        Cancel
+                      </button>
+                      <button className="contact-button" type="button" onClick={saveSectionEditor} disabled={isSavingAbout}>
+                        {isSavingAbout ? 'Saving…' : 'Save'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </section>
+
               <section className="artist-section">
                 <div className="preview-section-heading">
                   <h3>Posts</h3>
@@ -1949,7 +2164,18 @@ function ProfilePage({
                   </PreviewSectionHeading>
                   {(profileDetails.workTypes || []).length > 0 && (
                     <div className="profile-tags">
-                      {(profileDetails.workTypes || []).map((workType) => <span key={workType}>{workType}</span>)}
+                      {(profileDetails.workTypes || [])
+                        .filter((workType) => !(
+                          workType === 'others'
+                          && profileDetails.workTypes.some((item) => item.startsWith('Other: '))
+                        ))
+                        .map((workType) => (
+                        <span key={workType}>
+                          {workType.startsWith('Other: ')
+                            ? `Others: ${workType.slice('Other: '.length)}`
+                            : workType}
+                        </span>
+                      ))}
                     </div>
                   )}
                   {editingSection === 'workTypes' && (
@@ -1960,6 +2186,18 @@ function ProfilePage({
                         selected={selectedWorkTypes}
                         onChange={setSelectedWorkTypes}
                       />
+                      {selectedWorkTypes.includes('others') && (
+                        <div className="form-field">
+                          <label htmlFor="inline-other-work-type">Specify where you worked</label>
+                          <input
+                            id="inline-other-work-type"
+                            type="text"
+                            value={otherWorkTypeDraft}
+                            onChange={(event) => setOtherWorkTypeDraft(event.target.value)}
+                            placeholder="Enter another type of work"
+                          />
+                        </div>
+                      )}
                       {validationError && <p className="submit-error" role="alert">{validationError}</p>}
                       <div className="language-edit-actions">
                         <button className="secondary-button" type="button" onClick={closeSectionEditor}>Cancel</button>
@@ -1969,87 +2207,6 @@ function ProfilePage({
                   )}
                 </section>
               )}
-              {(profileDetails.experience || profileDetails.languages.length > 0 || profileDetails.videos.length > 0) && (
-                <section className="artist-section insights-section" id="artist-highlights">
-                  <h3>Profile highlights</h3>
-                  <div className="insights-grid">
-                    {profileDetails.experience && (
-                      <div className="insight-item">
-                        <span className="insight-icon" aria-hidden="true">✦</span>
-                        <div>
-                          <strong>{profileDetails.experience.toLowerCase() === 'fresher' || profileDetails.experience.toLowerCase().includes('year') ? profileDetails.experience : `${profileDetails.experience} years`}</strong>
-                          <span>Experience</span>
-                        </div>
-                      </div>
-                    )}
-                    {profileDetails.languages.length > 0 && (
-                      <div className="insight-item">
-                        <span className="insight-icon" aria-hidden="true">◎</span>
-                        <div><strong>{profileDetails.languages.length}</strong><span>Languages</span></div>
-                      </div>
-                    )}
-                    {profileDetails.videos.length > 0 && (
-                      <div className="insight-item">
-                        <span className="insight-icon" aria-hidden="true">▶</span>
-                        <div><strong>{profileDetails.videos.length}</strong><span>Demo videos</span></div>
-                      </div>
-                    )}
-                  </div>
-                </section>
-              )}
-
-              <section className="artist-section profile-about-section" id="artist-about">
-                <PreviewSectionHeading isOwner={isOwnerView} onEdit={openSectionEditor} sectionId="about">
-                  About
-                </PreviewSectionHeading>
-                {profileDetails.bio?.trim() ? (
-                  <p className="profile-about-content">{profileDetails.bio}</p>
-                ) : (
-                  <p className="profile-empty-hint">
-                    {isOwnerView ? 'Add an introduction about yourself.' : 'No About information added yet.'}
-                  </p>
-                )}
-                {editingSection === 'about' && (
-                  <div className="preview-inline-editor profile-about-editor">
-                    <label className="form-field" htmlFor="profile-about-text">
-                      About you
-                      <textarea
-                        id="profile-about-text"
-                        rows={5}
-                        value={aboutDraft}
-                        maxLength={5000}
-                        aria-describedby="profile-about-word-count"
-                        onChange={(event) => {
-                          const words = event.target.value.trim().match(/\S+/g) || []
-                          if (words.length > MAX_ABOUT_WORDS) {
-                            setAboutDraft(words.slice(0, MAX_ABOUT_WORDS).join(' '))
-                            setValidationError(`About is limited to ${MAX_ABOUT_WORDS} words.`)
-                            return
-                          }
-                          setAboutDraft(event.target.value)
-                          setValidationError('')
-                        }}
-                        placeholder="Write a short introduction about your experience, skills, and creative work."
-                      />
-                    </label>
-                    <div className="profile-about-editor-footer">
-                      <span id="profile-about-word-count" aria-live="polite">
-                        {(aboutDraft.trim().match(/\S+/g) || []).length}/{MAX_ABOUT_WORDS} words
-                      </span>
-                      {validationError && <p className="submit-error" role="alert">{validationError}</p>}
-                    </div>
-                    <div className="language-edit-actions">
-                      <button className="secondary-button" type="button" onClick={closeSectionEditor} disabled={isSavingAbout}>
-                        Cancel
-                      </button>
-                      <button className="contact-button" type="button" onClick={saveSectionEditor} disabled={isSavingAbout}>
-                        {isSavingAbout ? 'Saving…' : 'Save'}
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </section>
-
               <section className="artist-section">
                 <PreviewSectionHeading isOwner={isOwnerView} onEdit={openSectionEditor} sectionId="talents">
                   Crafts

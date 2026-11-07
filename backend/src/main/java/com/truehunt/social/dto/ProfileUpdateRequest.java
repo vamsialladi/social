@@ -72,7 +72,7 @@ public class ProfileUpdateRequest {
     }
 
     public String getName() {
-        return (name != null && !name.isBlank()) ? name : fullName;
+        return name;
     }
 
     public void setName(String name) {
@@ -80,14 +80,11 @@ public class ProfileUpdateRequest {
     }
 
     public String getFullName() {
-        return (fullName != null && !fullName.isBlank()) ? fullName : name;
+        return fullName;
     }
 
     public void setFullName(String fullName) {
         this.fullName = fullName;
-        if (this.name == null || this.name.isBlank()) {
-            this.name = fullName;
-        }
     }
 
     public String getHeadline() {
@@ -115,7 +112,7 @@ public class ProfileUpdateRequest {
     }
 
     public String getCompany() {
-        return (company != null && !company.isBlank()) ? company : companyName;
+        return company;
     }
 
     public void setCompany(String company) {
@@ -123,14 +120,11 @@ public class ProfileUpdateRequest {
     }
 
     public String getCompanyName() {
-        return (companyName != null && !companyName.isBlank()) ? companyName : company;
+        return companyName;
     }
 
     public void setCompanyName(String companyName) {
         this.companyName = companyName;
-        if (this.company == null || this.company.isBlank()) {
-            this.company = companyName;
-        }
     }
 
     public String getHeadquarters() {
@@ -150,29 +144,23 @@ public class ProfileUpdateRequest {
     }
 
     public String getLocation() {
-        return (location != null && !location.isBlank()) ? location : address;
+        return location;
     }
 
     public void setLocation(String location) {
         this.location = location;
-        if (this.address == null || this.address.isBlank()) {
-            this.address = location;
-        }
     }
 
     public String getAddress() {
-        return (address != null && !address.isBlank()) ? address : location;
+        return address;
     }
 
     public void setAddress(String address) {
         this.address = address;
-        if (this.location == null || this.location.isBlank()) {
-            this.location = address;
-        }
     }
 
     public String getBio() {
-        return (bio != null && !bio.isBlank()) ? bio : highlights;
+        return bio;
     }
 
     public void setBio(String bio) {
@@ -180,54 +168,47 @@ public class ProfileUpdateRequest {
     }
 
     public String getHighlights() {
-        return (highlights != null && !highlights.isBlank()) ? highlights : bio;
+        return highlights;
     }
 
     public void setHighlights(String highlights) {
         this.highlights = highlights;
-        if (this.bio == null || this.bio.isBlank()) {
-            this.bio = highlights;
-        }
     }
 
     public String getAvatar() {
-        return avatar != null ? avatar : profileImageUrl;
+        return avatar;
     }
 
     public void setAvatar(String avatar) {
         this.avatar = avatar;
-        this.profileImageUrl = avatar;
     }
 
     public String getProfileImageUrl() {
-        return profileImageUrl != null ? profileImageUrl : avatar;
+        return profileImageUrl;
     }
 
     public void setProfileImageUrl(String profileImageUrl) {
         this.profileImageUrl = profileImageUrl;
-        this.avatar = profileImageUrl;
     }
 
     public String getCoverImage() {
-        return coverImage != null ? coverImage : coverImageUrl;
+        return coverImage;
     }
 
     public void setCoverImage(String coverImage) {
         this.coverImage = coverImage;
-        this.coverImageUrl = coverImage;
     }
 
     public String getCoverImageUrl() {
-        return coverImageUrl != null ? coverImageUrl : coverImage;
+        return coverImageUrl;
     }
 
     public void setCoverImageUrl(String coverImageUrl) {
         this.coverImageUrl = coverImageUrl;
-        this.coverImage = coverImageUrl;
     }
 
     public String getPhone() {
-        return (phone != null && !phone.isBlank()) ? phone : phoneNumber;
+        return phone;
     }
 
     public void setPhone(String phone) {
@@ -235,14 +216,11 @@ public class ProfileUpdateRequest {
     }
 
     public String getPhoneNumber() {
-        return (phoneNumber != null && !phoneNumber.isBlank()) ? phoneNumber : phone;
+        return phoneNumber;
     }
 
     public void setPhoneNumber(String phoneNumber) {
         this.phoneNumber = phoneNumber;
-        if (this.phone == null || this.phone.isBlank()) {
-            this.phone = phoneNumber;
-        }
     }
 
     public String getProfessionalPhone() {
@@ -270,7 +248,7 @@ public class ProfileUpdateRequest {
     }
 
     public String getExperience() {
-        return (experience != null && !experience.isBlank()) ? experience : experienceYears;
+        return experience;
     }
 
     public void setExperience(String experience) {
@@ -278,18 +256,15 @@ public class ProfileUpdateRequest {
     }
 
     public String getExperienceYears() {
-        return (experienceYears != null && !experienceYears.isBlank()) ? experienceYears : experience;
+        return experienceYears;
     }
 
     public void setExperienceYears(String experienceYears) {
         this.experienceYears = experienceYears;
-        if (this.experience == null || this.experience.isBlank()) {
-            this.experience = experienceYears;
-        }
     }
 
     public String getPrimaryCraft() {
-        return (primaryCraft != null && !primaryCraft.isBlank()) ? primaryCraft : craft;
+        return primaryCraft;
     }
 
     public void setPrimaryCraft(String primaryCraft) {
@@ -297,14 +272,11 @@ public class ProfileUpdateRequest {
     }
 
     public String getCraft() {
-        return (craft != null && !craft.isBlank()) ? craft : primaryCraft;
+        return craft;
     }
 
     public void setCraft(String craft) {
         this.craft = craft;
-        if (this.primaryCraft == null || this.primaryCraft.isBlank()) {
-            this.primaryCraft = craft;
-        }
     }
 
     public String getSubCraft() {
@@ -404,7 +376,7 @@ public class ProfileUpdateRequest {
     }
 
     public List<String> getSkills() {
-        return (skills != null && !skills.isEmpty()) ? skills : talents;
+        return skills;
     }
 
     public void setSkills(List<String> skills) {
@@ -412,14 +384,11 @@ public class ProfileUpdateRequest {
     }
 
     public List<String> getTalents() {
-        return (talents != null && !talents.isEmpty()) ? talents : skills;
+        return talents;
     }
 
     public void setTalents(List<String> talents) {
         this.talents = talents;
-        if (this.skills == null || this.skills.isEmpty()) {
-            this.skills = talents;
-        }
     }
 
     public List<String> getLanguages() {

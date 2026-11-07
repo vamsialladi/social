@@ -38,6 +38,12 @@ public class PostService {
                 .collect(Collectors.toList());
     }
 
+    public List<Map<String, Object>> getPostsByAuthorId(String authorId) {
+        return postRepository.findAllByAuthorIdOrderByCreatedAtDesc(authorId).stream()
+                .map(PostEntity::toDto)
+                .collect(Collectors.toList());
+    }
+
     public List<Map<String, Object>> getOpportunities() {
         return postRepository.findAllByTypeIgnoreCaseOrderByCreatedAtDesc("opportunity").stream()
                 .map(PostEntity::toDto)

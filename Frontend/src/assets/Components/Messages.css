@@ -296,6 +296,7 @@
 }
 
 .message-avatar {
+  position: relative;
   display: grid;
   width: 42px;
   height: 42px;
@@ -308,6 +309,27 @@
   font-weight: 700;
 }
 
+.message-avatar img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+}
+
+.message-profile-button {
+  padding: 0;
+  border: 0;
+  cursor: pointer;
+}
+
+.message-profile-button:focus-visible,
+.message-preview-copy:focus-visible {
+  outline: 2px solid #007a53;
+  outline-offset: 2px;
+}
+
 .avatar-blue { background: linear-gradient(135deg, #315d78, #a9c3d1); }
 .avatar-rose { background: linear-gradient(135deg, #9c4f60, #e5b1ae); }
 .avatar-green { background: linear-gradient(135deg, #30694e, #acd2b6); }
@@ -317,6 +339,13 @@
   display: block;
   min-width: 0;
   flex: 1;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
 }
 
 .message-preview-heading {

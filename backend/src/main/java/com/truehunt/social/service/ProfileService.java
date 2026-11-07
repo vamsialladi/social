@@ -2,6 +2,7 @@ package com.truehunt.social.service;
 
 import com.truehunt.social.dto.*;
 import com.truehunt.social.exception.ResourceNotFoundException;
+import com.truehunt.social.exception.UnauthorizedException;
 import com.truehunt.social.model.ProfileEntity;
 import com.truehunt.social.model.UserAccountEntity;
 import com.truehunt.social.repository.ProfileRepository;
@@ -47,7 +48,8 @@ public class ProfileService {
                     directoryProfile.put("skinTone", profile.getSkinTone() != null ? profile.getSkinTone() : "");
                     directoryProfile.put("experience", profile.getExperience() != null ? profile.getExperience() : "");
                     directoryProfile.put("avatar", profile.getProfileImageUrl() != null ? profile.getProfileImageUrl() : "");
-
+                    directoryProfile.put("coverImageUrl", profile.getCoverImageUrl() != null ? profile.getCoverImageUrl() : "");
+                    directoryProfile.put("coverImage", profile.getCoverImageUrl() != null ? profile.getCoverImageUrl() : "");
                     List<String> skills = new ArrayList<>(profile.getTalents());
                     profile.getWorkTypes().stream()
                             .filter(workType -> !skills.contains(workType))
@@ -110,15 +112,7 @@ public class ProfileService {
         Optional<ProfileEntity> opt = profileRepository.findByUserId(id);
         if (opt.isEmpty()) {
             opt = findAccountByPublicUserId(id)
-                    .flatMap(account -> profileRepository.findByEmail(account.getEmail()));
-        }
-        if (opt.isEmpty()) {
-            opt = profileRepository.findByEmail(id);
-        }
-        if (opt.isEmpty()) {
-            try {
-                opt = profileRepository.findById(Long.parseLong(id));
-            } catch (Exception ignored) {}
+                    .flatMap(account -> profileRepository.findByUserId(account.getPublicUserId()));
         }
 
         if (opt.isEmpty()) {
@@ -133,21 +127,23 @@ public class ProfileService {
         ProfileEntity profile = findCurrentProfile(userEmail);
 
         if (req.getName() != null) profile.setName(req.getName());
-        if (req.getFullName() != null && !req.getFullName().isBlank()) profile.setName(req.getFullName());
-        if (req.getHeadline() != null && !req.getHeadline().isBlank()) profile.setHeadline(req.getHeadline());
+        else if (req.getFullName() != null) profile.setName(req.getFullName());
+        if (req.getHeadline() != null) profile.setHeadline(req.getHeadline());
         if (req.getRole() != null) profile.setRole(req.getRole());
         if (req.getCategory() != null) profile.setCategory(req.getCategory());
         if (req.getCompany() != null) profile.setCompany(req.getCompany());
+        else if (req.getCompanyName() != null) profile.setCompany(req.getCompanyName());
         if (req.getIndustry() != null) profile.setIndustry(req.getIndustry());
         if (req.getWebsiteUrl() != null) profile.setWebsiteUrl(req.getWebsiteUrl());
         if (req.getAvailability() != null) profile.setAvailability(req.getAvailability());
         if (req.getPhone() != null) profile.setPhone(req.getPhone());
-        if (req.getPhoneNumber() != null && !req.getPhoneNumber().isBlank()) profile.setPhone(req.getPhoneNumber());
+        else if (req.getPhoneNumber() != null) profile.setPhone(req.getPhoneNumber());
         if (req.getProfessionalPhone() != null) profile.setProfessionalPhone(req.getProfessionalPhone());
         if (req.getEmail() != null) profile.setEmail(req.getEmail());
         if (req.getExperience() != null) profile.setExperience(req.getExperience());
+        else if (req.getExperienceYears() != null) profile.setExperience(req.getExperienceYears());
         if (req.getPrimaryCraft() != null) profile.setPrimaryCraft(req.getPrimaryCraft());
-        if (req.getCraft() != null && !req.getCraft().isBlank()) profile.setPrimaryCraft(req.getCraft());
+        else if (req.getCraft() != null) profile.setPrimaryCraft(req.getCraft());
         if (req.getSubCraft() != null) profile.setSubCraft(req.getSubCraft());
         if (req.getDateOfBirth() != null) profile.setDateOfBirth(req.getDateOfBirth());
         if (req.getHeight() != null) profile.setHeight(req.getHeight());
@@ -157,14 +153,17 @@ public class ProfileService {
         if (req.getFacialHair() != null) profile.setFacialHair(req.getFacialHair());
         if (req.getSkinTone() != null) profile.setSkinTone(req.getSkinTone());
         if (req.getAddress() != null) profile.setAddress(req.getAddress());
-        if (req.getLocation() != null && !req.getLocation().isBlank()) profile.setAddress(req.getLocation());
-        if (req.getBio() != null) profile.setBio(req.getBio());
-        if (req.getHighlights() != null && !req.getHighlights().isBlank()) profile.setHighlights(req.getHighlights());
+        else if (req.getLocation() != null) profile.setAddress(req.getLocation());
+        String updatedBio = req.getBio() != null ? req.getBio() : req.getHighlights();
+        if (updatedBio != null) {
+            profile.setBio(updatedBio);
+            profile.setHighlights(updatedBio);
+        }
         if (req.getOtherLanguage() != null) profile.setOtherLanguage(req.getOtherLanguage());
         if (req.getProfileImageUrl() != null) profile.setProfileImageUrl(req.getProfileImageUrl());
-        if (req.getAvatar() != null && !req.getAvatar().isBlank()) profile.setProfileImageUrl(req.getAvatar());
+        else if (req.getAvatar() != null) profile.setProfileImageUrl(req.getAvatar());
         if (req.getCoverImageUrl() != null) profile.setCoverImageUrl(req.getCoverImageUrl());
-        if (req.getCoverImage() != null && !req.getCoverImage().isBlank()) profile.setCoverImageUrl(req.getCoverImage());
+        else if (req.getCoverImage() != null) profile.setCoverImageUrl(req.getCoverImage());
 
         if (req.getLanguages() != null) profile.setLanguages(req.getLanguages());
         if (req.getSecondaryCrafts() != null) profile.setSecondaryCrafts(req.getSecondaryCrafts());
@@ -173,10 +172,10 @@ public class ProfileService {
         if (req.getVideoUrls() != null) profile.setVideoUrls(req.getVideoUrls());
         if (req.getVideos() != null) profile.setVideos(req.getVideos());
 
-        if (req.getSkills() != null) {
-            profile.setTalents(req.getSkills());
-        } else if (req.getTalents() != null) {
+        if (req.getTalents() != null) {
             profile.setTalents(req.getTalents());
+        } else if (req.getSkills() != null) {
+            profile.setTalents(req.getSkills());
         }
 
         if (req.getExperiences() != null) {
@@ -541,20 +540,6 @@ public class ProfileService {
         return res;
     }
 
-    public List<Map<String, Object>> getProfilePosts(String id) {
-        List<Map<String, Object>> posts = new ArrayList<>();
-        Map<String, Object> p = new HashMap<>();
-        p.put("id", "post-" + id + "-1");
-        p.put("authorId", id);
-        p.put("authorName", "Cinema Professional");
-        p.put("content", "Excited to share insights from our recent shoot in Ramoji Film City!");
-        p.put("likesCount", 48);
-        p.put("commentsCount", 12);
-        p.put("createdAt", LocalDateTime.now().minusDays(2).toString());
-        posts.add(p);
-        return posts;
-    }
-
     public List<Map<String, Object>> getSuggestions(String currentId) {
         return getPublicDirectory().stream()
                 .filter(p -> !Objects.equals(p.get("id"), currentId))
@@ -563,32 +548,22 @@ public class ProfileService {
     }
 
     public ProfileEntity findCurrentProfile(String userEmail) {
-        Optional<UserAccountEntity> account = findAccountByEmail(userEmail);
-        if (account.isPresent()) {
-            UserAccountEntity currentAccount = account.get();
-            String publicUserId = currentAccount.getPublicUserId();
-            if (publicUserId != null && !publicUserId.isBlank()) {
-                ProfileEntity profile = profileRepository.findByUserId(publicUserId)
-                        .or(() -> profileRepository.findByEmail(currentAccount.getEmail()))
-                        .orElseGet(ProfileEntity::new);
-                profile.setUserId(publicUserId);
-                if (profile.getName() == null || profile.getName().isBlank()) {
-                    profile.setName(currentAccount.getName());
-                }
-                if (profile.getEmail() == null || profile.getEmail().isBlank()) {
-                    profile.setEmail(currentAccount.getEmail());
-                }
-                return profileRepository.save(profile);
-            }
+        UserAccountEntity currentAccount = findAccountByEmail(userEmail)
+                .orElseThrow(() -> new UnauthorizedException("A signed-in account is required to access this profile."));
+        String publicUserId = currentAccount.getPublicUserId();
+        if (publicUserId == null || publicUserId.isBlank()) {
+            throw new UnauthorizedException("The signed-in account does not have a profile identifier.");
         }
 
-        return profileRepository.findByUserId("me").orElseGet(() -> {
-            ProfileEntity profile = new ProfileEntity();
-            profile.setUserId("me");
-            profile.setName("Cinema Professional");
-            profile.setEmail("pro@truehunt.in");
-            return profileRepository.save(profile);
-        });
+        ProfileEntity profile = profileRepository.findByUserId(publicUserId).orElseGet(ProfileEntity::new);
+        profile.setUserId(publicUserId);
+        if (profile.getName() == null || profile.getName().isBlank()) {
+            profile.setName(currentAccount.getName());
+        }
+        if (profile.getEmail() == null || profile.getEmail().isBlank()) {
+            profile.setEmail(currentAccount.getEmail());
+        }
+        return profileRepository.save(profile);
     }
 
     public ProfileDto mapEntityToDto(ProfileEntity entity) {
@@ -602,9 +577,8 @@ public class ProfileService {
         dto.setEmail(entity.getEmail());
         dto.setAddress(entity.getAddress());
         dto.setLocation(entity.getAddress() != null && !entity.getAddress().isBlank() ? entity.getAddress() : "Hyderabad, India");
-        String bioVal = (entity.getBio() != null && !entity.getBio().isBlank()) ? entity.getBio() : entity.getHighlights();
-        dto.setBio(bioVal != null && !bioVal.isBlank() ? bioVal :
-                "Cinema professional dedicated to quality filmmaking, innovative storytelling, and industry collaboration.");
+        String bioVal = entity.getBio() != null ? entity.getBio() : entity.getHighlights();
+        dto.setBio(bioVal != null ? bioVal : "");
         dto.setHighlights(dto.getBio());
         dto.setDateOfBirth(entity.getDateOfBirth());
         dto.setExperience(entity.getExperience() != null ? entity.getExperience() : "");

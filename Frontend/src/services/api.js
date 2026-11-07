@@ -825,7 +825,7 @@ export const api = {
     },
 
     getPosts: async (id) => {
-      const fallback = FEATURED_TALENTS.find(t => t.id === id)?.posts || FEATURED_TALENTS[0].posts || [];
+      const fallback = FEATURED_TALENTS.find(t => t.id === id)?.posts || [];
       const res = await fetchWithFallback(`/profile/${id}/posts`, { method: 'GET' }, fallback);
       return res.data || fallback;
     },

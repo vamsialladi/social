@@ -20,25 +20,35 @@ public class ConnectionController {
     }
 
     @GetMapping("/suggestions")
-    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getSuggestions() {
-        return ResponseEntity.ok(ApiResponse.success(connectionService.getSuggestions()));
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getSuggestions(
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(connectionService.getSuggestions(userEmail)));
     }
 
     @GetMapping
-    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getConnectedProfiles() {
-        return ResponseEntity.ok(ApiResponse.success(connectionService.getConnectedProfiles()));
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getConnectedProfiles(
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(connectionService.getConnectedProfiles(userEmail)));
     }
 
     @PostMapping("/toggle")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> toggleConnection(@RequestBody Map<String, String> req) {
+    public ResponseEntity<ApiResponse<Map<String, Object>>> toggleConnection(
+            @RequestBody Map<String, String> req,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail
+    ) {
         String profileId = req.get("profileId");
-        return ResponseEntity.ok(ApiResponse.success(connectionService.toggleConnection(profileId)));
+        return ResponseEntity.ok(ApiResponse.success(connectionService.toggleConnection(profileId, userEmail)));
     }
 
     @PostMapping("/follow")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> toggleFollow(@RequestBody Map<String, String> req) {
+    public ResponseEntity<ApiResponse<Map<String, Object>>> toggleFollow(
+            @RequestBody Map<String, String> req,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail
+    ) {
         String profileId = req.get("profileId");
-        return ResponseEntity.ok(ApiResponse.success(connectionService.toggleFollow(profileId)));
+        return ResponseEntity.ok(ApiResponse.success(connectionService.toggleFollow(profileId, userEmail)));
     }
 
     @PostMapping

@@ -60,12 +60,14 @@ C:\Users\varis\Desktop\truehut.in\Final_Code\social\backend\src\main\java\com\tr
 C:\Users\varis\Desktop\truehut.in\Final_Code\social\backend\src\main\java\com\truehunt\social\model\PostEntity.java
 C:\Users\varis\Desktop\truehut.in\Final_Code\social\backend\src\main\java\com\truehunt\social\model\ProfileEntity.java
 C:\Users\varis\Desktop\truehut.in\Final_Code\social\backend\src\main\java\com\truehunt\social\model\UserAccountEntity.java
+C:\Users\varis\Desktop\truehut.in\Final_Code\social\backend\src\main\java\com\truehunt\social\model\UserProfileRelationshipEntity.java
 C:\Users\varis\Desktop\truehut.in\Final_Code\social\backend\src\main\java\com\truehunt\social\repository\ConversationRepository.java
 C:\Users\varis\Desktop\truehut.in\Final_Code\social\backend\src\main\java\com\truehunt\social\repository\NetworkProfileRepository.java
 C:\Users\varis\Desktop\truehut.in\Final_Code\social\backend\src\main\java\com\truehunt\social\repository\NotificationRepository.java
 C:\Users\varis\Desktop\truehut.in\Final_Code\social\backend\src\main\java\com\truehunt\social\repository\PostRepository.java
 C:\Users\varis\Desktop\truehut.in\Final_Code\social\backend\src\main\java\com\truehunt\social\repository\ProfileRepository.java
 C:\Users\varis\Desktop\truehut.in\Final_Code\social\backend\src\main\java\com\truehunt\social\repository\UserAccountRepository.java
+C:\Users\varis\Desktop\truehut.in\Final_Code\social\backend\src\main\java\com\truehunt\social\repository\UserProfileRelationshipRepository.java
 C:\Users\varis\Desktop\truehut.in\Final_Code\social\backend\src\main\java\com\truehunt\social\security\CustomUserDetailsService.java
 C:\Users\varis\Desktop\truehut.in\Final_Code\social\backend\src\main\java\com\truehunt\social\security\JwtAuthenticationFilter.java
 C:\Users\varis\Desktop\truehut.in\Final_Code\social\backend\src\main\java\com\truehunt\social\security\JwtTokenProvider.java
