@@ -14,9 +14,27 @@ function ProfileAvatarPlaceholder() {
   )
 }
 
+function getDismissedPostsStorageKey(userId) {
+  const accountId = String(userId || 'guest').trim().toLowerCase()
+  return `truehunt-not-interested-posts:${encodeURIComponent(accountId)}`
+}
+
+function readDismissedPostIds(storageKey) {
+  try {
+    const savedIds = localStorage.getItem(storageKey)
+    const parsedIds = savedIds ? JSON.parse(savedIds) : []
+    return Array.isArray(parsedIds) ? parsedIds.map(String) : []
+  } catch (error) {
+    console.warn('Could not read dismissed feed posts:', error)
+    return []
+  }
+}
+
 function Home({
   profileDetails,
   profilePreview,
+  currentUserId,
+  onOwnPostCreated,
   activeNavigation,
   setActiveNavigation,
   hidden,
@@ -24,6 +42,10 @@ function Home({
   onViewConnection,
 }) {
   const [posts, setPosts] = useState([])
+  const [dismissedPostIds, setDismissedPostIds] = useState(() => (
+    readDismissedPostIds(getDismissedPostsStorageKey(currentUserId))
+  ))
+  const [profileDirectory, setProfileDirectory] = useState([])
   const [connectedProfiles, setConnectedProfiles] = useState([])
   const [connectionsError, setConnectionsError] = useState('')
   const [isConnectionsOpen, setIsConnectionsOpen] = useState(false)
@@ -37,6 +59,7 @@ function Home({
   const mediaUrls = useRef([])
 
   const name = profileDetails.name.trim() || 'Your name'
+  const dismissedPostsStorageKey = getDismissedPostsStorageKey(currentUserId)
   const languages = [
     ...profileDetails.languages.filter((language) => language !== 'Other'),
     ...(profileDetails.otherLanguage ? [profileDetails.otherLanguage] : []),
@@ -47,20 +70,67 @@ function Home({
   }, [])
 
   useEffect(() => {
+    setDismissedPostIds(readDismissedPostIds(dismissedPostsStorageKey))
+  }, [dismissedPostsStorageKey])
+
+  useEffect(() => {
     async function loadPosts() {
       try {
         const data = activeNavigation === 'opportunities'
           ? await api.getOpportunities()
           : await api.getPosts()
         if (Array.isArray(data)) {
-          setPosts(data)
+          const dismissedIds = new Set(readDismissedPostIds(dismissedPostsStorageKey))
+          setDismissedPostIds([...dismissedIds])
+          setPosts(data.filter((post) => !dismissedIds.has(String(post.id))))
         }
       } catch (err) {
         console.warn('Failed to load posts from API:', err)
       }
     }
     loadPosts()
-  }, [activeNavigation])
+  }, [activeNavigation, dismissedPostsStorageKey])
+
+  useEffect(() => {
+    let isCurrent = true
+    async function loadProfileDirectory() {
+      try {
+        const directory = await api.getProfileDirectory()
+        if (isCurrent && Array.isArray(directory)) {
+          setProfileDirectory(directory)
+        }
+      } catch (error) {
+        console.warn('Could not load profile photos for feed posts:', error)
+      }
+    }
+
+    loadProfileDirectory()
+    return () => {
+      isCurrent = false
+    }
+  }, [])
+
+  function getPostAuthorAvatar(post) {
+    if (post.authorAvatar) return post.authorAvatar
+
+    const authorId = String(post.authorId || '').trim().toLowerCase()
+    const authorName = String(post.authorName || '').trim().toLowerCase()
+    const authorProfile = profileDirectory.find((profile) => (
+      authorId
+      && String(profile.userId || profile.id || profile.referId || '').trim().toLowerCase() === authorId
+    )) || profileDirectory.find((profile) => (
+      authorName && String(profile.name || '').trim().toLowerCase() === authorName
+    ))
+
+    if (authorProfile) {
+      return authorProfile.profileImageUrl || authorProfile.avatar || ''
+    }
+
+    const ownProfileIds = [currentUserId, profileDetails.userId, profileDetails.id]
+      .filter(Boolean)
+      .map((id) => String(id).trim().toLowerCase())
+    return authorId && ownProfileIds.includes(authorId) ? profilePreview : ''
+  }
 
   useEffect(() => {
     if (activeNavigation !== 'home') return undefined
@@ -123,25 +193,34 @@ function Home({
     }
 
     try {
-      const created = await api.createPost({
+      const response = await api.createPost({
         content,
         type: draftType,
         media: uploadedMedia,
       })
+      const created = {
+        ...response,
+        authorId: response.authorId || currentUserId,
+        authorAvatar: response.authorAvatar || profilePreview,
+      }
       setPosts((currentPosts) => [created, ...currentPosts])
+      onOwnPostCreated?.(created)
     } catch (err) {
       console.warn('Backend post creation note:', err)
       if (draftMedia) mediaUrls.current.push(draftMedia.url)
-      setPosts((currentPosts) => [
-        {
-          id: `${Date.now()}-${currentPosts.length}`,
-          content,
-          type: draftType,
-          media: draftMedia,
-          createdAt: new Date().toLocaleString(),
-        },
-        ...currentPosts,
-      ])
+      const created = {
+        id: `${Date.now()}`,
+        authorId: currentUserId,
+        authorAvatar: profilePreview,
+        authorName: name,
+        localOnly: true,
+        content,
+        type: draftType,
+        media: draftMedia,
+        createdAt: new Date().toLocaleString(),
+      }
+      setPosts((currentPosts) => [created, ...currentPosts])
+      onOwnPostCreated?.(created)
     }
 
     setDraft('')
@@ -178,24 +257,33 @@ function Home({
     }
 
     try {
-      const created = await api.createPost({
+      const response = await api.createPost({
         title: article.title,
         content: article.content,
         type: 'article',
         media: uploadedMedia,
       })
+      const created = {
+        ...response,
+        authorId: response.authorId || currentUserId,
+        authorAvatar: response.authorAvatar || profilePreview,
+      }
       setPosts((currentPosts) => [created, ...currentPosts])
+      onOwnPostCreated?.(created)
     } catch (err) {
       console.warn('Backend article creation note:', err)
-      setPosts((currentPosts) => [
-        {
-          id: `${Date.now()}-${currentPosts.length}`,
-          ...article,
-          type: 'article',
-          createdAt: new Date().toLocaleString(),
-        },
-        ...currentPosts,
-      ])
+      const created = {
+        id: `${Date.now()}`,
+        ...article,
+        authorId: currentUserId,
+        authorAvatar: profilePreview,
+        authorName: name,
+        localOnly: true,
+        type: 'article',
+        createdAt: new Date().toLocaleString(),
+      }
+      setPosts((currentPosts) => [created, ...currentPosts])
+      onOwnPostCreated?.(created)
     }
     setIsWritingArticle(false)
   }
@@ -223,11 +311,60 @@ function Home({
 
   async function handleDelete(postId) {
     try {
-      await api.deletePost(postId)
+      const postToDelete = posts.find((post) => String(post.id) === String(postId))
+      if (!postToDelete?.localOnly) {
+        await api.deletePost(postId)
+      }
+
       setPosts((current) => current.filter((p) => String(p.id) !== String(postId)))
+
+      const ownerId = String(currentUserId || 'me').trim()
+      const profilePostsStorageKey = `truehunt-social-posts:${encodeURIComponent(ownerId)}`
+      try {
+        const savedPosts = localStorage.getItem(profilePostsStorageKey)
+        const parsedPosts = savedPosts ? JSON.parse(savedPosts) : []
+        if (!Array.isArray(parsedPosts)) {
+          throw new Error('Saved profile posts are not a list.')
+        }
+        localStorage.setItem(
+          profilePostsStorageKey,
+          JSON.stringify(parsedPosts.filter((post) => String(post.id) !== String(postId))),
+        )
+      } catch (error) {
+        console.warn('Could not update saved profile posts after feed deletion:', error)
+      }
+
+      window.dispatchEvent(new CustomEvent('truehunt-social-post-deleted', {
+        detail: { postId: String(postId), profileId: ownerId },
+      }))
     } catch (err) {
       console.warn('Delete error:', err)
     }
+  }
+
+  function handleNotInterested(postId) {
+    const postIdString = String(postId)
+    const dismissedIds = new Set(readDismissedPostIds(dismissedPostsStorageKey))
+    dismissedIds.add(postIdString)
+    try {
+      localStorage.setItem(dismissedPostsStorageKey, JSON.stringify([...dismissedIds]))
+    } catch (error) {
+      console.warn('Could not save dismissed feed post:', error)
+    }
+    setDismissedPostIds([...dismissedIds])
+    setPosts((current) => current.filter((post) => String(post.id) !== postIdString))
+  }
+
+  function isOwnPost(post) {
+    const authorId = String(post.authorId || '').trim().toLowerCase()
+    const ownIds = [currentUserId, profileDetails.userId, profileDetails.id, profileDetails.email]
+      .filter(Boolean)
+      .map((id) => String(id).trim().toLowerCase())
+    if (authorId && ownIds.includes(authorId)) return true
+
+    const authorName = String(post.authorName || '').trim().toLowerCase()
+    const ownName = String(profileDetails.name || '').trim().toLowerCase()
+    return Boolean(authorName && ownName && authorName === ownName)
   }
 
   async function handleCommentSubmit(event, postId) {
@@ -252,9 +389,10 @@ function Home({
   }
 
   const visiblePosts = posts.filter((post) => (
-    activeNavigation === 'opportunities'
+    !dismissedPostIds.includes(String(post.id))
+    && (activeNavigation === 'opportunities'
       ? post.type === 'opportunity'
-      : post.type !== 'opportunity'
+      : post.type !== 'opportunity')
   ))
   return (
     <>
@@ -441,12 +579,14 @@ function Home({
             </section>
           ) : (
             <div className="home-post-list">
-              {visiblePosts.map((post) => (
+              {visiblePosts.map((post) => {
+                const authorAvatar = getPostAuthorAvatar(post)
+                return (
                 <article className="home-card home-post" key={post.id}>
                   <header className="home-post-header">
-                    <div className={`home-avatar${profilePreview ? '' : ' is-placeholder'}`} aria-hidden="true">
-                      {profilePreview
-                        ? <img src={profilePreview} alt="" />
+                    <div className={`home-avatar${authorAvatar ? '' : ' is-placeholder'}`} aria-hidden="true">
+                      {authorAvatar
+                        ? <img src={authorAvatar} alt="" />
                         : <ProfileAvatarPlaceholder />}
                     </div>
                     <div>
@@ -520,21 +660,39 @@ function Home({
                       </button>
                     )}
 
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(post.id)}
-                      style={{
-                        marginLeft: 'auto',
-                        background: 'transparent',
-                        border: 'none',
-                        color: '#d93025',
-                        cursor: 'pointer',
-                        fontSize: '12px'
-                      }}
-                      title="Delete post"
-                    >
-                      🗑️ Delete
-                    </button>
+                    {isOwnPost(post) ? (
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(post.id)}
+                        style={{
+                          marginLeft: 'auto',
+                          background: 'transparent',
+                          border: 'none',
+                          color: '#d93025',
+                          cursor: 'pointer',
+                          fontSize: '12px'
+                        }}
+                        title="Delete post"
+                      >
+                        🗑️ Delete
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleNotInterested(post.id)}
+                        style={{
+                          marginLeft: 'auto',
+                          background: 'transparent',
+                          border: 'none',
+                          color: 'var(--color-text-muted, #666)',
+                          cursor: 'pointer',
+                          fontSize: '12px'
+                        }}
+                        title="Hide this post from your feed"
+                      >
+                        Not interested
+                      </button>
+                    )}
                   </div>
 
                   {/* Comments section */}
@@ -568,7 +726,8 @@ function Home({
                     </div>
                   )}
                 </article>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>

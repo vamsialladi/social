@@ -5,6 +5,7 @@ import com.truehunt.social.repository.*;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.LocalDateTime;
@@ -21,7 +22,8 @@ public class DataInitializer {
             PostRepository postRepository,
             NotificationRepository notificationRepository,
             UserAccountRepository userAccountRepository,
-            PasswordEncoder passwordEncoder
+            PasswordEncoder passwordEncoder,
+            JdbcTemplate jdbcTemplate
     ) {
         return args -> {
             // 0. Seed Demo Accounts matching frontend SignInPage.jsx and Mock Data
@@ -35,7 +37,6 @@ public class DataInitializer {
                 aarav.setPublicUserId("1000002");
                 aarav.setPrimaryCraft("Cinematography");
                 aarav.setSubCraft("Director of Photography (DoP)");
-                aarav.setExperience("8+ Years");
                 aarav.setAcceptedTerms(true);
                 aarav.setCreatedAt(LocalDateTime.now());
                 userAccountRepository.save(aarav);
@@ -53,7 +54,6 @@ public class DataInitializer {
                 mythri.setHeadquarters("Jubilee Hills, Hyderabad");
                 mythri.setPrimaryCraft("Production");
                 mythri.setSubCraft("Feature Film Production House");
-                mythri.setExperience("15+ Years");
                 mythri.setAcceptedTerms(true);
                 mythri.setCreatedAt(LocalDateTime.now());
                 userAccountRepository.save(mythri);
@@ -69,7 +69,6 @@ public class DataInitializer {
                 talent.setPublicUserId("1000001");
                 talent.setPrimaryCraft("Acting");
                 talent.setSubCraft("Lead Actor");
-                talent.setExperience("5 Years");
                 talent.setAcceptedTerms(true);
                 talent.setCreatedAt(LocalDateTime.now());
                 userAccountRepository.save(talent);
@@ -85,13 +84,12 @@ public class DataInitializer {
                 producer.setPublicUserId("2000001");
                 producer.setPrimaryCraft("Producer");
                 producer.setSubCraft("Executive Producer");
-                producer.setExperience("10+ Years");
                 producer.setAcceptedTerms(true);
                 producer.setCreatedAt(LocalDateTime.now());
                 userAccountRepository.save(producer);
             }
 
-            // 1. Seed Profile with Experiences, Educations, and Projects
+            // 1. Seed the demo profile with education and project details
             if (profileRepository.findByUserId("me").isEmpty()) {
                 ProfileEntity profile = new ProfileEntity();
                 profile.setUserId("me");
@@ -99,39 +97,18 @@ public class DataInitializer {
                 profile.setPhone("+91 9876543210");
                 profile.setProfessionalPhone("+91 9876543210");
                 profile.setEmail("pro@truehunt.in");
-                profile.setExperience("5 Years");
                 profile.setPrimaryCraft("Cast (Actors)");
                 profile.setSubCraft("Lead Actor");
                 profile.setHeadline("Lead Actor | Method Acting & Action Specialist");
                 profile.setAddress("Hyderabad, Telangana, India");
                 profile.setFacialHair("Clean Shaven");
-                profile.setLanguages(List.of("Telugu", "English", "Hindi"));
                 profile.setOtherLanguage("");
                 profile.setTalents(List.of("Lead Actor", "Method Acting", "Action Stunts", "Voice Modulation"));
-                profile.setWorkTypes(List.of("Cinema", "Web series", "Short films"));
                 profile.setProfileImageUrl("https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80");
                 profile.setCoverImageUrl("https://images.unsplash.com/photo-1485846234645-a62644f84728?auto=format&fit=crop&w=1200&q=80");
                 profile.setVideoUrls(List.of("https://www.youtube.com/watch?v=sample1"));
                 profile.setHighlights("Cinema professional and lead actor dedicated to high-impact Indian cinema, disciplined on-set execution, and multi-lingual storytelling.");
                 profile.setBio(profile.getHighlights());
-
-                // Experiences
-                Map<String, Object> exp1 = new HashMap<>();
-                exp1.put("id", "exp-1");
-                exp1.put("title", "Lead Actor");
-                exp1.put("company", "Northstar Films");
-                exp1.put("location", "Hyderabad, Telangana, India");
-                exp1.put("startDate", "2023-01");
-                exp1.put("endDate", "2024-06");
-                exp1.put("isCurrent", false);
-                exp1.put("description", "Portrayed the protagonist in a marquee Telugu drama feature film.");
-                exp1.put("projectName", "Cinema Scope Production");
-                exp1.put("organizationName", "Northstar Films");
-                exp1.put("workedAs", "Lead Actor");
-                exp1.put("organizationLogoUrl", "https://www.google.com/s2/favicons?domain=netflix.com&sz=128");
-                exp1.put("companyLogoUrl", "https://www.google.com/s2/favicons?domain=netflix.com&sz=128");
-                exp1.put("featuredOnProfile", true);
-                profile.setExperiences(List.of(exp1));
 
                 // Educations
                 Map<String, Object> edu1 = new HashMap<>();
@@ -169,7 +146,6 @@ public class DataInitializer {
                 arjun.setSubCraft("Lead Actor");
                 arjun.setHeadline("Lead Actor | Commercial & Indie Features | Telugu & Pan-India Cinema");
                 arjun.setAddress("Hyderabad, Telangana, India");
-                arjun.setExperience("7 Years");
                 arjun.setHighlights("Dynamic lead actor specializing in intense romantic dramas, action thrillers, and commercial feature films.");
                 arjun.setTalents(List.of("Lead Actor", "Method Acting", "Action Stunts", "Telugu & Hindi Diction"));
                 arjun.setProfileImageUrl("https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=400&q=80");
@@ -186,7 +162,6 @@ public class DataInitializer {
                 meera.setSubCraft("Lead Actress");
                 meera.setHeadline("Lead Actress & Theatre Artist | NSD Alumna | Multilingual Performer");
                 meera.setAddress("Kochi & Bengaluru, India");
-                meera.setExperience("5 Years");
                 meera.setHighlights("Method actress trained at National School of Drama. Experienced in dramatic leads and intense character roles.");
                 meera.setTalents(List.of("Lead Actress", "Method Acting", "Classical Dance", "Voice Modulation"));
                 meera.setProfileImageUrl("https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=400&q=80");
@@ -203,12 +178,13 @@ public class DataInitializer {
                 rohan.setSubCraft("Character Actor");
                 rohan.setHeadline("Character Actor & Antagonist | Hindi & Regional Cinema");
                 rohan.setAddress("Mumbai, Maharashtra, India");
-                rohan.setExperience("10 Years");
                 rohan.setHighlights("Versatile character actor and antagonist with extensive theatre and feature film background.");
                 rohan.setTalents(List.of("Character Actor", "Antagonist / Villain", "Improvisation", "Voice Modulation"));
                 rohan.setProfileImageUrl("https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=400&q=80");
                 profileRepository.save(rohan);
             }
+
+            clearLegacyDefaultProfileDetails(profileRepository, userAccountRepository, jdbcTemplate);
 
             // 2. Seed Network Suggested Profiles
             if (networkProfileRepository.count() == 0) {
@@ -296,5 +272,131 @@ public class DataInitializer {
                 ));
             }
         };
+    }
+
+    private void clearLegacyDefaultProfileDetails(
+            ProfileRepository profileRepository,
+            UserAccountRepository userAccountRepository,
+            JdbcTemplate jdbcTemplate
+    ) {
+        String migrationKey = "clear-generated-profile-defaults-v2";
+        jdbcTemplate.execute(
+                "CREATE TABLE IF NOT EXISTS app_data_migrations "
+                        + "(migration_key VARCHAR(128) PRIMARY KEY)"
+        );
+        Integer completed = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM app_data_migrations WHERE migration_key = ?",
+                Integer.class,
+                migrationKey
+        );
+        if (completed != null && completed > 0) {
+            return;
+        }
+
+        clearAccountExperience(userAccountRepository, "aarav.varma@truehunt.in", "8+ Years");
+        clearAccountExperience(userAccountRepository, "mythri.studios@truehunt.in", "15+ Years");
+        clearAccountExperience(userAccountRepository, "pro@truehunt.in", "5 Years");
+        clearAccountExperience(userAccountRepository, "producer@truehunt.in", "10+ Years");
+
+        clearProfileExperience(profileRepository, "me", "5 Years");
+        clearProfileExperience(profileRepository, "1000001", "5 Years");
+        clearProfileExperience(profileRepository, "1000002", "8+ Years");
+        clearProfileExperience(profileRepository, "2000001", "10+ Years");
+        clearProfileExperience(profileRepository, "2000002", "15+ Years");
+        clearProfileExperience(profileRepository, "1000003", "5 Years");
+        clearProfileExperience(profileRepository, "1000004", "7 Years");
+        clearProfileExperience(profileRepository, "1000005", "10 Years");
+
+        Set<String> generatedSignupEmails = new HashSet<>();
+        for (ProfileEntity profile : profileRepository.findAll()) {
+            List<Map<String, Object>> experiences = profile.getExperiences();
+            boolean hasGeneratedSignupExperience = experiences.stream()
+                    .anyMatch(this::isGeneratedSignupExperience);
+            boolean changed = false;
+            if ("me".equals(profile.getUserId())) {
+                if (profile.getLanguages().equals(List.of("Telugu", "English", "Hindi"))) {
+                    profile.setLanguages(List.of());
+                    changed = true;
+                }
+                if (profile.getWorkTypes().equals(List.of("Cinema", "Web series", "Short films"))) {
+                    profile.setWorkTypes(List.of());
+                    changed = true;
+                }
+            }
+            if (hasGeneratedSignupExperience) {
+                if (profile.getEmail() != null) {
+                    generatedSignupEmails.add(profile.getEmail());
+                }
+                if (profile.getLanguages().equals(List.of("English", "Telugu"))) {
+                    profile.setLanguages(List.of());
+                    changed = true;
+                }
+                if (profile.getWorkTypes().equals(List.of("Cinema"))) {
+                    profile.setWorkTypes(List.of());
+                    changed = true;
+                }
+            }
+
+            List<Map<String, Object>> userAddedExperiences = experiences.stream()
+                    .filter(experience -> !isGeneratedSignupExperience(experience))
+                    .toList();
+            if (userAddedExperiences.size() != experiences.size()) {
+                profile.setExperiences(userAddedExperiences);
+                changed = true;
+            }
+            if (hasGeneratedSignupExperience && "3 - 5 Years".equals(profile.getExperience())) {
+                profile.setExperience(null);
+                changed = true;
+            }
+            if (changed) {
+                profileRepository.save(profile);
+            }
+        }
+
+        for (UserAccountEntity account : userAccountRepository.findAll()) {
+            if (generatedSignupEmails.contains(account.getEmail())
+                    && "3 - 5 Years".equals(account.getExperience())) {
+                account.setExperience(null);
+                userAccountRepository.save(account);
+            }
+        }
+        jdbcTemplate.update(
+                "INSERT INTO app_data_migrations (migration_key) VALUES (?)",
+                migrationKey
+        );
+    }
+
+    private void clearAccountExperience(
+            UserAccountRepository repository,
+            String email,
+            String seededExperience
+    ) {
+        repository.findByEmail(email)
+                .filter(account -> seededExperience.equals(account.getExperience()))
+                .ifPresent(account -> {
+                    account.setExperience(null);
+                    repository.save(account);
+                });
+    }
+
+    private void clearProfileExperience(
+            ProfileRepository repository,
+            String userId,
+            String seededExperience
+    ) {
+        repository.findByUserId(userId)
+                .filter(profile -> seededExperience.equals(profile.getExperience()))
+                .ifPresent(profile -> {
+                    profile.setExperience(null);
+                    repository.save(profile);
+                });
+    }
+
+    private boolean isGeneratedSignupExperience(Map<String, Object> experience) {
+        String title = String.valueOf(experience.getOrDefault("title", ""));
+        String description = String.valueOf(experience.getOrDefault("description", ""));
+        return title.endsWith(" Artist")
+                && description.startsWith("Professional ")
+                && description.endsWith(" experience in cinema and entertainment.");
     }
 }

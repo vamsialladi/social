@@ -62,7 +62,7 @@ export default function Footer() {
               TrueHunt (<strong>truehunt.in</strong>) is the dedicated professional networking and opportunity platform 
               connecting cinema professionals, cast, technicians, studios, and investors across the film industry.
             </p>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '6px 12px', borderRadius: 'var(--radius-xs)', backgroundColor: 'rgba(255, 255, 255, 0.08)', fontSize: '12px', color: '#CBD5E1' }}>
+            <div className="footer-concept" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '6px 12px', borderRadius: 'var(--radius-xs)', backgroundColor: 'rgba(255, 255, 255, 0.08)', fontSize: '12px', color: '#CBD5E1' }}>
               <span>Concept:</span>
               <span style={{ color: '#F1F5F9', fontStyle: 'italic' }}>Find talent. Discover opportunity. Create the next story.</span>
             </div>
@@ -277,7 +277,7 @@ export default function Footer() {
           <div>
             © {new Date().getFullYear()} TrueHunt (truehunt.in). All rights reserved. Film Industry Professional Network.
           </div>
-          <div style={{ display: 'flex', gap: '20px' }}>
+          <div className="footer-legal-links">
             <Link to="/privacy-policy" style={{ color: '#94A3B8' }}>Privacy</Link>
             <Link to="/terms-and-conditions" style={{ color: '#94A3B8' }}>Terms</Link>
             <Link to="/get-support" style={{ color: '#94A3B8' }}>Support</Link>

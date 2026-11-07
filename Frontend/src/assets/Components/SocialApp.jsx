@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import '../../App.css'
 import { api } from '../../api'
 import { api as directoryApi } from '../../services/api'
+import { getProfileStorageKey } from '../../services/profileStorage'
 import { FILM_CRAFTS } from '../../services/mockData'
 import { SUB_CRAFTS_BY_PRIMARY_CRAFT } from '../../services/suggestion'
 import Messages from './Messages'
@@ -1207,6 +1208,7 @@ export default function SocialApp() {
   const { isAuthenticated, user, logout } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
+  const profileStorageKey = getProfileStorageKey(user?.userId || user?.id || user?.email)
   const [activeNavigation, setActiveNavigationState] = useState(() => (
     location.state?.connectTalent?.name
       ? 'profile'
@@ -1224,48 +1226,42 @@ export default function SocialApp() {
       profileImageUrl: candidateProfile.profileImageUrl || candidateProfile.avatar || '',
     }
   })
-  const [networkConversation, setNetworkConversation] = useState(() => {
-    const requestedConversation = location.state?.openNetworkConversation
-    if (requestedConversation) {
-      return { profile: requestedConversation, requestId: Date.now() }
-    }
-
-    try {
-      const savedConversation = sessionStorage.getItem('truehunt_network_conversation')
-      if (!savedConversation) return null
-
-      sessionStorage.removeItem('truehunt_network_conversation')
-      return { profile: JSON.parse(savedConversation), requestId: Date.now() }
-    } catch (error) {
-      console.warn('Could not restore the requested network conversation:', error)
-      return null
-    }
-  })
   const openConversationRef = useRef(null)
   const [theme, setTheme] = useState('light')
-  const [profileDetails, setProfileDetails] = useState(() => {
-    try {
-      const savedLocal = localStorage.getItem('truehunt_social_profile') || localStorage.getItem('truehunt_profile_details')
-      if (savedLocal) {
-        return { ...emptyProfileDetails, ...JSON.parse(savedLocal) }
+  const [profileDetails, setProfileDetails] = useState(emptyProfileDetails)
+  const [profilePreview, setProfilePreview] = useState('')
+
+  function persistOwnPost(post) {
+    const profileId = String(
+      profileDetails.userId || profileDetails.id || user?.userId || user?.id || user?.email || 'me',
+    ).trim()
+    const storageKey = `truehunt-social-posts:${encodeURIComponent(profileId || 'me')}`
+    setProfileDetails((previous) => {
+      let existingPosts = Array.isArray(previous.posts) ? previous.posts : []
+      try {
+        const savedPosts = localStorage.getItem(storageKey)
+        const parsedPosts = savedPosts ? JSON.parse(savedPosts) : []
+        if (Array.isArray(parsedPosts)) existingPosts = parsedPosts
+      } catch (error) {
+        console.warn('Could not read saved Social profile posts:', error)
       }
-    } catch (e) {
-      // fallback
-    }
-    return emptyProfileDetails
-  })
-  const [profilePreview, setProfilePreview] = useState(() => {
-    try {
-      const savedLocal = localStorage.getItem('truehunt_social_profile') || localStorage.getItem('truehunt_profile_details')
-      if (savedLocal) {
-        const parsed = JSON.parse(savedLocal)
-        return parsed.profileImageUrl || ''
+
+      const posts = [
+        post,
+        ...existingPosts.filter((existing) => String(existing.id) !== String(post.id)),
+      ]
+      const updated = { ...previous, posts }
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(posts))
+        if (profileStorageKey) {
+          localStorage.setItem(profileStorageKey, JSON.stringify(updated))
+        }
+      } catch (error) {
+        console.warn('Could not save your Social post to your profile:', error)
       }
-    } catch (e) {
-      // fallback
-    }
-    return ''
-  })
+      return updated
+    })
+  }
 
   function setActiveNavigation(navigation) {
     const hash = navigationHashes[navigation]
@@ -1313,29 +1309,33 @@ export default function SocialApp() {
     }
   }, [])
 
-  useEffect(() => {
-    // 1. Immediately read cached social profile from localStorage (e.g. from JoinNow registration)
-    const savedLocal = localStorage.getItem('truehunt_social_profile') || localStorage.getItem('truehunt_profile_details')
-    if (savedLocal) {
+  useLayoutEffect(() => {
+    let isCurrentAccount = true
+    setProfileDetails(emptyProfileDetails)
+    setProfilePreview('')
+
+    if (profileStorageKey) {
       try {
-        const parsed = JSON.parse(savedLocal)
-        setProfileDetails((prev) => ({ ...prev, ...parsed }))
-        if (parsed.profileImageUrl) {
-          setProfilePreview(parsed.profileImageUrl)
+        const savedProfile = localStorage.getItem(profileStorageKey)
+        if (savedProfile) {
+          const parsed = JSON.parse(savedProfile)
+          setProfileDetails({ ...emptyProfileDetails, ...parsed })
+          setProfilePreview(parsed.profileImageUrl || parsed.avatar || '')
         }
-      } catch (e) {
-        console.warn('Error reading saved local profile:', e)
+      } catch (error) {
+        console.warn('Could not read the current account profile cache:', error)
       }
     }
 
-    // 2. Also sync with backend API
     async function loadBackendData() {
       try {
         const profile = await api.getProfile()
-        if (profile && profile.name) {
-          setProfileDetails((prev) => ({ ...prev, ...profile }))
-          if (profile.profileImageUrl) {
-            setProfilePreview(profile.profileImageUrl)
+        if (isCurrentAccount && profile && profile.name) {
+          const accountProfile = { ...emptyProfileDetails, ...profile }
+          setProfileDetails(accountProfile)
+          setProfilePreview(profile.profileImageUrl || profile.avatar || '')
+          if (profileStorageKey) {
+            localStorage.setItem(profileStorageKey, JSON.stringify(accountProfile))
           }
         }
       } catch (err) {
@@ -1343,7 +1343,10 @@ export default function SocialApp() {
       }
     }
     loadBackendData()
-  }, [])
+    return () => {
+      isCurrentAccount = false
+    }
+  }, [profileStorageKey])
 
   return (
     <main className={`cinemans-page is-preview${activeNavigation === 'home' ? ' is-home' : ''}${theme === 'dark' ? ' is-dark' : ''}`}>
@@ -1361,6 +1364,8 @@ export default function SocialApp() {
       <Home
         profileDetails={profileDetails}
         profilePreview={profilePreview}
+        currentUserId={profileDetails.userId || profileDetails.id || user?.userId || user?.id || user?.email || 'me'}
+        onOwnPostCreated={persistOwnPost}
         activeNavigation={activeNavigation}
         setActiveNavigation={setActiveNavigation}
         hidden={!['home', 'opportunities'].includes(activeNavigation)}
@@ -1370,8 +1375,12 @@ export default function SocialApp() {
 
       <div hidden={activeNavigation !== 'network'}>
         <NetworkPage
-          key={networkConversation?.requestId || 'network-page'}
-          initialConversation={networkConversation?.profile || location.state?.openNetworkConversation}
+          currentUserId={user?.userId || user?.id || profileDetails.userId || profileDetails.id}
+          onProfileSelect={showCandidateProfile}
+          onMessage={(recipient) => {
+            openConversationRef.current?.(recipient)
+            setActiveNavigation('messaging')
+          }}
         />
       </div>
       <div hidden={activeNavigation !== 'messaging'}>
@@ -1394,16 +1403,18 @@ export default function SocialApp() {
       <div hidden={activeNavigation !== 'profile'}>
         <ProfilePage
           isOwner={!viewingCandidateProfile && isAuthenticated}
+          isActive={activeNavigation === 'profile'}
           accountUserId={user?.userId || ''}
           profileDetails={viewingCandidateProfile || profileDetails}
           setProfileDetails={(updater) => {
             setProfileDetails((prev) => {
               const updated = typeof updater === 'function' ? updater(prev) : updater
-              try {
-                localStorage.setItem('truehunt_social_profile', JSON.stringify(updated))
-                localStorage.setItem('truehunt_profile_details', JSON.stringify(updated))
-              } catch (e) {
-                // ignore
+              if (profileStorageKey) {
+                try {
+                  localStorage.setItem(profileStorageKey, JSON.stringify(updated))
+                } catch (error) {
+                  console.warn('Could not save the current account profile cache:', error)
+                }
               }
               return updated
             })
@@ -1412,11 +1423,8 @@ export default function SocialApp() {
           setProfilePreview={setProfilePreview}
           onViewConnections={() => setActiveNavigation('connections')}
           onMessage={(recipient) => {
-            setNetworkConversation({
-              profile: recipient,
-              requestId: Date.now(),
-            })
-            setActiveNavigation('network')
+            openConversationRef.current?.(recipient)
+            setActiveNavigation('messaging')
           }}
         />
       </div>

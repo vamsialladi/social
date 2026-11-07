@@ -335,19 +335,13 @@ export default function ProfilePage() {
               onEditProfile={() => setShowEditProfileModal(true)}
               onConnect={handleConnect}
               onMessage={(recipient) => {
-                const openNetworkConversation = {
+                const openConversation = {
                   id: recipient?.id || recipient?.userId,
                   name: recipient?.name || 'Cinema Professional',
                   avatar: recipient?.avatar || recipient?.profileImageUrl || '',
                   role: recipient?.role || recipient?.headline || recipient?.category || '',
                 }
-
-                try {
-                  sessionStorage.setItem('truehunt_network_conversation', JSON.stringify(openNetworkConversation))
-                } catch (error) {
-                  console.warn('Could not save the requested network conversation:', error)
-                }
-                navigate('/social#network', { state: { openNetworkConversation } })
+                navigate('/social/messages', { state: { openConversation } })
               }}
               connected={connected}
             />

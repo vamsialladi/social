@@ -169,8 +169,11 @@ export default function FilmStrip3D({
                 left: `${x}px`,
                 top: `${y}px`,
                 transform: `translate(-50%, -50%) rotate(${rotAngle}rad) scale(${scale})`,
+                width: isCenter ? '70px' : '58px',
+                height: isCenter ? '70px' : '58px',
                 zIndex,
                 opacity,
+                '--frame-label-counter-rotation': `${-rotAngle}rad`,
                 pointerEvents: 'auto',
                 cursor: 'pointer',
                 transition: 'transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.35s ease'
@@ -180,8 +183,8 @@ export default function FilmStrip3D({
               {/* Circular Shaped Miniature Frame */}
               <div
                 style={{
-                  width: isCenter ? '70px' : '58px',
-                  height: isCenter ? '70px' : '58px',
+                  width: '100%',
+                  height: '100%',
                   borderRadius: '50%',
                   backgroundColor: '#0F172A',
                   border: isCenter ? '2.5px solid #F59E0B' : '2px solid rgba(217, 119, 6, 0.65)',
@@ -235,21 +238,12 @@ export default function FilmStrip3D({
 
               {/* Miniature Craft Name Tag */}
               <div
+                className="filmstrip-frame-label"
                 style={{
-                  position: 'absolute',
-                  bottom: '-16px',
-                  left: '50%',
-                  transform: 'translateX(-50%)',
-                  fontSize: '8px',
-                  fontWeight: 800,
                   color: isCenter ? '#FDE68A' : '#CBD5E1',
                   background: 'rgba(15, 23, 42, 0.85)',
-                  padding: '1px 6px',
                   borderRadius: '4px',
                   border: isCenter ? '1px solid #F59E0B' : '1px solid rgba(255,255,255,0.1)',
-                  whiteSpace: 'nowrap',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.04em'
                 }}
               >
                 {craft.shortName || craft.name}

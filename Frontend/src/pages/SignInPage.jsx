@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, Eye, EyeOff } from 'lucide-react';
 import TrueHuntLogo from '../components/common/TrueHuntLogo';
 import AuthPageLayout, { RoleSelectionCards } from '../components/common/AuthPageLayout';
 import { useAuth } from '../context/AuthContext';
@@ -10,6 +10,7 @@ export default function SignInPage() {
   const [selectedRole, setSelectedRole] = useState('TALENT');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const { login } = useAuth();
@@ -114,19 +115,44 @@ export default function SignInPage() {
                 Forgot Password?
               </span>
             </div>
-            <input
-              id="sign-in-password"
-              type="password"
-              className="form-control"
-              value={password}
-              onChange={(e) => {
-                setPassword(e.target.value);
-                setErrorMsg('');
-              }}
-              placeholder="••••••••••••"
-              autoComplete="current-password"
-              required
-            />
+            <div style={{ position: 'relative' }}>
+              <input
+                id="sign-in-password"
+                type={showPassword ? 'text' : 'password'}
+                className="form-control"
+                value={password}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  setErrorMsg('');
+                }}
+                placeholder="••••••••••••"
+                autoComplete="current-password"
+                required
+                style={{ paddingRight: '42px' }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((visible) => !visible)}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                title={showPassword ? 'Hide password' : 'Show password'}
+                style={{
+                  position: 'absolute',
+                  right: '12px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: 0,
+                  border: 'none',
+                  background: 'none',
+                  color: 'var(--color-text-muted)',
+                  cursor: 'pointer',
+                }}
+              >
+                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+              </button>
+            </div>
             {errorMsg && (
               <div
                 role="alert"

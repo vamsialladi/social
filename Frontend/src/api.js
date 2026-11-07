@@ -41,6 +41,7 @@ export const api = {
   // Profiles
   getProfile: () => fetchJson('/profiles/me'),
   getProfileById: (id) => fetchJson(`/profiles/${id}`),
+  getProfileDirectory: () => fetchJson('/profiles/directory'),
   updateProfile: (profile) => fetchJson('/profiles/me', { method: 'PATCH', body: profile }),
   verifyReference: (referenceId) => fetchJson('/profiles/reference-check', { method: 'POST', body: { referenceId } }),
 

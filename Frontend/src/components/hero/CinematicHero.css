@@ -462,6 +462,20 @@
   pointer-events: none;
 }
 
+.filmstrip-frame-label {
+  position: absolute;
+  bottom: -16px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 1px 6px;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-align: center;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
 /* Headline & Content */
 .craft-headline {
   margin: 0 0 4px 0;
@@ -659,16 +673,19 @@
 @media (max-width: 640px) {
   .cinematic-hero-banner {
     min-height: 0;
-    padding: 16px 8px 20px 8px;
+    box-sizing: border-box;
+    padding: 18px 12px 24px;
   }
 
   .cinematic-stage-arena {
-    height: clamp(280px, 75vw, 340px);
+    height: clamp(320px, 95vw, 380px);
+    margin: 4px 0 0;
   }
 
   .cinematic-main-heading {
-    font-size: clamp(23px, 7vw, 28px);
-    line-height: 1.12;
+    font-size: clamp(24px, 6.7vw, 29px);
+    line-height: 1.1;
+    overflow-wrap: anywhere;
   }
 
   .cinematic-sub-heading {
@@ -682,16 +699,130 @@
     letter-spacing: 0.07em;
   }
 
+  .cinematic-hero-header {
+    width: 100%;
+    box-sizing: border-box;
+    margin-bottom: 8px;
+    padding: 0 4px;
+  }
+
   .slot-center {
     width: min(210px, 72vw);
   }
 
+  .card-circular-featured {
+    justify-content: center;
+    overflow: hidden;
+    padding: 12px 14px;
+  }
+
+  .craft-top-badge {
+    width: max-content;
+    min-width: 0;
+    max-width: 100%;
+    justify-content: center;
+    gap: 3px;
+    margin-bottom: 5px;
+    padding: 3px 6px;
+    font-size: clamp(7px, 2vw, 9px);
+    letter-spacing: 0.02em;
+  }
+
+  .craft-top-badge-num {
+    margin-left: 2px;
+    font-size: 8px;
+  }
+
   .circle-center {
-    width: 68px;
-    height: 68px;
+    width: 58px;
+    height: 58px;
+    flex: 0 0 58px;
+    margin-bottom: 4px;
+  }
+
+  .craft-card-content {
+    display: flex;
+    width: 100%;
+    min-width: 0;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    overflow: hidden;
+  }
+
+  .craft-headline {
+    display: flex;
+    width: 100%;
+    min-width: 0;
+    flex-direction: column;
+    gap: 1px;
+    margin: 0;
+    line-height: 1.1;
+  }
+
+  .craft-headline-name {
+    max-width: 100%;
+    overflow: hidden;
+    font-size: clamp(9px, 2.7vw, 12px);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .craft-headline-sep {
+    display: none;
+  }
+
+  .craft-headline-tagline {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    font-size: clamp(8px, 2.3vw, 10px);
+    line-height: 1.15;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .craft-desc {
+    display: -webkit-box;
+    max-width: 100%;
+    margin: 0;
+    overflow: hidden;
+    font-size: 9px;
+    line-height: 1.2;
+    text-align: center;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .filmstrip-frame-label {
+    bottom: 3px;
+    width: calc(100% - 6px);
+    box-sizing: border-box;
+    overflow: hidden;
+    padding: 1px 2px;
+    font-size: clamp(5px, 1.5vw, 7px);
+    line-height: 1.2;
+    text-overflow: ellipsis;
+    transform: translateX(-50%) rotate(var(--frame-label-counter-rotation, 0rad));
   }
 
   .craft-dots-indicator {
     display: none;
+  }
+}
+
+@media (max-width: 360px) {
+  .cinematic-brand-pill {
+    gap: 6px;
+    font-size: 9px;
+    letter-spacing: 0.04em;
+  }
+
+  .cinematic-stage-arena {
+    height: 320px;
+  }
+
+  .slot-center {
+    width: min(190px, 68vw);
   }
 }

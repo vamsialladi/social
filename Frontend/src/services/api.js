@@ -271,15 +271,7 @@ export const api = {
     },
 
     sendOtp: async (destination) => {
-      const res = await fetchWithFallback('/auth/send-otp', {
-        method: 'POST',
-        body: JSON.stringify({ destination })
-      }, {
-        otp: '123456',
-        message: 'Dummy OTP 123456 generated.'
-      });
-      const data = res.data?.data || res.data;
-      return data || { otp: '123456', message: 'Dummy OTP 123456 generated.' };
+      return requestAuth('/auth/send-otp', { destination });
     },
 
     register: async (userData) => {

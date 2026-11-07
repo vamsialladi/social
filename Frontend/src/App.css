@@ -679,7 +679,7 @@
 
 @media (max-width: 640px) {
   .linkedin-navbar {
-    width: calc(100% + 25px);
+    width: auto;
     height: 58px;
     margin: -32px -14px 20px;
   }

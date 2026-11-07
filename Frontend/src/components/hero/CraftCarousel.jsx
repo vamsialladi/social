@@ -20,7 +20,7 @@ function CraftSlideshowPhoto({ craft, photoSlideIndex }) {
       decoding="async"
       fetchPriority="high"
       title={`${currentPhoto?.person} — ${craft.name}`}
-      aria-label={`${currentPhoto?.person}, ${craft.name}. Changes every 5 seconds.`}
+      aria-label={`${currentPhoto?.person}, ${craft.name}. Changes every 3 seconds.`}
       onError={(event) => {
         event.currentTarget.style.display = 'none';
       }}

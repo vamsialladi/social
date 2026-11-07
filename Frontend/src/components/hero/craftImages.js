@@ -129,9 +129,8 @@ const CRAFT_ADDITIONAL_IMAGES = {
         "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/11/K.E.Gnanavelraja.webp/250px-K.E.Gnanavelraja.webp",
     },
     {
-      person: "Karan Johar",
       image:
-        "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/6b/Karan_Johar_at_2025_Cannes_Homebound_Photocall_2_%28cropped%29.jpg/250px-Karan_Johar_at_2025_Cannes_Homebound_Photocall_2_%28cropped%29.jpg",
+        "https://images.openai.com/static-rsc-4/YKHbWFOGFJc573ao-lU4WSE5GEkAIb7EpM3PPmTTYJCYCujTu6M_r8lud6mTrTwRvyQ3sreK0vygp006bqsCArH8JZuAZm79SMThkKn_orE2Iuna2gzMftsZtCwaG_lcIuvizjyzqogRt_BBWbdiKlf9FEhY6VwLZQdzx_DdVs6fmIRB2G3nK71RrzcHX_on?purpose=fullsize",
     },
   ],
   Editing: [
@@ -405,24 +404,20 @@ const CRAFT_ADDITIONAL_IMAGES = {
   ],
   Makeup: [
     {
-      person: "Vikram Gaikwad",
       image:
-        "https://upload.wikimedia.org/wikipedia/commons/0/0a/Vikram-gaikwad-prod-message.jpg",
+        "https://telugucinetvmakeupandhairunion.com/wp-content/uploads/2020/10/A-2.jpg",
     },
     {
-      person: "Rick Baker",
       image:
-        "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/60/Rick_Baker_at_the_Locarno_FilmFestival_2026-1.jpg/250px-Rick_Baker_at_the_Locarno_FilmFestival_2026-1.jpg",
+        "https://telugucinetvmakeupandhairunion.com/wp-content/uploads/2020/10/B-23-copy.jpg",
     },
     {
-      person: "Ve Neill",
       image:
-        "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/45/Ve_Neill_by_Gage_Skidmore.jpg/250px-Ve_Neill_by_Gage_Skidmore.jpg",
+        "https://images.openai.com/cdn-cgi/image/width=640,fit=scale-down,quality=75,format=auto/static-rsc-4/pjez9K0E8-LzfTMkADTZwuJ5ToAQS1Qgozh4WYDl5EdnswGneSZl6uzfihir44iA2IYr2yIWfnXAjwbwNuuZKEk0-UqOZ4BjX0wPkjRbgtrU1Er6iRKdsMhykLqzmcfWczJEpoPtA3QG_N969cn6OGcm7z9BWUrU7-HoueMyAQ327Qucdj5MWMd_DinIm2hx?purpose=fullsize",
     },
     {
-      person: "Dick Smith",
       image:
-        "https://upload.wikimedia.org/wikipedia/commons/f/ff/Richard_Emerson_Smith_%28cropped%29.jpg",
+        "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRXEJTCsorPIOP0lwoUcAWfLlB9oSo33MmZCgrsmIgXPQ&s=10",
     },
   ],
   "Sound Design": [
@@ -434,12 +429,11 @@ const CRAFT_ADDITIONAL_IMAGES = {
     {
       person: "Anand Krishnamoorthi",
       image:
-        "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/0d/Anand_Krishnamoorthi.jpg/250px-Anand_Krishnamoorthi.jpg",
+        "https://www.indianfilmhistory.com/_next/image?url=https%3A%2F%2Fimages.indianfilmhistory.com%2Fpublic_html%2Fmedia%2Fcelebs%2Fvishnu-govindhan-9bb4qq.jpg&w=1920&q=75",
     },
     {
-      person: "Ben Burtt",
       image:
-        "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/fb/Ben_Burtt_Celebration_Europe_II.jpg/250px-Ben_Burtt_Celebration_Europe_II.jpg",
+        "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRV2b26Z-6muO5Bf-5Av-wEGhgpeRe4JRE5-FSR9qtMJ_2dJpHc7m8egOY&s=10",
     },
     {
       person: "Matthew Wood",
@@ -447,9 +441,8 @@ const CRAFT_ADDITIONAL_IMAGES = {
         "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/1d/Matthew_Wood.JPG/250px-Matthew_Wood.JPG",
     },
     {
-      person: "Matthew Wood",
       image:
-        "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/59/Matthew_Wood_ComicCon_2007.jpg/250px-Matthew_Wood_ComicCon_2007.jpg",
+        "https://images.openai.com/static-rsc-4/KoRks0NDTiJiR9SqmODC2pLb10RWb40S5EgsSaLgFSvG0SLJOJRWG45JaMULJb6idFzgd3ZLyNfRo0spsecNxYk2dlzAGfo44AluavvsfFHDVIxsfDIqMy7orjAzQ1TRrRBvRLS-o_pjRDq3YLiymVPUeoQMkXBtP9vPcNQSa9Bw_DnNHv4EJhM1bjqBbIis?purpose=fullsize",
     },
   ],
   VFX: [
@@ -599,9 +592,9 @@ const CRAFT_ADDITIONAL_IMAGES = {
         "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/5b/Dil_Raju_%28cropped%29.jpg/250px-Dil_Raju_%28cropped%29.jpg",
     },
     {
-      person: "Karan Johar",
+      person: " Ravi Shankar",
       image:
-        "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/6b/Karan_Johar_at_2025_Cannes_Homebound_Photocall_2_%28cropped%29.jpg/250px-Karan_Johar_at_2025_Cannes_Homebound_Photocall_2_%28cropped%29.jpg",
+        "https://www.themoviedb.org/person/1648659-y-ravi-shankarhttps://media.themoviedb.org/t/p/w600_and_h900_face/stZ6Fzi96nUlWyomx7hhXcqBQiX.jpg",
     },
   ],
   "Other Crafts": [

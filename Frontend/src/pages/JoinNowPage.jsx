@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import { EXPERIENCE_OPTIONS, REGISTRATION_CRAFTS, SUB_CRAFTS_BY_PRIMARY_CRAFT } from '../services/mockData';
 import { api } from '../services/api';
+import { getProfileStorageKey } from '../services/profileStorage';
 
 const SORTED_REGISTRATION_CRAFTS = [...REGISTRATION_CRAFTS].sort((first, second) => first.localeCompare(second));
 
@@ -93,7 +94,7 @@ export default function JoinNowPage() {
   const [secondarySubCrafts, setSecondarySubCrafts] = useState([]);
   const [secondarySubCraftSearch, setSecondarySubCraftSearch] = useState('');
   const [isSecondarySubCraftDropdownOpen, setIsSecondarySubCraftDropdownOpen] = useState(false);
-  const [experienceYears, setExperienceYears] = useState('3 - 5 Years');
+  const [experienceYears, setExperienceYears] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [headquarters, setHeadquarters] = useState('');
   const [agreeTerms, setAgreeTerms] = useState(true);
@@ -115,16 +116,14 @@ export default function JoinNowPage() {
     }
 
     setSendingOtp(true);
+    setErrorMsg('');
     try {
-      const res = await api.auth.sendOtp(phoneNumber);
-      const otpCode = res?.otp || '123456';
-      setPhoneOtp(otpCode);
+      await api.auth.sendOtp(phoneNumber);
       setOtpRequested(true);
-      showNotification(`Demo phone OTP: ${otpCode} (auto-filled)`, 'success');
-    } catch {
-      setPhoneOtp('123456');
-      setOtpRequested(true);
-      showNotification('Demo phone OTP: 123456 (auto-filled)', 'success');
+      showNotification('OTP request submitted. Enter the 6-digit code below.', 'success');
+    } catch (error) {
+      setOtpRequested(false);
+      setErrorMsg(error.message || 'Could not request an OTP. Please try again.');
     } finally {
       setSendingOtp(false);
     }
@@ -181,7 +180,7 @@ export default function JoinNowPage() {
         subCraft: selectedRole === 'TALENT' ? subCraft : null,
         secondaryCrafts: selectedRole === 'TALENT' ? secondaryCrafts : null,
         secondarySubCrafts: selectedRole === 'TALENT' ? secondarySubCrafts : null,
-        experienceYears: selectedRole === 'TALENT' ? experienceYears : null,
+        experienceYears: selectedRole === 'TALENT' && experienceYears ? experienceYears : null,
         companyName: selectedRole === 'STUDIO' ? companyName : null,
         headquarters: selectedRole === 'STUDIO' ? headquarters : null,
       };
@@ -195,41 +194,28 @@ export default function JoinNowPage() {
             userId: res.user.userId,
             name: fullName,
             phone: phoneNumber,
+            professionalPhone: '',
             email: email,
-            experience: experienceYears,
+            experience: experienceYears || '',
             address: 'Hyderabad, India',
-            languages: ['English', 'Telugu'],
+            languages: [],
             otherLanguage: '',
             primaryCraft: craft,
             subCraft,
             secondaryCrafts,
             secondarySubCrafts,
             talents: [craft, ...secondaryCrafts],
-            workTypes: ['Cinema'],
+            workTypes: [],
             videos: [],
             videoUrls: [],
-            experiences: [
-              {
-                id: `exp-${Date.now()}`,
-                projectName: `${craft} Showcase`,
-                movieName: `${craft} Production`,
-                workedAs: `${craft} Artist`,
-                organizationName: 'Film Industry',
-                location: 'Hyderabad, India',
-                startDate: '2023-01-01',
-                endDate: 'Present',
-                highlights: `Professional ${craft} artist with ${experienceYears} experience in cinema and entertainment.`,
-                title: `${craft} Artist`,
-                company: 'Film Industry',
-                duration: experienceYears,
-                description: `Professional ${craft} artist with ${experienceYears} experience in cinema and entertainment.`
-              }
-            ]
+            experiences: [],
           };
 
-          // Cache locally for instant availability in existing frontend
-          localStorage.setItem('truehunt_social_profile', JSON.stringify(socialProfileData));
-          localStorage.setItem('truehunt_profile_details', JSON.stringify(socialProfileData));
+          // Keep the registration cache isolated to this account.
+          const profileStorageKey = getProfileStorageKey(res.user.userId || res.user.id || email)
+          if (profileStorageKey) {
+            localStorage.setItem(profileStorageKey, JSON.stringify(socialProfileData))
+          }
 
           // Also update backend database profile endpoint
           try {
@@ -280,7 +266,7 @@ export default function JoinNowPage() {
         style={{
           width: '100%',
           maxWidth: '560px',
-          padding: '40px',
+          padding: 'clamp(20px, 6vw, 40px)',
           borderRadius: 'var(--radius-lg)',
           boxShadow: 'var(--shadow-card)',
           backgroundColor: 'var(--color-white)',
@@ -355,7 +341,7 @@ export default function JoinNowPage() {
                     <div><span style={{ color: 'var(--color-text-muted)' }}>Sub Craft :</span> <strong>{subCraft || 'None selected'}</strong></div>
                     <div><span style={{ color: 'var(--color-text-muted)' }}>Secondary Crafts *:</span> <strong>{secondaryCrafts.length ? secondaryCrafts.join(', ') : 'None selected'}</strong></div>
                     <div><span style={{ color: 'var(--color-text-muted)' }}>Secondary Sub Craft  :</span> <strong>{secondarySubCrafts.length ? [...secondarySubCrafts].sort((first, second) => first.localeCompare(second)).join(', ') : 'None selected'}</strong></div>
-                    <div><span style={{ color: 'var(--color-text-muted)' }}>Experience:</span> <strong>{experienceYears}</strong></div>
+                    <div><span style={{ color: 'var(--color-text-muted)' }}>Experience:</span> <strong>{experienceYears || 'Not added'}</strong></div>
                   </>
                 ) : (
                   <>
@@ -485,7 +471,7 @@ export default function JoinNowPage() {
 
           <div className="form-group">
             <label className="form-label" htmlFor="phone-number">Phone Number *</label>
-            <div style={{ display: 'flex', gap: '8px' }}>
+            <div className="join-phone-otp-row">
               <input
                 id="phone-number"
                 type="tel"
@@ -694,13 +680,14 @@ export default function JoinNowPage() {
               </div>
 
               <div className="form-group join-experience-field">
-                <label className="form-label" htmlFor="experience-years">Experience *</label>
+                <label className="form-label" htmlFor="experience-years">Experience (optional)</label>
                 <select
                   id="experience-years"
                   className="form-control"
                   value={experienceYears}
                   onChange={(e) => setExperienceYears(e.target.value)}
                 >
+                  <option value="">Select experience</option>
                   {EXPERIENCE_OPTIONS.map((experienceOption) => (
                     <option key={experienceOption} value={experienceOption}>{experienceOption}</option>
                   ))}

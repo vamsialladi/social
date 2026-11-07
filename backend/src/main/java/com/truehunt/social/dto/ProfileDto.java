@@ -256,7 +256,7 @@ public class ProfileDto {
     }
 
     public String getProfessionalPhone() {
-        return (professionalPhone != null && !professionalPhone.isBlank()) ? professionalPhone : phone;
+        return professionalPhone;
     }
 
     public void setProfessionalPhone(String professionalPhone) {

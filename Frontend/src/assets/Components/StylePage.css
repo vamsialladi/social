@@ -2163,6 +2163,240 @@
   padding: 18px;
 }
 
+.profile-post-carousel {
+  position: relative;
+  min-width: 0;
+}
+
+.profile-post-list {
+  display: flex;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  gap: 18px;
+  padding: 2px 4px 10px 2px;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+
+.profile-post-list::-webkit-scrollbar {
+  display: none;
+}
+
+.profile-post-card {
+  display: flex;
+  min-width: 0;
+  flex: 0 0 min(292px, 100%);
+  flex-direction: column;
+  border: 1px solid #e6e4e7;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(38, 26, 34, 0.06);
+  overflow: hidden;
+  scroll-snap-align: start;
+}
+
+.profile-post-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 14px 0;
+  color: #77737d;
+  font-size: 13px;
+}
+
+.profile-post-card-header time {
+  font-size: 10px;
+  text-align: right;
+}
+
+.profile-post-body {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 9px;
+  padding: 12px 14px 14px;
+}
+
+.profile-post-card h4,
+.profile-post-card p {
+  margin: 0;
+}
+
+.profile-post-card h4 {
+  color: #29272e;
+  font-size: 15px;
+}
+
+.profile-post-card p {
+  color: #4b4850;
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.profile-post-media {
+  display: block;
+  width: 100%;
+  height: 154px;
+  background: #f1f0f2;
+  object-fit: cover;
+}
+
+.profile-post-reactions {
+  display: flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 14px;
+  border-top: 1px solid #eeecef;
+  color: #4b4850;
+  font-size: 12px;
+}
+
+.profile-post-next-button {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  right: 8px;
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  transform: translateY(-50%);
+  border: 1px solid #e6e4e7;
+  border-radius: 50%;
+  background: #fff;
+  color: #29272e;
+  box-shadow: 0 2px 10px rgba(38, 26, 34, 0.15);
+  cursor: pointer;
+}
+
+.profile-post-owner-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.profile-post-edit-button,
+.profile-post-edit-actions button,
+.profile-post-delete-button {
+  width: fit-content;
+  padding: 7px 12px;
+  border: 1px solid #d5d1d9;
+  border-radius: 7px;
+  background: #fff;
+  color: #29272e;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.profile-post-delete-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-color: #efc9c6;
+  color: #b42318;
+}
+
+.profile-post-edit-form {
+  display: grid;
+  gap: 11px;
+}
+
+.profile-post-edit-form label {
+  display: grid;
+  gap: 5px;
+  color: #4b4850;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.profile-post-edit-form input,
+.profile-post-edit-form textarea {
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid #d5d1d9;
+  border-radius: 7px;
+  color: #29272e;
+  font: inherit;
+  font-size: 13px;
+}
+
+.profile-post-edit-form textarea {
+  resize: vertical;
+}
+
+.profile-post-edit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.profile-post-edit-actions button[type="submit"] {
+  border-color: #0a66c2;
+  background: #0a66c2;
+  color: #fff;
+}
+
+.profile-post-edit-form small {
+  color: #77737d;
+  font-size: 11px;
+}
+
+.profile-page-content .profile-avatar-column {
+  display: flex;
+  min-width: 0;
+  flex: 0 0 152px;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.profile-page-content .profile-user-id {
+  display: flex;
+  max-width: 100%;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  color: #514d57;
+  font-size: 12px;
+}
+
+.profile-page-content .profile-user-id span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-page-content .profile-user-id button {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: #f2f0f3;
+  color: #514d57;
+  cursor: pointer;
+}
+
+.profile-page-content .profile-user-id button:focus-visible {
+  outline: 2px solid #0a66c2;
+  outline-offset: 2px;
+}
+
 .experience-section-heading,
 .experience-entry-heading {
   display: flex;
@@ -4722,6 +4956,10 @@
   .profile-page-content .artist-avatar-progress.is-readonly {
     width: 104px;
     height: 104px;
+    flex-basis: 104px;
+  }
+
+  .profile-page-content .profile-avatar-column {
     flex-basis: 104px;
   }
 

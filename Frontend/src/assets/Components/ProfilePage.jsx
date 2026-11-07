@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Building2, Check, ChevronRight, UserPlus } from 'lucide-react'
+import { Building2, Check, ChevronRight, Eye, EyeOff, Trash2, UserPlus } from 'lucide-react'
 import './StylePage.css'
 import api from '../../api'
 import { EXPERIENCE_OPTIONS, REGISTRATION_CRAFTS, SUB_CRAFTS_BY_PRIMARY_CRAFT } from '../../services/mockData'
@@ -31,6 +31,7 @@ export const emptyProfileDetails = {
   videos: [],
   videoUrls: [],
   experiences: [],
+  posts: [],
 }
 
 const MAX_VIDEO_SIZE = 5 * 1024 * 1024
@@ -270,6 +271,49 @@ function getTodayDateString() {
   return `${today.getFullYear()}-${month}-${day}`
 }
 
+function getProfilePostsStorageKey(profileId) {
+  return `truehunt-social-posts:${encodeURIComponent(profileId || 'me')}`
+}
+
+function getProfilePostEditsStorageKey(profileId) {
+  return `truehunt-social-post-edits:${encodeURIComponent(profileId || 'me')}`
+}
+
+function readProfilePosts(profileId, fallbackPosts = []) {
+  try {
+    const savedPosts = localStorage.getItem(getProfilePostsStorageKey(profileId))
+    const posts = savedPosts ? JSON.parse(savedPosts) : null
+    return Array.isArray(posts) ? posts : fallbackPosts
+  } catch (error) {
+    console.warn('Could not load saved profile posts:', error)
+    return fallbackPosts
+  }
+}
+
+function getProfilePostMedia(post) {
+  const media = post.media && typeof post.media === 'object' ? post.media : {}
+  const url = media.url || post.mediaUrl
+  if (!url) return null
+
+  const mediaType = String(media.contentType || media.type || post.mediaType || '').toLowerCase()
+  return {
+    ...media,
+    url,
+    kind: media.kind || (mediaType.includes('video') ? 'video' : 'image'),
+  }
+}
+
+function readProfilePostEdits(profileId) {
+  try {
+    const savedEdits = localStorage.getItem(getProfilePostEditsStorageKey(profileId))
+    const edits = savedEdits ? JSON.parse(savedEdits) : {}
+    return edits && typeof edits === 'object' && !Array.isArray(edits) ? edits : {}
+  } catch (error) {
+    console.warn('Could not load private profile post edits:', error)
+    return {}
+  }
+}
+
 function getProfileCompletion(profileDetails, hasProfileImage) {
   const hasValue = (value) => String(value ?? '').trim().length > 0
   const completedFields = [
@@ -365,6 +409,7 @@ function PreviewSectionHeading({ children, isOwner, onEdit, sectionId }) {
 
 function ProfilePage({
   isOwner = true,
+  isActive = true,
   accountUserId = '',
   profileDetails,
   setProfileDetails,
@@ -435,17 +480,51 @@ function ProfilePage({
   const [relationshipActionState, setRelationshipActionState] = useState({ profileId: '', action: '' })
   const [relationshipErrorState, setRelationshipErrorState] = useState({ profileId: '', message: '' })
   const profileActionsRef = useRef(null)
+  const profilePostsListRef = useRef(null)
   const profileAccessId = String(profileDetails.userId || 'me')
   const targetProfileId = String(profileDetails.userId || profileDetails.id || '')
+  const isOwnerView = isOwner
   const phoneAccessRequests = phoneAccessState.profileId === profileAccessId
     ? phoneAccessState.requests
     : readPhoneAccessRequests(profileAccessId)
   const [currentUser] = useState(getCurrentUser)
   const [currentUserId] = useState(getCurrentUserIdentity)
+  const profilePostOwnerId = String(
+    profileDetails.userId || profileDetails.id || accountUserId || currentUserId || 'me',
+  ).trim()
+  const [profilePostsState, setProfilePostsState] = useState(() => ({
+    profileId: profilePostOwnerId,
+    posts: readProfilePosts(profilePostOwnerId, profileDetails.posts || []),
+  }))
+  const [profilePostEditsState, setProfilePostEditsState] = useState(() => ({
+    profileId: profilePostOwnerId,
+    edits: readProfilePostEdits(profilePostOwnerId),
+  }))
+  const profilePostEdits = isOwnerView && profilePostEditsState.profileId === profilePostOwnerId
+    ? profilePostEditsState.edits
+    : {}
+  const profilePosts = (profilePostsState.profileId === profilePostOwnerId
+    ? profilePostsState.posts
+    : profileDetails.posts || []).map((post) => ({
+      ...post,
+      ...(profilePostEdits[String(post.id)] || {}),
+    }))
+  const [editingProfilePostId, setEditingProfilePostId] = useState('')
+  const [profilePostTitleDraft, setProfilePostTitleDraft] = useState('')
+  const [profilePostContentDraft, setProfilePostContentDraft] = useState('')
+  const [isProfileUserIdVisible, setIsProfileUserIdVisible] = useState(false)
+  const [profilePostError, setProfilePostError] = useState('')
   const currentPhoneRequest = phoneAccessRequests.find((request) => (
     request.requesterId === currentUserId
   ))
-  const isOwnerView = isOwner
+  const displayedUserId = String(
+    accountUserId
+      || profileDetails.userId
+      || profileDetails.id
+      || currentUser?.userId
+      || currentUser?.id
+      || '',
+  ).trim()
   const connectionCount = isOwnerView
     ? connectedProfiles?.length ?? profileDetails.connectionsCount
     : profileDetails.connectionsCount
@@ -567,7 +646,9 @@ function ProfilePage({
 
   const displayedProfileImage = isProfileImageRemoved
     ? ''
-    : profilePreview || profileDetails.profileImageUrl || ''
+    : isOwnerView
+      ? profilePreview || profileDetails.profileImageUrl || ''
+      : profileDetails.profileImageUrl || profileDetails.avatar || ''
   const cropBaseScale = cropImageDimensions
     ? Math.max(
         cropStageSize / cropImageDimensions.width,
@@ -620,6 +701,164 @@ function ProfilePage({
       isCurrent = false
     }
   }, [isOwnerView])
+
+  useEffect(() => {
+    if (!isActive || !isOwnerView) return undefined
+
+    let isCurrent = true
+    async function loadProfilePosts() {
+      try {
+        const posts = await api.getPosts()
+        if (!isCurrent || !Array.isArray(posts)) return
+
+        const ownerId = profilePostOwnerId.toLowerCase()
+        const ownPosts = posts.filter((post) => {
+          const authorId = String(post.authorId || '').trim().toLowerCase()
+          return ownerId && authorId === ownerId
+        })
+        const cachedPosts = readProfilePosts(profilePostOwnerId, [])
+        const loadedIds = new Set(ownPosts.map((post) => String(post.id)))
+        const savedPosts = [
+          ...ownPosts,
+          ...cachedPosts.filter((post) => post.localOnly && !loadedIds.has(String(post.id))),
+        ]
+        setProfilePostEditsState({
+          profileId: profilePostOwnerId,
+          edits: readProfilePostEdits(profilePostOwnerId),
+        })
+        setProfilePostsState({ profileId: profilePostOwnerId, posts: savedPosts })
+        try {
+          localStorage.setItem(getProfilePostsStorageKey(profilePostOwnerId), JSON.stringify(savedPosts))
+        } catch (error) {
+          console.warn('Could not save profile posts:', error)
+        }
+      } catch (error) {
+        console.warn('Could not load profile posts:', error)
+      }
+    }
+
+    loadProfilePosts()
+    return () => {
+      isCurrent = false
+    }
+  }, [isActive, isOwnerView, profilePostOwnerId])
+
+  useEffect(() => {
+    function handleSocialPostDeleted(event) {
+      const { postId, profileId } = event.detail || {}
+      if (
+        !postId
+        || String(profileId || '').trim().toLowerCase() !== profilePostOwnerId.toLowerCase()
+      ) {
+        return
+      }
+
+      const deletedPostId = String(postId)
+      setProfilePostsState((current) => (
+        current.profileId === profilePostOwnerId
+          ? {
+              ...current,
+              posts: current.posts.filter((post) => String(post.id) !== deletedPostId),
+            }
+          : current
+      ))
+      setProfilePostEditsState((current) => {
+        if (current.profileId !== profilePostOwnerId || !current.edits[deletedPostId]) return current
+
+        const edits = { ...current.edits }
+        delete edits[deletedPostId]
+        try {
+          localStorage.setItem(getProfilePostEditsStorageKey(profilePostOwnerId), JSON.stringify(edits))
+        } catch (error) {
+          console.warn('Could not update saved profile post edits after feed deletion:', error)
+        }
+        return { ...current, edits }
+      })
+      setProfileDetails((details) => ({
+        ...details,
+        posts: (details.posts || []).filter((post) => String(post.id) !== deletedPostId),
+      }))
+    }
+
+    window.addEventListener('truehunt-social-post-deleted', handleSocialPostDeleted)
+    return () => window.removeEventListener('truehunt-social-post-deleted', handleSocialPostDeleted)
+  }, [profilePostOwnerId, setProfileDetails])
+
+  function startEditingProfilePost(post) {
+    setEditingProfilePostId(String(post.id))
+    setProfilePostTitleDraft(post.title || '')
+    setProfilePostContentDraft(post.content || '')
+  }
+
+  function cancelEditingProfilePost() {
+    setEditingProfilePostId('')
+    setProfilePostTitleDraft('')
+    setProfilePostContentDraft('')
+  }
+
+  function saveProfilePostEdit(event, post) {
+    event.preventDefault()
+    if (!isOwnerView) return
+
+    const updatedEdits = {
+      ...profilePostEdits,
+      [String(post.id)]: {
+        title: profilePostTitleDraft.trim(),
+        content: profilePostContentDraft.trim(),
+      },
+    }
+
+    try {
+      localStorage.setItem(
+        getProfilePostEditsStorageKey(profilePostOwnerId),
+        JSON.stringify(updatedEdits),
+      )
+    } catch (error) {
+      console.warn('Could not save your private profile post edit:', error)
+      return
+    }
+
+    setProfilePostEditsState({ profileId: profilePostOwnerId, edits: updatedEdits })
+    cancelEditingProfilePost()
+  }
+
+  async function deleteProfilePost(postId) {
+    if (!isOwnerView) return
+
+    setProfilePostError('')
+    try {
+      const postToDelete = profilePosts.find((post) => String(post.id) === String(postId))
+      if (!postToDelete?.localOnly) {
+        const serverPosts = await api.getPosts()
+        const existsOnServer = serverPosts.some(
+          (post) => String(post.id) === String(postId),
+        )
+        if (existsOnServer) {
+          await api.deletePost(postId)
+        }
+      }
+
+      const remainingPosts = profilePosts.filter((post) => String(post.id) !== String(postId))
+      const updatedEdits = { ...profilePostEdits }
+      delete updatedEdits[String(postId)]
+      setProfilePostsState({ profileId: profilePostOwnerId, posts: remainingPosts })
+      setProfilePostEditsState({ profileId: profilePostOwnerId, edits: updatedEdits })
+      setProfileDetails((details) => ({
+        ...details,
+        posts: (details.posts || []).filter((post) => String(post.id) !== String(postId)),
+      }))
+      if (editingProfilePostId === String(postId)) cancelEditingProfilePost()
+      try {
+        localStorage.setItem(getProfilePostsStorageKey(profilePostOwnerId), JSON.stringify(remainingPosts))
+        localStorage.setItem(getProfilePostEditsStorageKey(profilePostOwnerId), JSON.stringify(updatedEdits))
+      } catch (storageError) {
+        console.warn('Could not update saved profile posts after deletion:', storageError)
+      }
+    } catch (error) {
+      console.error('Could not delete profile post:', error)
+      setProfilePostError('Could not delete this post. Please try again.')
+    }
+  }
 
   async function connectToProfile() {
     if (!targetProfileId || relationshipAction) return
@@ -1091,14 +1330,15 @@ function ProfilePage({
       uploadedVideoUrls.current = []
     }
 
-    setProfileDetails(nextDetails)
     try {
       await api.updateProfile(nextDetails)
-    } catch (err) {
-      console.warn('Failed to save profile section to backend:', err)
+      setProfileDetails(nextDetails)
+      setEditingSection('')
+      setValidationError('')
+    } catch (error) {
+      console.error('Failed to save profile section to backend:', error)
+      setValidationError('Could not save your selection. Please try again.')
     }
-
-    setEditingSection('')
   }
 
   function handleEditProfile() {
@@ -1377,32 +1617,49 @@ function ProfilePage({
             </div>
           </div>
           <div className="artist-identity">
-            <div
-              className={`artist-avatar-progress${isOwnerView ? '' : ' is-readonly'}`}
-              style={{ '--profile-completion': `${profileCompletion}%` }}
-              role={isOwnerView ? 'button' : undefined}
-              aria-label={isOwnerView ? 'Edit profile photo' : undefined}
-              onClick={isOwnerView ? handleEditProfile : undefined}
-              onKeyDown={isOwnerView ? (event) => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                  event.preventDefault()
-                  handleEditProfile()
-                }
-              } : undefined}
-              tabIndex={isOwnerView ? 0 : undefined}
-              title={isOwnerView ? 'Click to edit your profile' : undefined}
-            >
-              {displayedProfileImage
-                ? <img className="artist-avatar" src={displayedProfileImage} alt={`${profileDetails.name || 'Artist'}'s profile`} />
-                : (
-                  <div className="artist-avatar avatar-fallback" aria-hidden="true">
-                    <svg className="profile-avatar-placeholder" viewBox="0 0 100 100" focusable="false">
-                      <circle cx="50" cy="35" r="21" />
-                      <path d="M10 96c2-23 18-39 40-39s38 16 40 39H10Z" />
-                    </svg>
-                  </div>
-                )}
-              {isOwnerView && <span className="artist-avatar-progress-label">{profileCompletion}%</span>}
+            <div className="profile-avatar-column">
+              <div
+                className={`artist-avatar-progress${isOwnerView ? '' : ' is-readonly'}`}
+                style={{ '--profile-completion': `${profileCompletion}%` }}
+                role={isOwnerView ? 'button' : undefined}
+                aria-label={isOwnerView ? 'Edit profile photo' : undefined}
+                onClick={isOwnerView ? handleEditProfile : undefined}
+                onKeyDown={isOwnerView ? (event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault()
+                    handleEditProfile()
+                  }
+                } : undefined}
+                tabIndex={isOwnerView ? 0 : undefined}
+                title={isOwnerView ? 'Click to edit your profile' : undefined}
+              >
+                {displayedProfileImage
+                  ? <img className="artist-avatar" src={displayedProfileImage} alt={`${profileDetails.name || 'Artist'}'s profile`} />
+                  : (
+                    <div className="artist-avatar avatar-fallback" aria-hidden="true">
+                      <svg className="profile-avatar-placeholder" viewBox="0 0 100 100" focusable="false">
+                        <circle cx="50" cy="35" r="21" />
+                        <path d="M10 96c2-23 18-39 40-39s38 16 40 39H10Z" />
+                      </svg>
+                    </div>
+                  )}
+                {isOwnerView && <span className="artist-avatar-progress-label">{profileCompletion}%</span>}
+              </div>
+              {isOwnerView && (
+                <div className="profile-user-id">
+                  <span>{isProfileUserIdVisible ? displayedUserId || 'Unavailable' : '••••••••'}</span>
+                  <button
+                    type="button"
+                    aria-label={isProfileUserIdVisible ? 'Hide user ID' : 'Show user ID'}
+                    aria-pressed={isProfileUserIdVisible}
+                    onClick={() => setIsProfileUserIdVisible((visible) => !visible)}
+                  >
+                    {isProfileUserIdVisible
+                      ? <EyeOff size={16} aria-hidden="true" />
+                      : <Eye size={16} aria-hidden="true" />}
+                  </button>
+                </div>
+              )}
             </div>
             <div className="artist-identity-content">
               <div className="artist-name-row">
@@ -1481,15 +1738,15 @@ function ProfilePage({
               <p className="artist-location">
                 {profileDetails.address || 'Add your location in Edit profile'}
               </p>
-              <p className="artist-experience">
-                {profileDetails.experience
-                  ? (profileDetails.experience.toLowerCase() === 'fresher'
+              {profileDetails.experience && (
+                <p className="artist-experience">
+                  {profileDetails.experience.toLowerCase() === 'fresher'
                     ? profileDetails.experience
                     : profileDetails.experience.toLowerCase().includes('year')
                     ? profileDetails.experience
-                    : `${profileDetails.experience} years of experience`)
-                  : 'Add your experience in Edit profile'}
-              </p>
+                    : `${profileDetails.experience} years of experience`}
+                </p>
+              )}
               {(profileDetails.height || profileDetails.weight || profileDetails.skinTone || profileDetails.facialHair) && (
                 <dl className="profile-appearance-details" aria-label="Appearance details">
                   {profileDetails.height && (
@@ -1562,50 +1819,184 @@ function ProfilePage({
           <div className="artist-content">
             <div className="artist-main">
               <section className="artist-section">
-                <PreviewSectionHeading isOwner={isOwnerView} onEdit={openSectionEditor} sectionId="workTypes">
-                  Worked in
-                </PreviewSectionHeading>
-                {(profileDetails.workTypes || []).length > 0 ? (
-                  <div className="profile-tags">
-                    {(profileDetails.workTypes || []).map((workType) => <span key={workType}>{workType}</span>)}
+                <div className="preview-section-heading">
+                  <h3>Posts</h3>
+                </div>
+                {profilePostError && <p className="submit-error" role="alert">{profilePostError}</p>}
+                {profilePosts.length > 0 ? (
+                  <div className="profile-post-carousel">
+                    <div className="profile-post-list" ref={profilePostsListRef}>
+                      {profilePosts.map((post) => {
+                        const media = getProfilePostMedia(post)
+                        const postType = String(post.type || '').toLowerCase()
+                        const postLabel = postType === 'media'
+                          ? 'Media'
+                          : postType
+                            ? `${postType.charAt(0).toUpperCase()}${postType.slice(1)}`
+                            : 'Post'
+
+                        return (
+                          <article className="profile-post-card" key={post.id}>
+                            <header className="profile-post-card-header">
+                              <span>{postLabel}</span>
+                              {post.createdAt && <time>{post.createdAt}</time>}
+                            </header>
+                            <div className="profile-post-body">
+                              {editingProfilePostId === String(post.id) ? (
+                                <form
+                                  className="profile-post-edit-form"
+                                  onSubmit={(event) => saveProfilePostEdit(event, post)}
+                                >
+                                  <label>
+                                    Title
+                                    <input
+                                      type="text"
+                                      value={profilePostTitleDraft}
+                                      onChange={(event) => setProfilePostTitleDraft(event.target.value)}
+                                      maxLength={200}
+                                    />
+                                  </label>
+                                  <label>
+                                    Post
+                                    <textarea
+                                      value={profilePostContentDraft}
+                                      onChange={(event) => setProfilePostContentDraft(event.target.value)}
+                                      rows={5}
+                                      maxLength={10000}
+                                    />
+                                  </label>
+                                  <div className="profile-post-edit-actions">
+                                    <button type="submit">Save to profile</button>
+                                    <button type="button" onClick={cancelEditingProfilePost}>Cancel</button>
+                                  </div>
+                                  <small>These changes are private to your profile and won’t change the Social feed.</small>
+                                </form>
+                              ) : (
+                                <>
+                                  {post.title && <h4>{post.title}</h4>}
+                                  {post.content && <p>{post.content}</p>}
+                                  {isOwnerView && (
+                                    <div className="profile-post-owner-actions">
+                                      <button
+                                        className="profile-post-edit-button"
+                                        type="button"
+                                        onClick={() => startEditingProfilePost(post)}
+                                      >
+                                        Edit
+                                      </button>
+                                      <button
+                                        className="profile-post-delete-button"
+                                        type="button"
+                                        onClick={() => deleteProfilePost(post.id)}
+                                        aria-label={`Delete post ${post.title || post.content || ''}`}
+                                        title="Delete post"
+                                      >
+                                        <Trash2 size={15} aria-hidden="true" />
+                                        Delete
+                                      </button>
+                                    </div>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                            {media?.kind === 'video' && (
+                              <video className="profile-post-media" src={media.url} controls />
+                            )}
+                            {media?.kind !== 'video' && media && (
+                              <img
+                                className="profile-post-media"
+                                src={media.url}
+                                alt="Post attachment"
+                                onError={(event) => {
+                                  event.currentTarget.hidden = true
+                                }}
+                              />
+                            )}
+                            {post.likesCount > 0 && (
+                              <div className="profile-post-reactions" aria-label={`${post.likesCount} likes`}>
+                                👍 {post.likesCount}
+                              </div>
+                            )}
+                          </article>
+                        )
+                      })}
+                    </div>
+                    {profilePosts.length > 1 && (
+                      <button
+                        className="profile-post-next-button"
+                        type="button"
+                        aria-label="Scroll to more posts"
+                        title="More posts"
+                        onClick={() => profilePostsListRef.current?.scrollBy({
+                          left: profilePostsListRef.current.clientWidth * 0.85,
+                          behavior: 'smooth',
+                        })}
+                      >
+                        <ChevronRight size={22} aria-hidden="true" />
+                      </button>
+                    )}
                   </div>
                 ) : (
                   <p className="profile-empty-hint">
-                    {isOwnerView ? 'Select Edit to add your previous work types.' : 'No previous work types added yet.'}
+                    {isOwnerView ? 'Your Social posts will appear here.' : 'No posts shared yet.'}
                   </p>
                 )}
-                {editingSection === 'workTypes' && (
-                  <div className="preview-inline-editor">
-                    <SelectionGroup
-                      label="Previous Worked in"
-                      options={workTypes}
-                      selected={selectedWorkTypes}
-                      onChange={setSelectedWorkTypes}
-                    />
-                    <div className="language-edit-actions">
-                      <button className="secondary-button" type="button" onClick={closeSectionEditor}>Cancel</button>
-                      <button className="contact-button" type="button" onClick={saveSectionEditor}>Save</button>
+              </section>
+              {(isOwnerView || (profileDetails.workTypes || []).length > 0) && (
+                <section className="artist-section">
+                  <PreviewSectionHeading isOwner={isOwnerView} onEdit={openSectionEditor} sectionId="workTypes">
+                    Worked in
+                  </PreviewSectionHeading>
+                  {(profileDetails.workTypes || []).length > 0 && (
+                    <div className="profile-tags">
+                      {(profileDetails.workTypes || []).map((workType) => <span key={workType}>{workType}</span>)}
                     </div>
+                  )}
+                  {editingSection === 'workTypes' && (
+                    <div className="preview-inline-editor">
+                      <SelectionGroup
+                        label="Previous Worked in"
+                        options={workTypes}
+                        selected={selectedWorkTypes}
+                        onChange={setSelectedWorkTypes}
+                      />
+                      {validationError && <p className="submit-error" role="alert">{validationError}</p>}
+                      <div className="language-edit-actions">
+                        <button className="secondary-button" type="button" onClick={closeSectionEditor}>Cancel</button>
+                        <button className="contact-button" type="button" onClick={saveSectionEditor}>Save</button>
+                      </div>
+                    </div>
+                  )}
+                </section>
+              )}
+              {(profileDetails.experience || profileDetails.languages.length > 0 || profileDetails.videos.length > 0) && (
+                <section className="artist-section insights-section" id="artist-highlights">
+                  <h3>Profile highlights</h3>
+                  <div className="insights-grid">
+                    {profileDetails.experience && (
+                      <div className="insight-item">
+                        <span className="insight-icon" aria-hidden="true">✦</span>
+                        <div>
+                          <strong>{profileDetails.experience.toLowerCase() === 'fresher' || profileDetails.experience.toLowerCase().includes('year') ? profileDetails.experience : `${profileDetails.experience} years`}</strong>
+                          <span>Experience</span>
+                        </div>
+                      </div>
+                    )}
+                    {profileDetails.languages.length > 0 && (
+                      <div className="insight-item">
+                        <span className="insight-icon" aria-hidden="true">◎</span>
+                        <div><strong>{profileDetails.languages.length}</strong><span>Languages</span></div>
+                      </div>
+                    )}
+                    {profileDetails.videos.length > 0 && (
+                      <div className="insight-item">
+                        <span className="insight-icon" aria-hidden="true">▶</span>
+                        <div><strong>{profileDetails.videos.length}</strong><span>Demo videos</span></div>
+                      </div>
+                    )}
                   </div>
-                )}
-              </section>
-              <section className="artist-section insights-section" id="artist-highlights">
-                <h3>Profile highlights</h3>
-                <div className="insights-grid">
-                  <div className="insight-item">
-                    <span className="insight-icon" aria-hidden="true">✦</span>
-                    <div><strong>{profileDetails.experience ? (profileDetails.experience.toLowerCase() === 'fresher' || profileDetails.experience.toLowerCase().includes('year') ? profileDetails.experience : `${profileDetails.experience} years`) : '—'}</strong><span>Experience</span></div>
-                  </div>
-                  <div className="insight-item">
-                    <span className="insight-icon" aria-hidden="true">◎</span>
-                    <div><strong>{profileDetails.languages.length || '—'}</strong><span>Languages</span></div>
-                  </div>
-                  <div className="insight-item">
-                    <span className="insight-icon" aria-hidden="true">▶</span>
-                    <div><strong>{profileDetails.videos.length || '—'}</strong><span>Demo videos</span></div>
-                  </div>
-                </div>
-              </section>
+                </section>
+              )}
 
               <section className="artist-section profile-about-section" id="artist-about">
                 <PreviewSectionHeading isOwner={isOwnerView} onEdit={openSectionEditor} sectionId="about">
@@ -1756,52 +2147,51 @@ function ProfilePage({
                 )}
               </section>
 
-              <section className="artist-section" id="artist-languages">
-                <PreviewSectionHeading isOwner={isOwnerView} onEdit={openSectionEditor} sectionId="languages">
-                  Languages
-                </PreviewSectionHeading>
-                {profileDetails.languages.length > 0 ? (
-                  <div className="profile-tags">
-                    {profileDetails.languages.map((language) => (
-                      <span key={language}>
-                        {language === 'Other' && profileDetails.otherLanguage
-                          ? `Other: ${profileDetails.otherLanguage}`
-                          : language}
-                      </span>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="profile-empty-hint">
-                    {isOwnerView ? 'Add languages in Edit profile.' : 'No languages added yet.'}
-                  </p>
-                )}
-                {editingSection === 'languages' && (
-                  <div className="preview-inline-editor">
-                    <SelectionGroup
-                      label="Languages you know"
-                      options={languages}
-                      selected={selectedLanguages}
-                      onChange={setSelectedLanguages}
-                    />
-                    {selectedLanguages.includes('Other') && (
-                      <div className="form-field language-other-field">
-                        <label htmlFor="inline-other-language">Specify your language</label>
-                        <input
-                          id="inline-other-language"
-                          type="text"
-                          value={otherLanguageDraft}
-                          onChange={(event) => setOtherLanguageDraft(event.target.value)}
-                          placeholder="Enter another language"
-                        />
-                      </div>
-                    )}
-                    <div className="language-edit-actions">
-                      <button className="secondary-button" type="button" onClick={closeSectionEditor}>Cancel</button>
-                      <button className="contact-button" type="button" onClick={saveSectionEditor}>Save</button>
+              {(isOwnerView || profileDetails.languages.length > 0) && (
+                <section className="artist-section" id="artist-languages">
+                  <PreviewSectionHeading isOwner={isOwnerView} onEdit={openSectionEditor} sectionId="languages">
+                    Languages
+                  </PreviewSectionHeading>
+                  {profileDetails.languages.length > 0 && (
+                    <div className="profile-tags">
+                      {profileDetails.languages.map((language) => (
+                        <span key={language}>
+                          {language === 'Other' && profileDetails.otherLanguage
+                            ? `Other: ${profileDetails.otherLanguage}`
+                            : language}
+                        </span>
+                      ))}
                     </div>
-                  </div>
-                )}
-              </section>
+                  )}
+                  {editingSection === 'languages' && (
+                    <div className="preview-inline-editor">
+                      <SelectionGroup
+                        label="Languages you know"
+                        options={languages}
+                        selected={selectedLanguages}
+                        onChange={setSelectedLanguages}
+                      />
+                      {selectedLanguages.includes('Other') && (
+                        <div className="form-field language-other-field">
+                          <label htmlFor="inline-other-language">Specify your language</label>
+                          <input
+                            id="inline-other-language"
+                            type="text"
+                            value={otherLanguageDraft}
+                            onChange={(event) => setOtherLanguageDraft(event.target.value)}
+                            placeholder="Enter another language"
+                          />
+                        </div>
+                      )}
+                      {validationError && <p className="submit-error" role="alert">{validationError}</p>}
+                      <div className="language-edit-actions">
+                        <button className="secondary-button" type="button" onClick={closeSectionEditor}>Cancel</button>
+                        <button className="contact-button" type="button" onClick={saveSectionEditor}>Save</button>
+                      </div>
+                    </div>
+                  )}
+                </section>
+              )}
 
               <section className="artist-section" id="artist-demo-videos">
                 <PreviewSectionHeading isOwner={isOwnerView} onEdit={openSectionEditor} sectionId="videos">
@@ -1958,11 +2348,7 @@ function ProfilePage({
                       )
                     })}
                   </div>
-                ) : (
-                  <p className="profile-empty-hint">
-                    {isOwnerView ? 'Add a movie or project to your experience.' : 'No experience added yet.'}
-                  </p>
-                )}
+                ) : null}
               </section>
               <section className="artist-section" id="artist-video-links">
                 <PreviewSectionHeading isOwner={isOwnerView} onEdit={openSectionEditor} sectionId="videoLinks">

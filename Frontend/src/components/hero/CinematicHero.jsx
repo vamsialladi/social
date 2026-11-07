@@ -157,7 +157,7 @@ const CINEMA_24_CRAFTS = [
     tagline: 'Acoustic Landscapes',
     desc: 'Record Foley, synthesize atmospheric soundscapes, and mix immersive Dolby audio.',
     icon: '🎧',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/21/Resul_Pookutty_60th_Filmfare_Awards_%28cropped%29.jpg/250px-Resul_Pookutty_60th_Filmfare_Awards_%28cropped%29.jpg',
+    image: 'https://images.openai.com/static-rsc-4/fTPQNsiXbaMjqmXq20G7TDLoRv8G9pzVYmOMoCaI1vfNANSOVBPv3C2Ru2FaE6ZGOkW9sGstAkffhX7SLPyqkpMVnWsjDCE8euDBjf96Er5rzSoQZQifysrO7MAXOJdO8yUSKBnGNBf1SOrnHi-Gof0MBmZas1cFWGPvL51BDzv0urh9aSFOLA7o1xZ9kzav?purpose=fullsize',
     targetCraft: 'Audiography (Sound Recording/Mixing)'
   },
   {
@@ -175,7 +175,7 @@ const CINEMA_24_CRAFTS = [
     tagline: 'Flawless Lip-Sync',
     desc: 'Voice multilingual translations and enhance emotional dialogue performances.',
     icon: '🎙️',
-    image: 'https://thumb.wikimedia.org/wikipedia/commons/thumb/6/67/S._P._Balasubrahmanyam_at_the_%27Gurkha%27_Audio_Launch.jpg/250px-S._P._Balasubrahmanyam_at_the_%27Gurkha%27_Audio_Launch.jpg',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/7/77/Sai_Kumar_at_IFFI-2010%2C_in_Panjim%2C_Goa_on_November_27%2C_2010_%28cropped%29.jpg ',
     targetCraft: 'Dubbing Artist'
   },
   {
@@ -193,7 +193,7 @@ const CINEMA_24_CRAFTS = [
     tagline: 'Flawless Logistics',
     desc: 'Oversee daily shooting schedules, crew logistics, permits, and equipment operations.',
     icon: '📋',
-    image: 'https://thumb.wikimedia.org/wikipedia/commons/thumb/6/6b/Karan_Johar_at_2025_Cannes_Homebound_Photocall_2_%28cropped%29.jpg/250px-Karan_Johar_at_2025_Cannes_Homebound_Photocall_2_%28cropped%29.jpg',
+    image: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRX5NrljI2o2zIbxQ_0PAMS6xYC49eptRuJBUAVXMuYsyVQV8EiXuNpjxqkBLla4Yj2I86qCg5DwykJ1_hm_eUUVD2tpnIYpZsawCCgQw&s=10',
     targetCraft: 'Production Executive'
   },
   {
@@ -211,7 +211,7 @@ const CINEMA_24_CRAFTS = [
     tagline: 'Reach Theatres',
     desc: 'Deliver movies across multiplexes, single screens, OTT streaming, and world territories.',
     icon: '🎟️',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5c/Daggubati_Suresh_Babu.jpg/250px-Daggubati_Suresh_Babu.jpg',
+    image: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQ5Y5uXKnOJm7I98srVqmi7YX5dmBOkL4AWmz1Ynxu7amXHxZDk30Hb5aYG2GF0yXPql9Lyss6QaqLGDgDpjezKK9ZtC0FqUns6soG6ipXC1A&s=10',
     targetCraft: 'Producer'
   },
   {
@@ -220,7 +220,7 @@ const CINEMA_24_CRAFTS = [
     tagline: 'Power Every Unit',
     desc: 'Lighting technicians, riggers, spot teams, and skilled studio specialists.',
     icon: '⚡',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e1/Nagarjuna_Akkineni_at_ANR_Awards.jpg/250px-Nagarjuna_Akkineni_at_ANR_Awards.jpg',
+    image: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSERyScUAqNB4Y1hqfdAUfpkRvvIAafINLaw-PIziZOutcPglAsnkkl3BSPGfBiYAoWD4L2l4B2dgyWFoCIXHRmcwgV0nLoboYNezyNyw&s=10',
     targetCraft: 'Studio/Production Support Workers'
   }
 ];
@@ -248,7 +248,7 @@ export default function CinematicHero() {
   useEffect(() => {
     const slideshowTimer = window.setInterval(() => {
       setPhotoSlideIndex((index) => index + 1);
-    }, 5000);
+    }, 3000);
 
     return () => window.clearInterval(slideshowTimer);
   }, []);
@@ -395,7 +395,11 @@ export default function CinematicHero() {
           {/* Central 3D Earth Globe (Rotates continuously on vertical axis) */}
           <div className="globe-center-pod">
             <RotatingGlobe
-              size={Math.floor(Math.min(600, stageSize.width * 0.66, stageSize.height * 0.99))}
+              size={Math.floor(Math.min(
+                600,
+                stageSize.width * (stageSize.width <= 640 ? 0.74 : 0.66),
+                stageSize.height * 0.99,
+              ))}
               isRotating={true}
             />
           </div>

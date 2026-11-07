@@ -4,7 +4,7 @@ echo ========================================================
 echo Starting TrueHunt Spring Boot Backend on port 8080...
 echo ========================================================
 
-cd /d "%~dp0"
+cd /d "%~dp0..\backend"
 
 where mvn >nul 2>nul
 if %errorlevel% equ 0 (
@@ -20,5 +20,5 @@ if %errorlevel% equ 0 (
 )
 
 echo Using Maven from: %MVN_CMD%
-"%MVN_CMD%" -f backend/pom.xml spring-boot:run
+"%MVN_CMD%" spring-boot:run
 pause

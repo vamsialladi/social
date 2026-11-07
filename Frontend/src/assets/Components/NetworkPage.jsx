@@ -3,10 +3,8 @@ import api from '../../api'
 import {
   CalendarDays,
   MessageCircle,
-  Send,
   UserRound,
   UsersRound,
-  X,
 } from 'lucide-react'
 import './NetworkPage.css'
 
@@ -17,70 +15,66 @@ const networkSections = [
   { label: 'Events', count: 0, Icon: CalendarDays },
 ]
 
-const suggestedProfiles = [
-  {
-    id: 'maya',
-    name: 'Maya Krishnan',
-    initials: 'MK',
-    status: 'active',
-    role: 'Actor · Voice artist',
-    location: 'Hyderabad, Telangana',
-    mutualConnections: '12 mutual connections',
-    avatarClass: 'network-avatar-coral',
-  },
-  {
-    id: 'rohan',
-    name: 'Rohan Mehta',
-    initials: 'RM',
-    status: 'offline',
-    role: 'Cinematographer · Editor',
-    location: 'Mumbai, Maharashtra',
-    mutualConnections: '8 mutual connections',
-    avatarClass: 'network-avatar-blue',
-  },
-]
-
-function NetworkPage({ onMessage, initialConversation }) {
+function NetworkPage({ onMessage, onProfileSelect, currentUserId }) {
   const [activeTab, setActiveTab] = useState('grow')
   const [activeSection, setActiveSection] = useState('grow')
-  const [profiles, setProfiles] = useState(suggestedProfiles)
+  const [profiles, setProfiles] = useState([])
+  const [loadingProfiles, setLoadingProfiles] = useState(true)
   const [connectedProfiles, setConnectedProfiles] = useState([])
   const [followedProfiles, setFollowedProfiles] = useState([])
-  const [activeConversation, setActiveConversation] = useState(initialConversation || null)
-  const [conversationMessages, setConversationMessages] = useState([])
-  const [draftMessage, setDraftMessage] = useState('')
 
   function openConversation(profile) {
     if (!profile?.name) return
-
-    setActiveConversation(profile)
-    setConversationMessages([])
-    setDraftMessage('')
     onMessage?.(profile)
-  }
-
-  function sendConversationMessage(event) {
-    event.preventDefault()
-    const content = draftMessage.trim()
-    if (!content) return
-
-    setConversationMessages((currentMessages) => [...currentMessages, content])
-    setDraftMessage('')
   }
 
   useEffect(() => {
     async function loadNetworkData() {
       try {
-        const data = await api.getNetworkSuggestions()
-        if (Array.isArray(data) && data.length > 0) {
-          setProfiles(data)
-          const connected = data.filter((p) => p.isConnected).map((p) => p.id)
-          const followed = data.filter((p) => p.isFollowing).map((p) => p.id)
-          setConnectedProfiles(connected)
-          setFollowedProfiles(followed)
+        const directory = await api.getProfileDirectory()
+        let networkProfiles = []
+        try {
+          networkProfiles = await api.getNetworkSuggestions()
+        } catch (err) {
+          console.warn('Network connection status load error:', err)
         }
+        const networkProfilesById = new Map(
+          (Array.isArray(networkProfiles) ? networkProfiles : [])
+            .map((profile) => [String(profile.id), profile]),
+        )
+        const allProfiles = (Array.isArray(directory) ? directory : [])
+          .filter((profile) => profile && (profile.id || profile.userId) && profile.name)
+          .filter((profile) => {
+            const profileId = String(profile.id || profile.userId).trim().toLowerCase()
+            return !currentUserId || profileId !== String(currentUserId).trim().toLowerCase()
+          })
+          .map((profile, index) => {
+            const id = String(profile.id || profile.userId)
+            const name = profile.name.trim()
+            const nameParts = name.split(/\s+/)
+            const connection = networkProfilesById.get(id)
+            return {
+              ...profile,
+              id,
+              name,
+              initials: nameParts.slice(0, 2).map((part) => part[0]).join('').toUpperCase(),
+              status: connection?.status || 'active',
+              role: profile.headline || profile.role || profile.primaryCraft || profile.category || 'Cinema Professional',
+              location: profile.location || profile.address || '',
+              mutualConnections: connection?.mutualConnections || 'TrueHunt member',
+              avatarClass: index % 2 === 0 ? 'network-avatar-coral' : 'network-avatar-blue',
+              profileImageUrl: profile.profileImageUrl || profile.avatar || '',
+              isConnected: Boolean(connection?.isConnected),
+              isFollowing: Boolean(connection?.isFollowing),
+            }
+          })
+        setProfiles(allProfiles)
+        setConnectedProfiles(allProfiles.filter((profile) => profile.isConnected).map((profile) => profile.id))
+        setFollowedProfiles(allProfiles.filter((profile) => profile.isFollowing).map((profile) => profile.id))
       } catch (err) {
-        console.warn('Network suggestions load error:', err)
+        console.warn('Network profiles load error:', err)
+      } finally {
+        setLoadingProfiles(false)
       }
     }
     loadNetworkData()
@@ -120,9 +114,16 @@ function NetworkPage({ onMessage, initialConversation }) {
       <article className="network-profile-card" key={profile.id}>
         <div className={`network-profile-cover ${profile.avatarClass}`} />
         <div className="network-profile-avatar-wrap">
-          <div className={`network-profile-avatar ${profile.avatarClass}`} aria-hidden="true">
-            {profile.initials}
-          </div>
+          <button
+            className={`network-profile-avatar ${profile.avatarClass}`}
+            type="button"
+            aria-label={`View ${profile.name}'s profile`}
+            onClick={() => onProfileSelect?.(profile)}
+          >
+            {profile.profileImageUrl
+              ? <img src={profile.profileImageUrl} alt="" />
+              : profile.initials}
+          </button>
           <span
             className={`network-presence-dot is-${profile.status}`}
             role="img"
@@ -230,47 +231,6 @@ function NetworkPage({ onMessage, initialConversation }) {
         </aside>
 
         <div className="network-main">
-          {activeConversation && (
-            <section className="network-chat-panel" aria-label={`Message ${activeConversation.name}`}>
-              <header className="network-chat-header">
-                <span className="network-chat-avatar" aria-hidden="true">
-                  {(activeConversation.name || 'Cinema Professional')
-                    .split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase()}
-                </span>
-                <div>
-                  <h2>{activeConversation.name}</h2>
-                  <p>{activeConversation.role || 'Cinema Professional'}</p>
-                </div>
-                <button
-                  type="button"
-                  aria-label="Close conversation"
-                  onClick={() => setActiveConversation(null)}
-                >
-                  <X size={18} aria-hidden="true" />
-                </button>
-              </header>
-              <div className="network-chat-messages" aria-live="polite">
-                {conversationMessages.length === 0
-                  ? <p>Start a conversation with {activeConversation.name}.</p>
-                  : conversationMessages.map((message, index) => (
-                    <p className="network-chat-message" key={`${index}-${message}`}>{message}</p>
-                  ))}
-              </div>
-              <form className="network-chat-composer" onSubmit={sendConversationMessage}>
-                <label className="visually-hidden" htmlFor="network-chat-message">Write a message</label>
-                <input
-                  id="network-chat-message"
-                  type="text"
-                  placeholder="Write a message..."
-                  value={draftMessage}
-                  onChange={(event) => setDraftMessage(event.target.value)}
-                />
-                <button type="submit" aria-label="Send message" disabled={!draftMessage.trim()}>
-                  <Send size={17} aria-hidden="true" />
-                </button>
-              </form>
-            </section>
-          )}
           {activeSection === 'connections' ? (
             <section className="network-suggestions" aria-labelledby="network-connections-title">
               <header className="network-section-heading">
@@ -338,9 +298,11 @@ function NetworkPage({ onMessage, initialConversation }) {
                   </div>
                   <span className="network-suggestion-count">{profiles.length} suggestions</span>
                 </header>
-                <div className="network-profile-grid">
-                  {profiles.map(renderProfileCard)}
-                </div>
+                {loadingProfiles
+                  ? <p role="status">Loading profiles…</p>
+                  : profiles.length > 0
+                    ? <div className="network-profile-grid">{profiles.map(renderProfileCard)}</div>
+                    : <p>No profiles are available yet.</p>}
               </section>
             </>
           ) : (

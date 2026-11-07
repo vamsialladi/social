@@ -246,7 +246,7 @@ public class ProfileUpdateRequest {
     }
 
     public String getProfessionalPhone() {
-        return (professionalPhone != null && !professionalPhone.isBlank()) ? professionalPhone : getPhone();
+        return professionalPhone;
     }
 
     public void setProfessionalPhone(String professionalPhone) {

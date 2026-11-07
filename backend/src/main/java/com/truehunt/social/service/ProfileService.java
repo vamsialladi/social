@@ -598,7 +598,7 @@ public class ProfileService {
         dto.setReferId(entity.getUserId());
         dto.setName(entity.getName());
         dto.setPhone(entity.getPhone());
-        dto.setProfessionalPhone(entity.getProfessionalPhone() != null ? entity.getProfessionalPhone() : entity.getPhone());
+        dto.setProfessionalPhone(entity.getProfessionalPhone() != null ? entity.getProfessionalPhone() : "");
         dto.setEmail(entity.getEmail());
         dto.setAddress(entity.getAddress());
         dto.setLocation(entity.getAddress() != null && !entity.getAddress().isBlank() ? entity.getAddress() : "Hyderabad, India");
@@ -607,7 +607,7 @@ public class ProfileService {
                 "Cinema professional dedicated to quality filmmaking, innovative storytelling, and industry collaboration.");
         dto.setHighlights(dto.getBio());
         dto.setDateOfBirth(entity.getDateOfBirth());
-        dto.setExperience(entity.getExperience() != null ? entity.getExperience() : "5 Years");
+        dto.setExperience(entity.getExperience() != null ? entity.getExperience() : "");
         dto.setPrimaryCraft(entity.getPrimaryCraft() != null ? entity.getPrimaryCraft() : "Direction");
         dto.setSubCraft(entity.getSubCraft());
         dto.setHeadline(entity.getHeadline() != null && !entity.getHeadline().isBlank()
