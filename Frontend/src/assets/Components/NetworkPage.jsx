@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import api from '../../api'
+import { api as directoryApi } from '../../services/api'
 import {
   ArrowLeft,
   CalendarDays,
@@ -23,6 +24,23 @@ function getProfileKey(profileOrId) {
   return String(id || '').trim().toLowerCase()
 }
 
+function getProfileIdentityKeys(profile) {
+  return [
+    profile.id,
+    profile.userId,
+    profile.user_id,
+    profile._id,
+    profile.referId,
+    profile.email,
+  ]
+    .filter(Boolean)
+    .map((identifier) => String(identifier).trim().toLowerCase())
+}
+
+function getNormalizedProfileName(profile) {
+  return String(profile.name || '').trim().replace(/\s+/g, ' ').toLowerCase()
+}
+
 function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [] }) {
   const [activeTab, setActiveTab] = useState('grow')
   const [activeSection, setActiveSection] = useState('grow')
@@ -38,6 +56,10 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [] }
   const currentUserIdentityKey = JSON.stringify(currentUserIdentifiers
     .filter(Boolean)
     .map((identifier) => String(identifier).trim().toLowerCase()))
+  const suggestionProfiles = profiles.filter((profile) => (
+    !connectedProfiles.includes(getProfileKey(profile))
+    && !followedProfiles.includes(getProfileKey(profile))
+  ))
 
   function openConversation(profile) {
     if (!profile?.name) return
@@ -49,13 +71,35 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [] }
 
     async function loadNetworkData() {
       try {
-        const directory = await api.getProfileDirectory()
+        const [registeredProfiles, talentProfiles] = await Promise.all([
+          api.getProfileDirectory(),
+          directoryApi.talents.getAll(),
+        ])
         let networkProfiles = []
         try {
           networkProfiles = await api.getNetworkSuggestions()
         } catch (err) {
           console.warn('Network connection status load error:', err)
         }
+        const directory = []
+        const profilesToMerge = [
+          ...(Array.isArray(talentProfiles) ? talentProfiles : []),
+          ...(Array.isArray(registeredProfiles) ? registeredProfiles : []),
+        ]
+        profilesToMerge.filter((profile) => profile && profile.name).forEach((profile) => {
+          const identityKeys = new Set(getProfileIdentityKeys(profile))
+          const normalizedName = getNormalizedProfileName(profile)
+          const existingIndex = directory.findIndex((existingProfile) => (
+            getProfileIdentityKeys(existingProfile).some((key) => identityKeys.has(key))
+            || getNormalizedProfileName(existingProfile) === normalizedName
+          ))
+
+          if (existingIndex === -1) {
+            directory.push(profile)
+          } else {
+            directory[existingIndex] = { ...directory[existingIndex], ...profile }
+          }
+        })
         const networkProfilesById = new Map(
           (Array.isArray(networkProfiles) ? networkProfiles : [])
             .map((profile) => [getProfileKey(profile), profile]),
@@ -498,27 +542,16 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [] }
                     <p>Connect with artists and professionals in your community.</p>
                   </div>
                   <span className="network-suggestion-count">
-                    {profiles.filter((profile) => (
-                      !connectedProfiles.includes(getProfileKey(profile))
-                      && !followedProfiles.includes(getProfileKey(profile))
-                    )).length} suggestions
+                    {suggestionProfiles.length} suggestions
                   </span>
                 </header>
                 {connectionError && <p className="network-connection-error" role="alert">{connectionError}</p>}
                 {loadingProfiles
                   ? <p role="status">Loading profiles…</p>
-                  : profiles.some((profile) => (
-                    !connectedProfiles.includes(getProfileKey(profile))
-                    && !followedProfiles.includes(getProfileKey(profile))
-                  ))
+                  : suggestionProfiles.length > 0
                     ? (
                       <div className="network-profile-grid">
-                        {profiles
-                          .filter((profile) => (
-                            !connectedProfiles.includes(getProfileKey(profile))
-                            && !followedProfiles.includes(getProfileKey(profile))
-                          ))
-                          .map(renderProfileCard)}
+                        {suggestionProfiles.map(renderProfileCard)}
                       </div>
                     )
                     : <p>No profiles are available yet.</p>}

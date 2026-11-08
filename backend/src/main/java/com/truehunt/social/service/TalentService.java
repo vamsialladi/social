@@ -79,8 +79,15 @@ public class TalentService {
 
         // Add registered database profiles
         if (profileRepository != null) {
-            for (ProfileEntity p : profileRepository.findAll()) {
-                if (p.getName() == null || p.getName().isBlank()) continue;
+            List<ProfileEntity> registeredProfiles = profileRepository.findAll().stream()
+                    .filter(profile -> profile.getName() != null && !profile.getName().isBlank())
+                    .toList();
+            Set<String> registeredNames = registeredProfiles.stream()
+                    .map(profile -> normalizeName(profile.getName()))
+                    .collect(Collectors.toSet());
+            map.entrySet().removeIf(entry -> registeredNames.contains(normalizeName(entry.getValue().getName())));
+
+            for (ProfileEntity p : registeredProfiles) {
                 String uid = p.getUserId() != null && !p.getUserId().isBlank() ? p.getUserId() : String.valueOf(p.getId());
                 if (!map.containsKey(uid)) {
                     TalentDto dto = new TalentDto();
@@ -108,6 +115,10 @@ public class TalentService {
         }
 
         return new ArrayList<>(map.values());
+    }
+
+    private String normalizeName(String name) {
+        return name == null ? "" : name.trim().replaceAll("\\s+", " ").toLowerCase(Locale.ROOT);
     }
 
     private boolean isCraftMatching(TalentDto t, String craftQuery) {

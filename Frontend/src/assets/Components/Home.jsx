@@ -514,10 +514,21 @@ function Home({
               {profileDetails.experience && (
                 <p>{profileDetails.experience.toLowerCase().includes('year') ? `${profileDetails.experience} experience` : `${profileDetails.experience} years of experience`}</p>
               )}
-              {(languages.length > 0 || profileDetails.workTypes.length > 0) && (
+              {profileDetails.workTypes.length > 0 && (
                 <div className="home-profile-tags">
-                  {[...languages, ...profileDetails.workTypes].map((item) => (
-                    <span key={item}>{item}</span>
+                  {profileDetails.workTypes.map((workType) => (
+                    <span key={workType}>
+                      {workType.startsWith('Other: ')
+                        ? `Others: ${workType.slice('Other: '.length)}`
+                        : workType}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {languages.length > 0 && (
+                <div className="home-profile-tags">
+                  {languages.map((language) => (
+                    <span key={language}>{language}</span>
                   ))}
                 </div>
               )}

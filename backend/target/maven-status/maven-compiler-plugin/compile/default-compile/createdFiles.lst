@@ -15,6 +15,7 @@ com\truehunt\social\dto\ProfileDto.class
 com\truehunt\social\controller\SupportController.class
 com\truehunt\social\dto\ProfileUpdateRequest.class
 com\truehunt\social\controller\MediaController.class
+com\truehunt\social\repository\ProfileViewRepository.class
 com\truehunt\social\dto\StageUpdateRequest.class
 com\truehunt\social\controller\SearchController.class
 com\truehunt\social\controller\PostController.class
@@ -34,6 +35,7 @@ com\truehunt\social\model\ProfileEntity$3.class
 com\truehunt\social\model\PostEntity.class
 com\truehunt\social\controller\AuthController.class
 com\truehunt\social\controller\SettingsController.class
+com\truehunt\social\service\ProfileViewService.class
 com\truehunt\social\model\NetworkProfileEntity.class
 com\truehunt\social\controller\StatsController.class
 com\truehunt\social\exception\GlobalExceptionHandler.class
@@ -63,6 +65,7 @@ com\truehunt\social\service\PostService.class
 com\truehunt\social\service\StatsService.class
 com\truehunt\social\config\WebConfig.class
 com\truehunt\social\dto\TaskDto.class
+com\truehunt\social\model\ProfileViewEntity.class
 com\truehunt\social\dto\AuthResponse.class
 com\truehunt\social\dto\ApiResponse.class
 com\truehunt\social\repository\PostRepository.class

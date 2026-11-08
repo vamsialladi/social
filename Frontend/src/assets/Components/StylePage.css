@@ -128,7 +128,8 @@
 }
 
 .profile-modal-close:hover {
-  background: #f7f5f7;
+  color:white;
+  background: #d42d0c;
 }
 
 .profile-image-crop-backdrop {
@@ -935,7 +936,8 @@
 
 .artist-headline,
 .artist-location,
-.artist-experience {
+.artist-experience,
+.artist-languages {
   margin: 4px 0;
   color: #5f5c65;
   font-size: 13px;
@@ -4307,7 +4309,8 @@
 }
 
 .profile-page-content .artist-location,
-.profile-page-content .artist-experience {
+.profile-page-content .artist-experience,
+.profile-page-content .artist-languages {
   font-size: 13px;
 }
 

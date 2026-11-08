@@ -1144,10 +1144,15 @@ function ProfilePage({
 
     if (interaction.mode === 'move-frame') {
       const { frame } = interaction
+      const minX = Math.max(0, interaction.imageLeft)
+      const minY = Math.max(0, interaction.imageTop)
+      const maxX = Math.min(cropStageSize - frame.size, interaction.imageLeft + cropImageWidth - frame.size)
+      const maxY = Math.min(cropStageSize - frame.size, interaction.imageTop + cropImageHeight - frame.size)
+      setCropPosition({ x: interaction.imageLeft, y: interaction.imageTop })
       setCropFrame({
         ...frame,
-        x: Math.min(cropStageSize - frame.size, Math.max(0, frame.x + dx)),
-        y: Math.min(cropStageSize - frame.size, Math.max(0, frame.y + dy)),
+        x: Math.min(maxX, Math.max(minX, frame.x + dx)),
+        y: Math.min(maxY, Math.max(minY, frame.y + dy)),
       })
       return
     }
@@ -1656,6 +1661,15 @@ function ProfilePage({
     setIsSubmitted(false)
 
     const form = event.currentTarget
+    const addressField = form.elements.namedItem('address')
+    if (addressField.value.trim()) {
+      addressField.setCustomValidity('')
+    } else {
+      addressField.setCustomValidity('Enter your address.')
+      addressField.reportValidity()
+      return
+    }
+
     const videoInputs = Array.from(form.querySelectorAll('input[type="file"][data-video]'))
     const invalidVideoIndex = uploadedVideos.findIndex((video) => video && (
       video.file.size > MAX_VIDEO_SIZE
@@ -1871,7 +1885,7 @@ function ProfilePage({
                   : 'Add your talents in Edit profile'}
               </p>
               <p className="artist-location">
-                {profileDetails.address || 'Add your location in Edit profile'}
+                {profileDetails.address}
               </p>
               {profileDetails.experience && (
                 <p className="artist-experience">
@@ -1880,6 +1894,15 @@ function ProfilePage({
                     : profileDetails.experience.toLowerCase().includes('year')
                     ? profileDetails.experience
                     : `${profileDetails.experience} years of experience`}
+                </p>
+              )}
+              {profileDetails.languages.length > 0 && (
+                <p className="artist-languages">
+                  Languages: {profileDetails.languages.map((language) => (
+                    language === 'Other' && profileDetails.otherLanguage
+                      ? `Other: ${profileDetails.otherLanguage}`
+                      : language
+                  )).join(', ')}
                 </p>
               )}
               {(profileDetails.height || profileDetails.weight || profileDetails.skinTone || profileDetails.facialHair) && (
@@ -3201,6 +3224,7 @@ function ProfilePage({
                   <option value="Female">Female</option>
                   <option value="Male">Male</option>
                   <option value="Non-binary">Non-binary</option>
+                  <option value="Transgender">Transgender</option> 
                   <option value="Other">Other</option>
                   <option value="Prefer not to say">Prefer not to say</option>
                 </select>
@@ -3232,18 +3256,27 @@ function ProfilePage({
                   <option value="">Select skin tone</option>
                   <option value="White">White</option>
                   <option value="Brown">Brown</option>
+                  <option value="Black">Black</option>
+                  <option value="Olive">Olive</option>
                   <option value="Light brown">Light brown</option>
                   <option value="Dark">Dark</option>
                 </select>
               </div>
               <div className="form-field">
-                <label htmlFor="candidate-address">Candidate address</label>
+                <label htmlFor="candidate-address">Enter the Full Address <span aria-hidden="true">*</span></label>
                 <textarea
                   id="candidate-address"
                   name="address"
                   defaultValue={profileDetails.address}
                   placeholder="Street address, city, state, postal code"
                   rows="3"
+                  required
+                  aria-required="true"
+                  onChange={(event) => {
+                    event.currentTarget.setCustomValidity(
+                      event.currentTarget.value.trim() ? '' : 'Enter your address.',
+                    )
+                  }}
                 />
               </div>
             </div>

@@ -15,6 +15,23 @@ import ConnectionsPage from './ConnectionsPage'
 import Settings from './Settings'
 import { useAuth } from '../../context/AuthContext'
 
+function getProfileIdentityKeys(profile) {
+  return [
+    profile.id,
+    profile.userId,
+    profile.user_id,
+    profile._id,
+    profile.referId,
+    profile.email,
+  ]
+    .filter(Boolean)
+    .map((identifier) => String(identifier).trim().toLowerCase())
+}
+
+function getNormalizedProfileName(profile) {
+  return String(profile.name || '').trim().replace(/\s+/g, ' ').toLowerCase()
+}
+
 const navigationHashes = {
   home: 'home',
   network: 'network',
@@ -221,6 +238,7 @@ const genderFilters = [
   'Female',
   'Male',
   'Non-binary',
+  'Transgender',
   'Other',
   'Prefer not to say',
 ]
@@ -379,17 +397,26 @@ function Navigation({
         talent.user_id,
         talent.id,
         talent._id,
-        ...(talent.skills || []),
+        ...(Array.isArray(talent.skills) ? talent.skills : []),
+        ...(Array.isArray(talent.talents) ? talent.talents : []),
       ].filter(Boolean).join(' ').toLowerCase()
       const matchesKeyword = !keyword || searchableText.includes(keyword)
       const matchesLocation = !location || (talent.location || '').toLowerCase().includes(location)
       const matchesCategory = talentCategoryDraft === 'All'
-        || [talent.category, talent.primaryCraft, talent.craft]
-          .some((craft) => String(craft || '').toLowerCase() === talentCategoryDraft.toLowerCase())
+        || [
+          talent.category,
+          talent.primaryCraft,
+          talent.craft,
+          ...(Array.isArray(talent.talents) ? talent.talents : []),
+          ...(Array.isArray(talent.secondaryCrafts) ? talent.secondaryCrafts : []),
+        ].some((craft) => String(craft || '').trim().toLowerCase() === talentCategoryDraft.toLowerCase())
       const matchesCinemaType = selectedCinemaTypes.length === 0
         || selectedCinemaTypes.some((filter) => filter.terms.some((term) => searchableText.includes(term)))
+      const talentGender = String(
+        talent.gender ?? talent.profileDetails?.gender ?? talent.profile_details?.gender ?? '',
+      ).trim().toLowerCase()
       const matchesGender = genderDraft.length === 0
-        || genderDraft.some((gender) => (talent.gender || '').toLowerCase() === gender.toLowerCase())
+        || genderDraft.some((gender) => talentGender === gender.toLowerCase())
       const matchesSkinTone = skinToneDraft.length === 0
         || skinToneDraft.some((skinTone) => (talent.skinTone || '').toLowerCase() === skinTone.toLowerCase())
       const bodyBuild = (talent.bodyBuild || '').toLowerCase()
@@ -495,23 +522,50 @@ function Navigation({
         throw new Error('Talent search returned an invalid response.')
       }
 
-      const directory = [...talents]
-      profiles.forEach((profile) => {
-        const existingIndex = directory.findIndex((talent) => {
-          const talentId = talent.userId || talent.user_id || talent.id || talent._id
-          const profileId = profile.userId || profile.user_id || profile.id || profile._id
-          const talentName = talent.name?.trim().toLowerCase()
-          const profileName = profile.name?.trim().toLowerCase()
+      const directory = []
+      const currentProfile = profileDetails.name?.trim()
+        ? {
+            ...profileDetails,
+            id: profileDetails.id || profileDetails.userId,
+            category: profileDetails.category || profileDetails.primaryCraft,
+            craft: profileDetails.craft || profileDetails.primaryCraft,
+            role: profileDetails.role || profileDetails.subCraft || profileDetails.primaryCraft,
+            avatar: profileDetails.avatar || profileDetails.profileImageUrl || profilePreview,
+            location: profileDetails.location || profileDetails.address,
+          }
+        : null
+      const profilesToMerge = [...talents, ...profiles, ...(currentProfile ? [currentProfile] : [])]
+      profilesToMerge.forEach((profile) => {
+        if (!profile || typeof profile !== 'object') return
 
-          return (talentId && profileId && String(talentId) === String(profileId))
-            || (talentName && profileName && talentName === profileName)
-        })
+        const identityKeys = getProfileIdentityKeys(profile)
+        const identityKeySet = new Set(identityKeys)
+        const normalizedName = getNormalizedProfileName(profile)
+        const matchingIndexes = directory.reduce((matches, existingProfile, index) => {
+          const sharesIdentity = getProfileIdentityKeys(existingProfile)
+            .some((key) => identityKeySet.has(key))
+          const sharesNameWithoutIdentity = identityKeys.length === 0
+            && getProfileIdentityKeys(existingProfile).length === 0
+            && normalizedName
+            && getNormalizedProfileName(existingProfile) === normalizedName
 
-        if (existingIndex === -1) {
+          if (sharesIdentity || sharesNameWithoutIdentity) matches.push(index)
+          return matches
+        }, [])
+
+        if (matchingIndexes.length === 0) {
           directory.push(profile)
-        } else {
-          directory[existingIndex] = { ...directory[existingIndex], ...profile }
+          return
         }
+
+        const firstIndex = matchingIndexes[0]
+        const mergedProfile = matchingIndexes.reduce(
+          (merged, index) => ({ ...merged, ...directory[index] }),
+          {},
+        )
+        Object.assign(mergedProfile, profile)
+        matchingIndexes.slice(1).reverse().forEach((index) => directory.splice(index, 1))
+        directory[firstIndex] = mergedProfile
       })
 
       setTalentDirectory(directory)
@@ -700,53 +754,49 @@ function Navigation({
                         ))}
                       </fieldset>
                     )}
-                    {isActingFilterContext && (
-                      <>
-                        <fieldset className="social-talent-filter-group">
-                          <legend>Gender</legend>
-                          {genderFilters.map((gender) => (
-                            <label className="social-talent-filter-option" key={gender}>
-                              <input
-                                type="checkbox"
-                                name="talent-gender"
-                                value={gender}
-                                checked={genderDraft.includes(gender)}
-                                onChange={() => {
-                                  const removesMale = gender === 'Male' && genderDraft.includes('Male')
-                                  setGenderDraft((selected) => {
-                                    return selected.includes(gender)
-                                      ? selected.filter((value) => value !== gender)
-                                      : [...selected, gender]
-                                  })
-                                  if (removesMale) setFacialHairDraft([])
-                                }}
-                              />
-                              <span>{gender}</span>
-                            </label>
-                          ))}
-                        </fieldset>
-                        {genderDraft.includes('Male') && (
-                          <fieldset className="social-talent-filter-group">
-                            <legend>Facial hair</legend>
-                            {facialHairFilters.map((style) => (
-                              <label className="social-talent-filter-option" key={style}>
-                                <input
-                                  type="checkbox"
-                                  name="talent-facial-hair"
-                                  value={style}
-                                  checked={facialHairDraft.includes(style)}
-                                  onChange={() => setFacialHairDraft((selected) => (
-                                    selected.includes(style)
-                                      ? selected.filter((value) => value !== style)
-                                      : [...selected, style]
-                                  ))}
-                                />
-                                <span>{style}</span>
-                              </label>
-                            ))}
-                          </fieldset>
-                        )}
-                      </>
+                    <fieldset className="social-talent-filter-group">
+                      <legend>Gender</legend>
+                      {genderFilters.map((gender) => (
+                        <label className="social-talent-filter-option" key={gender}>
+                          <input
+                            type="checkbox"
+                            name="talent-gender"
+                            value={gender}
+                            checked={genderDraft.includes(gender)}
+                            onChange={() => {
+                              const removesMale = gender === 'Male' && genderDraft.includes('Male')
+                              setGenderDraft((selected) => (
+                                selected.includes(gender)
+                                  ? selected.filter((value) => value !== gender)
+                                  : [...selected, gender]
+                              ))
+                              if (removesMale) setFacialHairDraft([])
+                            }}
+                          />
+                          <span>{gender}</span>
+                        </label>
+                      ))}
+                    </fieldset>
+                    {isActingFilterContext && genderDraft.includes('Male') && (
+                      <fieldset className="social-talent-filter-group">
+                        <legend>Facial hair</legend>
+                        {facialHairFilters.map((style) => (
+                          <label className="social-talent-filter-option" key={style}>
+                            <input
+                              type="checkbox"
+                              name="talent-facial-hair"
+                              value={style}
+                              checked={facialHairDraft.includes(style)}
+                              onChange={() => setFacialHairDraft((selected) => (
+                                selected.includes(style)
+                                  ? selected.filter((value) => value !== style)
+                                  : [...selected, style]
+                              ))}
+                            />
+                            <span>{style}</span>
+                          </label>
+                        ))}
+                      </fieldset>
                     )}
                     {isActingFilterContext && (
                       <>
