@@ -42,6 +42,8 @@ export const api = {
   getProfile: () => fetchJson('/profiles/me'),
   getProfileById: (id) => fetchJson(`/profiles/${id}`),
   getProfileDirectory: () => fetchJson('/profiles/directory'),
+  recordProfileView: (id) => fetchJson(`/profiles/${encodeURIComponent(id)}/views`, { method: 'POST' }),
+  getProfileViewers: () => fetchJson('/profiles/me/viewers'),
   updateProfile: (profile) => fetchJson('/profiles/me', { method: 'PATCH', body: profile }),
   verifyReference: (referenceId) => fetchJson('/profiles/reference-check', { method: 'POST', body: { referenceId } }),
 

@@ -1773,7 +1773,8 @@ function ProfilePage({
               </div>
               {isOwnerView && (
                 <div className="profile-user-id">
-                  <span>{isProfileUserIdVisible ? displayedUserId || 'Unavailable' : '••••••••'}</span>
+                  <span className="profile-user-id-label">TrueHunt ID:</span>
+                  <span className="profile-user-id-value">{isProfileUserIdVisible ? displayedUserId || 'Unavailable' : '••••••••'}</span>
                   <button
                     type="button"
                     aria-label={isProfileUserIdVisible ? 'Hide user ID' : 'Show user ID'}

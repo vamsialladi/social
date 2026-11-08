@@ -59,6 +59,7 @@ C:\Users\varis\Desktop\truehut.in\Final_Code\social\backend\src\main\java\com\tr
 C:\Users\varis\Desktop\truehut.in\Final_Code\social\backend\src\main\java\com\truehunt\social\model\NotificationEntity.java
 C:\Users\varis\Desktop\truehut.in\Final_Code\social\backend\src\main\java\com\truehunt\social\model\PostEntity.java
 C:\Users\varis\Desktop\truehut.in\Final_Code\social\backend\src\main\java\com\truehunt\social\model\ProfileEntity.java
+C:\Users\varis\Desktop\truehut.in\Final_Code\social\backend\src\main\java\com\truehunt\social\model\ProfileViewEntity.java
 C:\Users\varis\Desktop\truehut.in\Final_Code\social\backend\src\main\java\com\truehunt\social\model\UserAccountEntity.java
 C:\Users\varis\Desktop\truehut.in\Final_Code\social\backend\src\main\java\com\truehunt\social\model\UserProfileRelationshipEntity.java
 C:\Users\varis\Desktop\truehut.in\Final_Code\social\backend\src\main\java\com\truehunt\social\repository\ConversationRepository.java
@@ -66,6 +67,7 @@ C:\Users\varis\Desktop\truehut.in\Final_Code\social\backend\src\main\java\com\tr
 C:\Users\varis\Desktop\truehut.in\Final_Code\social\backend\src\main\java\com\truehunt\social\repository\NotificationRepository.java
 C:\Users\varis\Desktop\truehut.in\Final_Code\social\backend\src\main\java\com\truehunt\social\repository\PostRepository.java
 C:\Users\varis\Desktop\truehut.in\Final_Code\social\backend\src\main\java\com\truehunt\social\repository\ProfileRepository.java
+C:\Users\varis\Desktop\truehut.in\Final_Code\social\backend\src\main\java\com\truehunt\social\repository\ProfileViewRepository.java
 C:\Users\varis\Desktop\truehut.in\Final_Code\social\backend\src\main\java\com\truehunt\social\repository\UserAccountRepository.java
 C:\Users\varis\Desktop\truehut.in\Final_Code\social\backend\src\main\java\com\truehunt\social\repository\UserProfileRelationshipRepository.java
 C:\Users\varis\Desktop\truehut.in\Final_Code\social\backend\src\main\java\com\truehunt\social\security\CustomUserDetailsService.java
@@ -83,6 +85,7 @@ C:\Users\varis\Desktop\truehut.in\Final_Code\social\backend\src\main\java\com\tr
 C:\Users\varis\Desktop\truehut.in\Final_Code\social\backend\src\main\java\com\truehunt\social\service\NotificationService.java
 C:\Users\varis\Desktop\truehut.in\Final_Code\social\backend\src\main\java\com\truehunt\social\service\PostService.java
 C:\Users\varis\Desktop\truehut.in\Final_Code\social\backend\src\main\java\com\truehunt\social\service\ProfileService.java
+C:\Users\varis\Desktop\truehut.in\Final_Code\social\backend\src\main\java\com\truehunt\social\service\ProfileViewService.java
 C:\Users\varis\Desktop\truehut.in\Final_Code\social\backend\src\main\java\com\truehunt\social\service\ProtectProducerService.java
 C:\Users\varis\Desktop\truehut.in\Final_Code\social\backend\src\main\java\com\truehunt\social\service\SettingsService.java
 C:\Users\varis\Desktop\truehut.in\Final_Code\social\backend\src\main\java\com\truehunt\social\service\StatsService.java

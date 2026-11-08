@@ -2421,8 +2421,10 @@
 
 .profile-page-content .profile-user-id {
   display: flex;
+  width: 100%;
   max-width: 100%;
   min-width: 0;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: center;
   gap: 5px;
@@ -2430,11 +2432,12 @@
   font-size: 12px;
 }
 
-.profile-page-content .profile-user-id span {
+.profile-page-content .profile-user-id-value {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  white-space: normal;
 }
 
 .profile-page-content .profile-user-id button {
@@ -4702,24 +4705,28 @@
 }
 
 @media (max-width: 800px) {
-  .linkedin-navbar {
-    height: auto;
-    min-height: 58px;
+  .cinemans-page {
+    padding-bottom: calc(84px + env(safe-area-inset-bottom));
   }
 
-  .linkedin-navbar-inner {
+  .cinemans-page .linkedin-navbar {
+    height: auto;
+    min-height: 66px;
+  }
+
+  .cinemans-page .linkedin-navbar-inner {
     position: relative;
     display: grid;
     width: min(100% - 24px, 1120px);
     height: auto;
-    min-height: 58px;
+    min-height: 66px;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 42px;
     grid-template-areas:
       "brand brand menu"
       "profile-search ref-search ref-search";
     gap: 8px;
     overflow: visible;
-    padding: 8px 0;
+    padding: 12px 0;
   }
 
   .linkedin-navbar-inner > a {
@@ -4758,87 +4765,49 @@
   }
 
   .linkedin-mobile-menu-toggle {
-    display: flex;
-    width: 42px;
-    height: 40px;
-    grid-area: menu;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 5px;
-    border: 1px solid #e4e0e5;
-    border-radius: 10px;
-    background: #fff;
-    color: #39333f;
-    cursor: pointer;
-    transition: border-color 160ms ease, background 160ms ease;
-  }
-
-  .linkedin-mobile-menu-toggle:hover,
-  .linkedin-mobile-menu-toggle[aria-expanded="true"] {
-    border-color: rgba(217, 75, 48, 0.35);
-    background: #fff5f1;
-  }
-
-  .linkedin-mobile-menu-toggle:focus-visible {
-    outline: 3px solid rgba(217, 75, 48, 0.25);
-    outline-offset: 2px;
-  }
-
-  .linkedin-mobile-menu-toggle span {
-    width: 18px;
-    height: 2px;
-    border-radius: 2px;
-    background: currentColor;
-    transition: transform 160ms ease, opacity 160ms ease;
-  }
-
-  .linkedin-navbar.is-mobile-menu-open .linkedin-mobile-menu-toggle span:first-child {
-    transform: translateY(7px) rotate(45deg);
-  }
-
-  .linkedin-navbar.is-mobile-menu-open .linkedin-mobile-menu-toggle span:nth-child(2) {
-    opacity: 0;
-  }
-
-  .linkedin-navbar.is-mobile-menu-open .linkedin-mobile-menu-toggle span:last-child {
-    transform: translateY(-7px) rotate(-45deg);
+    display: none;
   }
 
   .linkedin-navbar .linkedin-nav-items {
-    position: absolute;
-    top: calc(100% - 1px);
+    position: fixed;
+    z-index: 1000;
     right: 0;
+    bottom: 0;
     left: 0;
-    z-index: 20;
-    display: none;
-    width: auto;
+    grid-area: auto;
+    display: flex;
+    width: 100%;
+    min-width: 0;
     flex: none;
-    flex-direction: column;
-    align-items: stretch;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-around;
     gap: 3px;
     margin: 0;
-    padding: 8px;
-    border: 1px solid #e7e3e8;
-    border-radius: 14px;
-    background: #fff;
-    box-shadow: 0 16px 36px rgba(29, 24, 35, 0.16);
-  }
-
-  .linkedin-navbar.is-mobile-menu-open .linkedin-nav-items {
-    display: flex;
+    overflow-x: auto;
+    padding: 4px 6px calc(4px + env(safe-area-inset-bottom));
+    box-sizing: border-box;
+    border: 0;
+    border-top: 1px solid #e7e3e8;
+    border-radius: 0;
+    background: transparent;
+    background-color: #fff;
+    box-shadow: 0 -4px 16px rgba(29, 24, 35, 0.1);
+    scrollbar-width: thin;
   }
 
   .linkedin-navbar .linkedin-nav-items > .linkedin-nav-item,
   .linkedin-navbar .linkedin-profile-menu > .linkedin-nav-item {
-    width: 100%;
-    min-height: 44px;
-    flex-direction: row;
-    justify-content: flex-start;
-    gap: 12px;
-    padding: 8px 11px;
+    width: auto;
+    min-width: 58px;
+    min-height: 52px;
+    flex: 0 0 auto;
+    flex-direction: column;
+    justify-content: center;
+    gap: 4px;
+    padding: 5px 8px;
     border-radius: 9px;
-    font-size: 13px;
+    font-size: 11px;
   }
 
   .linkedin-navbar .linkedin-nav-items > .linkedin-nav-item:hover,
@@ -4847,7 +4816,8 @@
   }
 
   .linkedin-navbar .linkedin-nav-items .linkedin-nav-item small {
-    font-size: 13px;
+    font-size: 10px;
+    white-space: nowrap;
   }
 
   .linkedin-navbar .linkedin-nav-items .linkedin-nav-item .linkedin-nav-icon {
@@ -4856,8 +4826,23 @@
   }
 
   .linkedin-navbar .linkedin-profile-menu {
+    position: fixed;
+    top: 8px;
+    right: 12px;
+    z-index: 1101;
     display: block;
-    width: 100%;
+    width: auto;
+    flex: 0 0 auto;
+  }
+
+  .linkedin-navbar .linkedin-profile-menu > .linkedin-nav-item {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 4px;
+  }
+
+  .linkedin-navbar .linkedin-profile-menu > .linkedin-nav-item small {
+    display: none;
   }
 
   .linkedin-navbar .linkedin-nav-items > .linkedin-nav-divider {
@@ -4865,40 +4850,46 @@
   }
 
   .linkedin-navbar .linkedin-profile-dropdown {
-    position: static;
-    width: 100%;
+    position: fixed;
+    top: 64px;
+    right: 8px;
+    bottom: auto;
+    z-index: 1100;
+    width: min(240px, calc(100vw - 32px));
     max-height: min(45vh, 280px);
-    margin-top: 4px;
+    margin: 0;
     overflow-y: auto;
-    border: 0;
+    border: 1px solid #e3e1e5;
     border-radius: 9px;
-    background: #f8f7f8;
-    box-shadow: none;
+    background: #fff;
+    box-shadow: 0 12px 30px rgba(35, 29, 41, 0.2);
   }
 
   .linkedin-navbar .linkedin-nav-items > .linkedin-business {
-    width: 100%;
+    width: auto;
   }
 }
 
 @media (max-width: 640px) {
-  .linkedin-navbar-inner {
+  .cinemans-page .linkedin-navbar-inner {
     width: 100%;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 42px;
     grid-template-areas:
       "brand brand menu"
       "profile-search ref-search ref-search";
-    padding: 9px;
+    padding: 13px 9px;
   }
 
   .linkedin-navbar .linkedin-search-wrap .linkedin-search {
     width: 100%;
     flex: 1 1 auto;
   }
+}
 
-  .linkedin-navbar .linkedin-nav-items {
-    right: 9px;
-    left: 9px;
+@media (max-width: 800px) {
+  .cinemans-page.is-dark .linkedin-navbar .linkedin-nav-items {
+    border-top-color: #393d45;
+    background-color: #202329;
   }
 }
 

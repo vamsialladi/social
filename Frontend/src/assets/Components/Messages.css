@@ -40,18 +40,27 @@
 .messages-layout {
   display: grid;
   height: 100%;
-  width: min(100%, 1280px);
+  width: min(100%, 1180px);
   max-width: 100%;
   min-width: 0;
-  grid-template-columns: minmax(0, 3fr) minmax(220px, 0.7fr);
+  grid-template-columns: minmax(0, 1fr) 300px;
   align-items: stretch;
-  gap: 20px;
+  gap: 18px;
   margin: 0 auto;
+}
+
+.messages-main-column {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
 }
 
 .messages-shell {
   display: flex;
-  height: 100%;
+  height: auto;
+  flex: 1 1 auto;
+  min-height: 0;
   min-width: 0;
   overflow: hidden;
   flex-direction: column;
@@ -59,6 +68,39 @@
   border-radius: 12px;
   background: #fff;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.messages-promotion-column {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  padding-top: 10px;
+}
+
+.messages-promotion-column .home-promotion-card {
+  width: 100%;
+  min-height: 300px;
+}
+
+.messages-promotion-column .home-promotion-art {
+  min-height: 112px;
+}
+
+.messages-promotion-column .home-promotion-art-title {
+  font-size: 24px;
+}
+
+.messages-promotion-column .home-promotion-content {
+  gap: 12px;
+  padding: 16px 18px 18px;
+}
+
+.messages-promotion-column .home-promotion-content h2 {
+  font-size: 16px;
+}
+
+.messages-promotion-column .home-promotion-content p {
+  font-size: 13px;
 }
 
 .messages-header {
@@ -259,7 +301,11 @@
   min-width: 0;
   height: auto;
   min-height: 0;
-  grid-template-columns: minmax(300px, 40%) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.messages-content.is-chat-open {
+  grid-template-columns: minmax(260px, 40%) minmax(0, 1fr);
 }
 
 .messages-list {
@@ -385,38 +431,19 @@
 }
 
 .message-detail {
-  display: flex;
+  display: none;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
   flex-direction: column;
 }
 
+.messages-content.is-chat-open .message-detail {
+  display: flex;
+}
+
 .message-back-button {
   display: none;
-}
-
-.mobile-chat-popover {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 10px;
-  z-index: 20;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-}
-
-.mobile-chat-popover button {
-  border: 0;
-  background: transparent;
-  color: #1b1b1b;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  padding: 0;
 }
 
 .message-detail-header {
@@ -478,6 +505,10 @@
 
 .star-button.is-starred {
   color: #e3a400;
+}
+
+.message-close-button {
+  margin-left: 2px;
 }
 
 .message-sponsored {
@@ -563,6 +594,26 @@
   font-size: 12px;
 }
 
+.conversation-timestamp {
+  align-self: center;
+  margin: 8px 0 2px;
+  color: #777;
+  text-align: center;
+  font-size: 11px;
+}
+
+.conversation-message-time {
+  align-self: flex-start;
+  margin: -4px 0 4px 4px;
+  color: #777;
+  font-size: 11px;
+}
+
+.conversation-message-time.is-outgoing {
+  align-self: flex-end;
+  margin-right: 4px;
+}
+
 .conversation-bubble {
   align-self: flex-start;
   max-width: min(70%, 360px);
@@ -572,6 +623,10 @@
   color: #333;
   font-size: 13px;
   line-height: 1.5;
+  border: 0;
+  text-align: left;
+  font-family: inherit;
+  cursor: pointer;
 }
 
 .conversation-bubble.is-outgoing {
@@ -590,18 +645,13 @@
   background: #fff;
 }
 
-.messages-sidebar {
-  display: grid;
-  align-content: start;
-  gap: 18px;
-}
-
 .messages-sidebar-footer {
   display: flex;
+  flex: 0 0 auto;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 12px 18px;
-  padding: 0 10px;
+  gap: 8px 18px;
+  padding: 8px 10px 0;
   color: #686868;
   font-size: 12px;
 }
@@ -828,30 +878,46 @@
 }
 
 @media (max-width: 740px) {
-  .messages-layout {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .messages-sidebar {
-    display: none;
+  .cinemans-page.is-messaging {
+    row-gap: 0;
   }
 
   .messages-page {
-    padding: 6px 10px 8px;
+    width: 100%;
+    min-width: 0;
+    padding: 6px 8px 8px;
+  }
+
+  .messages-layout,
+  .messages-shell {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .messages-main-column {
+    width: 100%;
+  }
+
+  .messages-shell {
+    border-radius: 8px;
   }
 
   .messages-header {
     min-height: 60px;
-    gap: 12px;
-    padding: 0 12px;
+    min-width: 0;
+    gap: 8px;
+    padding: 0 10px;
   }
 
   .messages-header h1 {
+    min-width: 0;
     font-size: 18px;
   }
 
   .messages-search {
-    width: 100%;
+    width: auto;
+    min-width: 0;
+    flex: 1 1 0;
     height: 38px;
     gap: 6px;
     padding: 0 8px;
@@ -867,8 +933,10 @@
 
   .messages-filters {
     min-height: 58px;
+    flex-wrap: nowrap;
     gap: 6px;
-    overflow-x: visible;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
     padding: 0 10px;
   }
 
@@ -885,18 +953,28 @@
 
   .messages-filter-chip {
     min-height: 38px;
+    flex: 0 0 auto;
     font-size: 14px;
   }
 
   .messages-content {
+    display: grid;
+    width: 100%;
     flex: 1;
     height: auto;
     min-height: 0;
     grid-template-columns: minmax(0, 1fr);
   }
 
+  .messages-content.is-chat-open {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .messages-list {
     display: block;
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
     height: 100%;
     min-height: 0;
     max-height: none;
@@ -920,6 +998,9 @@
 
   .message-detail {
     display: none;
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
     min-height: 0;
   }
 
@@ -927,9 +1008,28 @@
     display: flex;
   }
 
+  .message-close-button {
+    display: none;
+  }
+
   .message-conversation {
+    width: 100%;
+    box-sizing: border-box;
     min-height: 0;
     padding: 12px;
+  }
+
+  .message-reply {
+    box-sizing: border-box;
+    min-width: 0;
+    margin: 8px 10px 10px;
+    padding: 10px 12px 8px;
+  }
+
+  .message-reply-input,
+  .message-reply-input input {
+    box-sizing: border-box;
+    min-width: 0;
   }
 
   .message-back-button {
@@ -949,12 +1049,13 @@
 
   .message-detail-header {
     position: relative;
+    min-width: 0;
     min-height: 58px;
     padding: 0 10px;
   }
 
   .message-contact p {
-    max-width: 48vw;
+    max-width: 40vw;
     font-size: 12px;
   }
 
@@ -963,19 +1064,20 @@
   }
 }
 
-@media (max-width: 1179px) {
-  .messages-page {
-    height: calc(100dvh - 72px);
+@media (max-width: 900px) {
+  .messages-layout {
+    grid-template-columns: minmax(0, 1fr);
+    width: 100%;
+  }
+
+  .messages-promotion-column {
+    display: none;
   }
 }
 
-@media (min-width: 741px) and (max-width: 1050px) {
-  .messages-layout {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .messages-sidebar {
-    display: none;
+@media (max-width: 1179px) {
+  .messages-page {
+    height: calc(100dvh - 72px);
   }
 }
 
@@ -997,5 +1099,34 @@
 
   .messages-header-actions {
     margin-left: 0;
+  }
+}
+
+@media (max-width: 900px) {
+  .cinemans-page.is-messaging .messages-route:not([hidden]) {
+    overflow-y: auto;
+  }
+
+  .messages-page {
+    height: auto;
+    min-height: 100%;
+    overflow-y: visible;
+  }
+
+  .messages-layout {
+    height: auto;
+    min-height: 100%;
+    grid-template-rows: minmax(65dvh, auto) auto;
+    gap: 24px;
+  }
+
+  .messages-main-column {
+    min-height: 65dvh;
+  }
+
+  .messages-promotion-column {
+    display: flex;
+    padding-top: 0;
+    padding-bottom: 16px;
   }
 }

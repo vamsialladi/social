@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ChevronDown,
   ChevronLeft,
@@ -114,6 +114,42 @@ const categories = ['Opportunities', 'Unread', 'Connections', 'InMail', 'Starred
 const mailboxOptions = ['Focused', 'Other', 'Archived', 'Spam']
 const emojis = ['😀', '😂', '😍', '😊', '👍', '🎉', '❤️', '🙏']
 
+function formatMessageTimestamp(timestamp) {
+  const date = new Date(timestamp)
+  if (Number.isNaN(date.getTime())) return ''
+
+  return new Intl.DateTimeFormat(undefined, {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(date)
+}
+
+function formatMessageDate(timestamp) {
+  const date = new Date(timestamp)
+  if (Number.isNaN(date.getTime())) return ''
+
+  return new Intl.DateTimeFormat(undefined, {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  }).format(date)
+}
+
+function formatMessageTime(timestamp) {
+  const date = new Date(timestamp)
+  if (Number.isNaN(date.getTime())) return ''
+
+  return new Intl.DateTimeFormat(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(date)
+}
+
 function createProfileConversation(conversation) {
   const name = conversation?.name?.trim()
   if (!name) return null
@@ -176,10 +212,13 @@ function Messages({ conversationToOpen, openConversationRef, onProfileSelect }) 
   const [replyText, setReplyText] = useState('')
   const [replyAttachment, setReplyAttachment] = useState(null)
   const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false)
+  const [expandedMessageTimeId, setExpandedMessageTimeId] = useState(null)
   const [isMobileDetailOpen, setIsMobileDetailOpen] = useState(
     () => Boolean(initialProfileConversation && window.innerWidth <= 740),
   )
-  const [isMobileChatPopoverOpen, setIsMobileChatPopoverOpen] = useState(false)
+  const [isDesktopChatOpen, setIsDesktopChatOpen] = useState(
+    () => Boolean(initialProfileConversation && window.innerWidth > 740),
+  )
   const replyInputRef = useRef(null)
   const attachmentInputRef = useRef(null)
   const emojiPickerRef = useRef(null)
@@ -214,7 +253,7 @@ function Messages({ conversationToOpen, openConversationRef, onProfileSelect }) 
     setActiveCategory('')
     setSearch('')
     setIsMobileDetailOpen(window.innerWidth <= 740)
-    setIsMobileChatPopoverOpen(false)
+    setIsDesktopChatOpen(window.innerWidth > 740)
   }, [messages])
 
   useEffect(() => {
@@ -260,7 +299,8 @@ function Messages({ conversationToOpen, openConversationRef, onProfileSelect }) 
     const handleResize = () => {
       if (window.innerWidth > 740) {
         setIsMobileDetailOpen(false)
-        setIsMobileChatPopoverOpen(false)
+      } else {
+        setIsDesktopChatOpen(false)
       }
     }
 
@@ -277,18 +317,13 @@ function Messages({ conversationToOpen, openConversationRef, onProfileSelect }) 
 
   function handleSelectMessage(id) {
     if (window.innerWidth <= 740) {
-      if (selectedId === id && isMobileDetailOpen) {
-        setIsMobileChatPopoverOpen((current) => !current)
-        return
-      }
-
       setSelectedId(id)
       setIsMobileDetailOpen(true)
-      setIsMobileChatPopoverOpen(false)
       return
     }
 
     setSelectedId(id)
+    setIsDesktopChatOpen(true)
   }
 
   function toggleStar(id) {
@@ -314,7 +349,7 @@ function Messages({ conversationToOpen, openConversationRef, onProfileSelect }) 
             ...(!message.thread?.length && !message.sponsored
               ? [{ id: `${message.id}-initial`, content: message.description, direction: 'incoming' }]
               : []),
-            { id: messageId, content, attachment, direction: 'outgoing' },
+            { id: messageId, content, attachment, direction: 'outgoing', sentAt: new Date().toISOString() },
           ],
           preview: content || `Attachment: ${attachment.name}`,
           date: 'Now',
@@ -361,7 +396,7 @@ function Messages({ conversationToOpen, openConversationRef, onProfileSelect }) 
       sponsored: false,
       subject: 'New message',
       description: content,
-      thread: [{ id: messageId, content, direction: 'outgoing' }],
+      thread: [{ id: messageId, content, direction: 'outgoing', sentAt: new Date().toISOString() }],
     }
 
     setMessages((currentMessages) => [newMessage, ...currentMessages])
@@ -375,7 +410,8 @@ function Messages({ conversationToOpen, openConversationRef, onProfileSelect }) 
   return (
     <main className="messages-page" id="messages" aria-label="Messages">
       <div className="messages-layout">
-        <section className="messages-shell">
+        <div className="messages-main-column">
+          <section className="messages-shell">
         <header className="messages-header">
           <h1>Messaging</h1>
           <label className="messages-search">
@@ -445,7 +481,7 @@ function Messages({ conversationToOpen, openConversationRef, onProfileSelect }) 
           ))}
         </nav>
 
-        <div className={`messages-content${isMobileDetailOpen ? ' is-detail-open' : ''}`}>
+        <div className={`messages-content${isMobileDetailOpen ? ' is-detail-open' : ''}${isDesktopChatOpen ? ' is-chat-open' : ''}`}>
           <aside className="messages-list" aria-label="Conversation list">
             {visibleMessages.length ? visibleMessages.map((message) => (
               <div
@@ -496,25 +532,11 @@ function Messages({ conversationToOpen, openConversationRef, onProfileSelect }) 
                     aria-label="Back to message list"
                     onClick={() => {
                       setIsMobileDetailOpen(false)
-                      setIsMobileChatPopoverOpen(false)
                     }}
                   >
                     <ChevronLeft size={18} strokeWidth={2.5} />
                     <span>Messages</span>
                   </button>
-                  {isMobileChatPopoverOpen && (
-                    <div className="mobile-chat-popover" role="dialog" aria-label="Conversation actions">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsMobileChatPopoverOpen(false)
-                          setIsMobileDetailOpen(false)
-                        }}
-                      >
-                        Close chat
-                      </button>
-                    </div>
-                  )}
                   <div className="message-contact">
                     <button
                       className={`message-avatar message-profile-button avatar-${selectedMessage.color}`}
@@ -553,42 +575,85 @@ function Messages({ conversationToOpen, openConversationRef, onProfileSelect }) 
                     >
                       <Star size={29} strokeWidth={1.8} fill={selectedMessage.starred ? 'currentColor' : 'none'} />
                     </button>
+                    <button
+                      className="messages-icon-button message-close-button"
+                      type="button"
+                      aria-label="Close chat"
+                      onClick={() => setIsDesktopChatOpen(false)}
+                    >
+                      <X size={23} strokeWidth={2.2} />
+                    </button>
                   </div>
                 </header>
 
-                <article className="message-sponsored">
-                  <div className="sponsored-meta">
-                    <span>Sponsored</span>
-                    <time>{selectedMessage.date}</time>
-                  </div>
-                  <div className="sponsored-content">
-                    <h3>{initialMessages[0].subject}</h3>
-                    <p>{initialMessages[0].description}</p>
-                  </div>
-                </article>
-
                 {(!selectedMessage.sponsored || selectedMessage.thread?.length > 0) && (
                   <article className="message-conversation">
-                    <p className="conversation-date">{selectedMessage.date}</p>
+                    {!(selectedMessage.thread || []).some((message) => message.sentAt) && (
+                      <p className="conversation-date">{selectedMessage.date}</p>
+                    )}
                     {(selectedMessage.thread?.length
                       ? selectedMessage.thread
                       : selectedMessage.description
                         ? [{ id: `${selectedMessage.id}-initial`, content: selectedMessage.description, direction: 'incoming' }]
                         : []
-                    ).map((message) => (
-                      <div
-                        className={`conversation-bubble${message.direction === 'outgoing' ? ' is-outgoing' : ''}`}
-                        key={message.id}
-                      >
-                        {message.content && <span>{message.content}</span>}
-                        {message.attachment && (
-                          <span className="conversation-attachment">
-                            <Paperclip size={14} aria-hidden="true" />
-                            {message.attachment.name}
-                          </span>
-                        )}
-                      </div>
-                    ))}
+                    ).map((message, index, thread) => {
+                      const sentDate = message.sentAt ? new Date(message.sentAt) : null
+                      const dateKey = sentDate && !Number.isNaN(sentDate.getTime())
+                        ? `${sentDate.getFullYear()}-${sentDate.getMonth()}-${sentDate.getDate()}`
+                        : ''
+                      const previousSentDate = index > 0 && thread[index - 1].sentAt
+                        ? new Date(thread[index - 1].sentAt)
+                        : null
+                      const previousDateKey = previousSentDate && !Number.isNaN(previousSentDate.getTime())
+                        ? `${previousSentDate.getFullYear()}-${previousSentDate.getMonth()}-${previousSentDate.getDate()}`
+                        : ''
+                      const showDate = Boolean(dateKey && dateKey !== previousDateKey)
+                      const bubbleClassName = `conversation-bubble${message.direction === 'outgoing' ? ' is-outgoing' : ''}`
+                      const bubbleContent = (
+                        <>
+                          {message.content && <span>{message.content}</span>}
+                          {message.attachment && (
+                            <span className="conversation-attachment">
+                              <Paperclip size={14} aria-hidden="true" />
+                              {message.attachment.name}
+                            </span>
+                          )}
+                        </>
+                      )
+
+                      return (
+                        <Fragment key={message.id}>
+                          {showDate && (
+                            <time className="conversation-timestamp" dateTime={message.sentAt}>
+                              {formatMessageDate(message.sentAt)}
+                            </time>
+                          )}
+                          {message.sentAt ? (
+                            <button
+                              className={bubbleClassName}
+                              type="button"
+                              aria-label={`Message sent ${formatMessageTimestamp(message.sentAt)}`}
+                              aria-expanded={expandedMessageTimeId === message.id}
+                              onClick={() => setExpandedMessageTimeId((currentId) => (
+                                currentId === message.id ? null : message.id
+                              ))}
+                            >
+                              {bubbleContent}
+                            </button>
+                          ) : (
+                            <div className={bubbleClassName}>{bubbleContent}</div>
+                          )}
+                          {message.sentAt && expandedMessageTimeId === message.id && (
+                            <time
+                              className={`conversation-message-time${message.direction === 'outgoing' ? ' is-outgoing' : ''}`}
+                              dateTime={message.sentAt}
+                            >
+                              {formatMessageTime(message.sentAt)}
+                            </time>
+                          )}
+                        </Fragment>
+                      )
+                    })}
                   </article>
                 )}
 
@@ -676,10 +741,11 @@ function Messages({ conversationToOpen, openConversationRef, onProfileSelect }) 
             )}
           </section>
         </div>
-        </section>
+          </section>
+        </div>
 
-        <aside className="messages-sidebar" aria-label="Discover opportunities">
-          <section className="home-promotion-card" aria-label="Sponsored movie industry promotion">
+        <aside className="messages-promotion-column" aria-label="Promotion">
+          <section className="home-promotion-card" aria-label="Promoted film career opportunity">
             <div className="home-promotion-art">
               <span className="home-promotion-label">PROMOTED</span>
               <span className="home-promotion-art-title">THE NEXT<br />BIG PICTURE</span>
@@ -689,10 +755,9 @@ function Messages({ conversationToOpen, openConversationRef, onProfileSelect }) 
               <h2>Bring your next story to the screen</h2>
               <p>Northstar Films is meeting new writers, actors, and independent filmmakers for upcoming productions.</p>
               <span className="home-promotion-caption">Make your mark in the movies.</span>
-              <button className="home-promotion-button" type="button">Explore film careers</button>
             </div>
           </section>
-          <footer className="messages-sidebar-footer">
+          <footer className="messages-sidebar-footer" aria-label="Messages information">
             <a href="/" onClick={(event) => event.preventDefault()}>About</a>
             <a href="/" onClick={(event) => event.preventDefault()}>Help Center</a>
             <a href="/" onClick={(event) => event.preventDefault()}>Privacy &amp; Terms</a>

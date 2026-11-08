@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { UsersRound, X } from 'lucide-react'
+import { Eye, UsersRound, X } from 'lucide-react'
 import './Home.css'
 import Article from './Article.jsx'
 import api from '../../api'
@@ -47,8 +47,11 @@ function Home({
   ))
   const [profileDirectory, setProfileDirectory] = useState([])
   const [connectedProfiles, setConnectedProfiles] = useState([])
+  const [profileViewers, setProfileViewers] = useState([])
   const [connectionsError, setConnectionsError] = useState('')
+  const [profileViewersError, setProfileViewersError] = useState('')
   const [isConnectionsOpen, setIsConnectionsOpen] = useState(false)
+  const [isProfileViewersOpen, setIsProfileViewersOpen] = useState(false)
   const [isWritingArticle, setIsWritingArticle] = useState(false)
   const [draft, setDraft] = useState('')
   const [draftType, setDraftType] = useState('post')
@@ -152,6 +155,30 @@ function Home({
       isCurrent = false
     }
   }, [activeNavigation])
+
+  useEffect(() => {
+    if (activeNavigation !== 'home') return undefined
+
+    let isCurrent = true
+    async function loadProfileViewers() {
+      setProfileViewersError('')
+      try {
+        const data = await api.getProfileViewers()
+        if (!Array.isArray(data)) {
+          throw new Error('Profile viewers returned an invalid response.')
+        }
+        if (isCurrent) setProfileViewers(data)
+      } catch (error) {
+        console.error('Failed to load profile viewers:', error)
+        if (isCurrent) setProfileViewersError('Could not load profile viewers. Please try again.')
+      }
+    }
+
+    loadProfileViewers()
+    return () => {
+      isCurrent = false
+    }
+  }, [activeNavigation, currentUserId])
 
   useEffect(() => {
     function handleConnectionChanged(event) {
@@ -496,20 +523,52 @@ function Home({
               )}
             </div>
           </section>
-          <button
-            className="home-card home-connections-card"
-            type="button"
-            onClick={() => setIsConnectionsOpen(true)}
-            aria-haspopup="dialog"
-          >
-            <span className="home-connections-icon"><UsersRound size={20} aria-hidden="true" /></span>
-            <span className="home-connections-copy">
-              <strong>Connections</strong>
-              <small>View your professional network</small>
-            </span>
-            <span className="home-connections-count">{connectedProfiles.length}</span>
-          </button>
+          <div className="home-card home-sidebar-stats">
+            <button
+              className="home-connections-card"
+              type="button"
+              onClick={() => {
+                setIsProfileViewersOpen(false)
+                setIsConnectionsOpen(true)
+              }}
+              aria-haspopup="dialog"
+            >
+              <span className="home-connections-icon"><UsersRound size={20} aria-hidden="true" /></span>
+              <span className="home-connections-copy">
+                <strong>Connections</strong>
+                <small>View your professional network</small>
+              </span>
+              <span className="home-connections-count">{connectedProfiles.length}</span>
+            </button>
+            <button
+              className="home-profile-viewers-card"
+              type="button"
+              onClick={() => {
+                setIsConnectionsOpen(false)
+                setIsProfileViewersOpen(true)
+                api.getProfileViewers().then((data) => {
+                  if (!Array.isArray(data)) {
+                    throw new Error('Profile viewers returned an invalid response.')
+                  }
+                  setProfileViewers(data)
+                  setProfileViewersError('')
+                }).catch((error) => {
+                  console.error('Failed to refresh profile viewers:', error)
+                  setProfileViewersError('Could not load profile viewers. Please try again.')
+                })
+              }}
+              aria-haspopup="dialog"
+            >
+              <span className="home-connections-icon"><Eye size={20} aria-hidden="true" /></span>
+              <span className="home-connections-copy">
+                <strong>Profile viewers</strong>
+                <small>Profile visibility insights</small>
+              </span>
+              <span className="home-connections-count">{profileViewers.length}</span>
+            </button>
+          </div>
           {connectionsError && <p className="home-connections-error" role="alert">{connectionsError}</p>}
+          {profileViewersError && <p className="home-connections-error" role="alert">{profileViewersError}</p>}
         </aside>
 
         <div className="home-feed-column">
@@ -893,6 +952,78 @@ function Home({
             <div className="home-connections-empty">
               <UsersRound size={24} aria-hidden="true" />
               <p>No connections yet.</p>
+            </div>
+          )}
+        </section>
+      </div>
+    )}
+    {isProfileViewersOpen && (
+      <div
+        className="home-connections-backdrop"
+        onMouseDown={(event) => {
+          if (event.target === event.currentTarget) setIsProfileViewersOpen(false)
+        }}
+      >
+        <section
+          className="home-connections-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="home-profile-viewers-title"
+        >
+          <header className="home-connections-dialog-header">
+            <div>
+              <h2 id="home-profile-viewers-title">Profile viewers</h2>
+              <p>{profileViewers.length} people viewed your profile</p>
+            </div>
+            <button
+              type="button"
+              className="home-connections-close"
+              aria-label="Close profile viewers"
+              onClick={() => setIsProfileViewersOpen(false)}
+            >
+              <X size={20} aria-hidden="true" />
+            </button>
+          </header>
+          {profileViewersError ? (
+            <p className="home-profile-viewers-message" role="alert">{profileViewersError}</p>
+          ) : profileViewers.length ? (
+            <ul className="home-connections-list">
+              {profileViewers.map((profile) => {
+                const profileName = profile.name || 'TrueHunt member'
+                const profileImage = profile.profileImageUrl || profile.avatar || ''
+                const initials = profileName
+                  .split(/\s+/)
+                  .map((part) => part[0])
+                  .join('')
+                  .slice(0, 2)
+
+                return (
+                  <li key={profile.userId || profile.id || profileName}>
+                    <button
+                      type="button"
+                      className="home-connection-person"
+                      onClick={() => {
+                        setIsProfileViewersOpen(false)
+                        onViewConnection?.({
+                          ...profile,
+                          userId: profile.userId || profile.id || '',
+                          profileImageUrl: profileImage,
+                        })
+                      }}
+                    >
+                      <span className={`home-avatar home-connection-avatar${profileImage ? '' : ' is-placeholder'}`}>
+                        {profileImage ? <img src={profileImage} alt="" /> : initials}
+                      </span>
+                      <span className="home-connection-person-name">{profileName}</span>
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+          ) : (
+            <div className="home-connections-empty">
+              <Eye size={24} aria-hidden="true" />
+              <p>No profile viewers yet.</p>
             </div>
           )}
         </section>

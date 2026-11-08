@@ -3,6 +3,7 @@ package com.truehunt.social.controller;
 import com.truehunt.social.dto.*;
 import com.truehunt.social.service.PostService;
 import com.truehunt.social.service.ProfileService;
+import com.truehunt.social.service.ProfileViewService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -15,10 +16,31 @@ public class ProfileController {
 
     private final ProfileService profileService;
     private final PostService postService;
+    private final ProfileViewService profileViewService;
 
-    public ProfileController(ProfileService profileService, PostService postService) {
+    public ProfileController(
+            ProfileService profileService,
+            PostService postService,
+            ProfileViewService profileViewService
+    ) {
         this.profileService = profileService;
         this.postService = postService;
+        this.profileViewService = profileViewService;
+    }
+
+    @GetMapping("/me/viewers")
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getMyProfileViewers(
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(profileViewService.getMyViewers(userEmail)));
+    }
+
+    @PostMapping("/{profileId}/views")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> recordProfileView(
+            @PathVariable String profileId,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(profileViewService.recordView(profileId, userEmail)));
     }
 
     @GetMapping("/directory")

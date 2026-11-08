@@ -1227,6 +1227,7 @@ export default function SocialApp() {
     }
   })
   const openConversationRef = useRef(null)
+  const recordedProfileViewRef = useRef('')
   const [theme, setTheme] = useState('light')
   const [profileDetails, setProfileDetails] = useState(emptyProfileDetails)
   const [profilePreview, setProfilePreview] = useState('')
@@ -1318,6 +1319,38 @@ export default function SocialApp() {
   }
 
   useEffect(() => {
+    const candidateId = String(
+      viewingCandidateProfile?.userId
+        || viewingCandidateProfile?.id
+        || '',
+    ).trim()
+    if (activeNavigation !== 'profile' || !candidateId || !isAuthenticated) return
+
+    const ownProfileIds = [
+      profileDetails.userId,
+      profileDetails.id,
+      user?.userId,
+      user?.id,
+    ].filter(Boolean).map((id) => String(id).trim().toLowerCase())
+    if (ownProfileIds.includes(candidateId.toLowerCase())) return
+    if (recordedProfileViewRef.current === candidateId) return
+
+    recordedProfileViewRef.current = candidateId
+    api.recordProfileView(candidateId).catch((error) => {
+      recordedProfileViewRef.current = ''
+      console.warn('Could not record profile view:', error)
+    })
+  }, [
+    activeNavigation,
+    isAuthenticated,
+    profileDetails.id,
+    profileDetails.userId,
+    user?.id,
+    user?.userId,
+    viewingCandidateProfile,
+  ])
+
+  useEffect(() => {
     if (location.state?.connectTalent) {
       navigate(`${location.pathname}${location.search}`, { replace: true, state: null })
     }
@@ -1376,7 +1409,7 @@ export default function SocialApp() {
   }, [profileStorageKey])
 
   return (
-    <main className={`cinemans-page is-preview${activeNavigation === 'home' ? ' is-home' : ''}${theme === 'dark' ? ' is-dark' : ''}`}>
+    <main className={`cinemans-page is-preview${activeNavigation === 'home' ? ' is-home' : ''}${activeNavigation === 'messaging' ? ' is-messaging' : ''}${theme === 'dark' ? ' is-dark' : ''}`}>
       <Navigation
         activeNavigation={activeNavigation}
         setActiveNavigation={setActiveNavigation}
@@ -1417,7 +1450,7 @@ export default function SocialApp() {
           }}
         />
       </div>
-      <div hidden={activeNavigation !== 'messaging'}>
+      <div className="messages-route" hidden={activeNavigation !== 'messaging'}>
         <Messages
           conversationToOpen={location.state?.openConversation}
           openConversationRef={openConversationRef}
