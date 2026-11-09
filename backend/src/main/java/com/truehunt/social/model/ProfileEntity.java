@@ -71,7 +71,8 @@ public class ProfileEntity {
     @Column(columnDefinition = "TEXT")
     private String workTypesJson = "[]";
 
-    @Column(length = 2048)
+    @Lob
+    @Column(name = "profile_image_url", columnDefinition = "CLOB")
     private String profileImageUrl;
 
     @Column(length = 2048)

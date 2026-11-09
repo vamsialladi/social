@@ -201,6 +201,10 @@
   color: #5d5b60;
 }
 
+.cinemans-page.is-home .linkedin-navbar {
+  margin-bottom: 12px;
+}
+
 .linkedin-navbar-inner {
   display: flex;
   width: min(100% - 40px, 1120px);
@@ -649,6 +653,32 @@
   background: #e9e7eb;
 }
 
+.business-explore-dropdown {
+  width: 230px;
+}
+
+.business-explore-dropdown-heading {
+  padding: 8px 10px 6px;
+  color: #77737d;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.business-explore-dropdown-link {
+  justify-content: space-between;
+  text-decoration: none;
+}
+
+.business-explore-dropdown-link span {
+  color: #77737d;
+}
+
+.cinemans-page.is-dark .business-explore-dropdown-heading,
+.cinemans-page.is-dark .business-explore-dropdown-link span {
+  color: #b6c1cc;
+}
+
 .linkedin-nav-divider {
   width: 1px;
   margin: 9px 0;
@@ -682,6 +712,10 @@
     width: auto;
     height: 58px;
     margin: -32px -14px 20px;
+  }
+
+  .cinemans-page.is-home .linkedin-navbar {
+    margin-bottom: 10px;
   }
 
   .linkedin-navbar-inner {
@@ -740,7 +774,6 @@
 .cinemans-page.is-dark .navigation-placeholder,
 .cinemans-page.is-dark .home-card,
 .cinemans-page.is-dark .home-post,
-.cinemans-page.is-dark .home-news-card,
 .cinemans-page.is-dark .home-empty-feed,
 .cinemans-page.is-dark .network-manage-card,
 .cinemans-page.is-dark .network-tip-card,
@@ -848,8 +881,7 @@
   .home-feed-sort,
   .home-empty-feed h2,
   .home-post-title,
-  .home-post-content,
-  .home-news-card h2) {
+  .home-post-content) {
   color: #e5e7eb;
 }
 

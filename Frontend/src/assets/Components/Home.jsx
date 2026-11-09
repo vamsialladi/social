@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { Eye, UsersRound, X } from 'lucide-react'
+import { ArrowUpRight, Eye, MessageCircle, ThumbsUp, UsersRound, X } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import './Home.css'
 import Article from './Article.jsx'
 import api from '../../api'
@@ -30,6 +31,29 @@ function readDismissedPostIds(storageKey) {
   }
 }
 
+function getPostPreviewText(post) {
+  const candidates = [
+    post.content,
+    post.text,
+    post.body,
+    post.caption,
+    post.description,
+    post.title,
+  ]
+  return candidates
+    .map((value) => (typeof value === 'string' ? value.trim() : ''))
+    .find((value) => value && value.toLowerCase() !== 'post' && value.toLowerCase() !== 'shared a post') || ''
+}
+
+function getPostPreviewMedia(post) {
+  const media = post.media && typeof post.media === 'object' ? post.media : {}
+  const url = media.url || post.mediaUrl || post.imageUrl || post.videoUrl
+  if (!url) return null
+
+  const type = String(media.kind || media.type || media.contentType || post.mediaType || '').toLowerCase()
+  return { url, isVideo: type.includes('video') }
+}
+
 function Home({
   profileDetails,
   profilePreview,
@@ -42,6 +66,7 @@ function Home({
   onViewConnection,
 }) {
   const [posts, setPosts] = useState([])
+  const [focusedPostId, setFocusedPostId] = useState('')
   const [dismissedPostIds, setDismissedPostIds] = useState(() => (
     readDismissedPostIds(getDismissedPostsStorageKey(currentUserId))
   ))
@@ -77,21 +102,37 @@ function Home({
   }, [dismissedPostsStorageKey])
 
   useEffect(() => {
+    let isCurrent = true
     async function loadPosts() {
       try {
         const data = activeNavigation === 'opportunities'
           ? await api.getOpportunities()
           : await api.getPosts()
-        if (Array.isArray(data)) {
-          const dismissedIds = new Set(readDismissedPostIds(dismissedPostsStorageKey))
-          setDismissedPostIds([...dismissedIds])
-          setPosts(data.filter((post) => !dismissedIds.has(String(post.id))))
-        }
+        if (!isCurrent || !Array.isArray(data)) return
+
+        const dismissedIds = new Set(readDismissedPostIds(dismissedPostsStorageKey))
+        setDismissedPostIds([...dismissedIds])
+        setPosts((current) => {
+          const localPosts = current.filter((post) => post.localOnly)
+          const refreshedPosts = data.filter((post) => !dismissedIds.has(String(post.id)))
+          const refreshedIds = new Set(refreshedPosts.map((post) => String(post.id)))
+          return [...localPosts.filter((post) => !refreshedIds.has(String(post.id))), ...refreshedPosts]
+        })
       } catch (err) {
         console.warn('Failed to load posts from API:', err)
       }
     }
+
     loadPosts()
+    const refreshInterval = window.setInterval(() => {
+      if (document.visibilityState === 'visible') loadPosts()
+    }, 15000)
+    window.addEventListener('focus', loadPosts)
+    return () => {
+      isCurrent = false
+      window.clearInterval(refreshInterval)
+      window.removeEventListener('focus', loadPosts)
+    }
   }, [activeNavigation, dismissedPostsStorageKey])
 
   useEffect(() => {
@@ -339,13 +380,53 @@ function Home({
 
   const [openCommentsPostId, setOpenCommentsPostId] = useState(null)
   const [commentText, setCommentText] = useState('')
+  const [commentErrors, setCommentErrors] = useState({})
+  const [isCommentSubmitting, setIsCommentSubmitting] = useState(false)
+  const [expandedCommentPostIds, setExpandedCommentPostIds] = useState([])
+  const [pendingLikePostIds, setPendingLikePostIds] = useState([])
+  const [likeErrors, setLikeErrors] = useState({})
 
-  async function handleLike(postId) {
+  async function handleLike(post) {
+    const postId = String(post.id)
+    if (pendingLikePostIds.includes(postId)) return
+
+    const wasLiked = Boolean(post.liked)
+    const previousCount = Number(post.likesCount) || 0
+    const optimisticLike = {
+      liked: !wasLiked,
+      likesCount: Math.max(0, previousCount + (wasLiked ? -1 : 1)),
+    }
+
+    setLikeErrors((current) => {
+      const next = { ...current }
+      delete next[postId]
+      return next
+    })
+    setPosts((current) => current.map((item) => (
+      String(item.id) === postId ? { ...item, ...optimisticLike } : item
+    )))
+
+    if (post.localOnly) return
+
+    setPendingLikePostIds((current) => [...current, postId])
     try {
       const updated = await api.likePost(postId)
-      setPosts((current) => current.map((p) => (String(p.id) === String(postId) ? { ...p, ...updated } : p)))
+      setPosts((current) => current.map((item) => (
+        String(item.id) === postId ? { ...item, ...updated } : item
+      )))
     } catch (err) {
       console.warn('Like error:', err)
+      setPosts((current) => current.map((item) => (
+        String(item.id) === postId
+          ? { ...item, liked: wasLiked, likesCount: previousCount }
+          : item
+      )))
+      setLikeErrors((current) => ({
+        ...current,
+        [postId]: err instanceof Error ? err.message : 'Could not update this like. Please try again.',
+      }))
+    } finally {
+      setPendingLikePostIds((current) => current.filter((id) => id !== postId))
     }
   }
 
@@ -416,6 +497,25 @@ function Home({
     return Boolean(authorName && ownName && authorName === ownName)
   }
 
+  function showPost(post) {
+    const postId = String(post.id)
+    setPosts((current) => (
+      current.some((item) => String(item.id) === postId) ? current : [post, ...current]
+    ))
+    setFocusedPostId(postId)
+    if (activeNavigation !== 'home') setActiveNavigation('home')
+  }
+
+  useEffect(() => {
+    if (!focusedPostId || activeNavigation !== 'home') return undefined
+
+    const frameId = requestAnimationFrame(() => {
+      document.getElementById(`home-post-${encodeURIComponent(focusedPostId)}`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    })
+    return () => cancelAnimationFrame(frameId)
+  }, [activeNavigation, focusedPostId, posts])
+
   function viewPostAuthor(post) {
     if (isOwnPost(post)) {
       onViewProfile?.()
@@ -452,13 +552,68 @@ function Home({
 
   async function handleCommentSubmit(event, postId) {
     event.preventDefault()
-    if (!commentText.trim()) return
+    const text = commentText.trim()
+    if (!text || isCommentSubmitting) return
+
+    const postIdString = String(postId)
+    const post = posts.find((item) => String(item.id) === postIdString)
+    if (!post) return
+
+    const previousComments = Array.isArray(post.comments) ? post.comments : []
+    const optimisticComment = {
+      id: `comment-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      authorName: name,
+      text,
+      createdAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    }
+
+    setPosts((current) => current.map((item) => (
+      String(item.id) === postIdString
+        ? {
+            ...item,
+            comments: [...(Array.isArray(item.comments) ? item.comments : []), optimisticComment],
+            commentsCount: (Number(item.commentsCount) || previousComments.length) + 1,
+          }
+        : item
+    )))
+    setCommentText('')
+    setOpenCommentsPostId(postIdString)
+    setExpandedCommentPostIds((current) => current.filter((id) => id !== postIdString))
+    setCommentErrors((current) => {
+      const next = { ...current }
+      delete next[postIdString]
+      return next
+    })
+
+    if (post.localOnly) return
+
+    setIsCommentSubmitting(true)
     try {
-      const updated = await api.commentOnPost(postId, commentText.trim())
-      setPosts((current) => current.map((p) => (String(p.id) === String(postId) ? { ...p, ...updated } : p)))
-      setCommentText('')
+      const updated = await api.commentOnPost(postId, text)
+      setPosts((current) => current.map((item) => (
+        String(item.id) === postIdString
+          ? {
+              ...item,
+              ...updated,
+              comments: Array.isArray(updated.comments) ? updated.comments : item.comments,
+              commentsCount: updated.commentsCount ?? item.commentsCount,
+            }
+          : item
+      )))
     } catch (err) {
       console.warn('Comment error:', err)
+      setPosts((current) => current.map((item) => (
+        String(item.id) === postIdString
+          ? { ...item, comments: previousComments, commentsCount: post.commentsCount ?? previousComments.length }
+          : item
+      )))
+      setCommentText(text)
+      setCommentErrors((current) => ({
+        ...current,
+        [postIdString]: err instanceof Error ? err.message : 'Could not post your comment. Please try again.',
+      }))
+    } finally {
+      setIsCommentSubmitting(false)
     }
   }
 
@@ -477,6 +632,30 @@ function Home({
       ? post.type === 'opportunity'
       : post.type !== 'opportunity')
   ))
+  const allMyPosts = [
+    ...posts.filter(isOwnPost),
+    ...(Array.isArray(profileDetails.posts) ? profileDetails.posts : []),
+  ].filter((post, index, allPosts) => (
+    allPosts.findIndex((candidate) => String(candidate.id) === String(post.id)) === index
+  ))
+  const myPosts = allMyPosts.slice(0, 3)
+  const newestPost = allMyPosts[0]
+
+  function renderPostPreview(post) {
+    const text = getPostPreviewText(post)
+    const media = getPostPreviewMedia(post)
+    return (
+      <>
+        {media && !media.isVideo && (
+          <img className="home-my-post-thumbnail" src={media.url} alt="" />
+        )}
+        {text && <span className="home-my-post-copy">{text}</span>}
+        {!text && media?.isVideo && <span className="home-my-post-copy">Video post</span>}
+        {!text && !media && <span className="home-my-post-copy">Content unavailable</span>}
+      </>
+    )
+  }
+
   return (
     <>
       <section
@@ -580,6 +759,58 @@ function Home({
           </div>
           {connectionsError && <p className="home-connections-error" role="alert">{connectionsError}</p>}
           {profileViewersError && <p className="home-connections-error" role="alert">{profileViewersError}</p>}
+          {activeNavigation === 'home' && (
+            <section className="home-card home-sidebar-stats" aria-labelledby="home-post-impressions-heading">
+              <div className="home-connections-card home-post-impressions-row">
+                <span className="home-connections-icon"><ThumbsUp size={20} aria-hidden="true" /></span>
+                <span className="home-connections-copy">
+                  <strong id="home-post-impressions-heading">Post impressions</strong>
+                  <small>
+                    <span aria-label={`${newestPost?.likesCount || 0} likes`}>
+                      {newestPost?.likesCount || 0}
+                    </span>
+                  </small>
+                </span>
+              </div>
+            </section>
+          )}
+          {activeNavigation === 'home' && (
+            <section className="home-card home-my-posts-card" aria-labelledby="home-my-posts-heading">
+              <header className="home-my-posts-header">
+                <h2 id="home-my-posts-heading">My Posts</h2>
+                <button type="button" onClick={onViewProfile}>View all</button>
+              </header>
+              {myPosts.length > 0 ? (
+                <ol className="home-my-posts-list">
+                  {myPosts.map((post) => (
+                    <li key={post.id}>
+                      <button type="button" onClick={() => showPost(post)}>
+                        {renderPostPreview(post)}
+                        <span className="home-my-post-metrics">
+                          <span><ThumbsUp size={13} aria-hidden="true" /> {post.likesCount || 0}</span>
+                          <span><MessageCircle size={13} aria-hidden="true" /> {post.commentsCount ?? post.comments?.length ?? 0}</span>
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <p className="home-my-posts-empty">Your posts will appear here.</p>
+              )}
+            </section>
+          )}
+          {activeNavigation === 'home' && (
+            <Link className="home-explore-promo home-explore-promo-tickets" to="/entertainments">
+              <span className="home-explore-promo-art">
+                <img src="/assets/explore-tickets.png" alt="" />
+              </span>
+              <span className="home-explore-promo-copy">
+                <strong>Book a ticket</strong>
+                <small>Explore films and showtimes</small>
+                <ArrowUpRight size={16} aria-hidden="true" />
+              </span>
+            </Link>
+          )}
         </aside>
 
         <div className="home-feed-column">
@@ -708,8 +939,17 @@ function Home({
               {visiblePosts.map((post) => {
                 const authorAvatar = getPostAuthorAvatar(post)
                 const authorName = post.authorName || name
+                const postId = String(post.id)
+                const postComments = Array.isArray(post.comments) ? post.comments : []
+                const areCommentsExpanded = expandedCommentPostIds.includes(postId)
+                const commentsToShow = areCommentsExpanded ? postComments : postComments.slice(-1)
+                const remainingCommentCount = postComments.length - commentsToShow.length
                 return (
-                <article className="home-card home-post" key={post.id}>
+                <article
+                  className={`home-card home-post${focusedPostId === String(post.id) ? ' is-focused' : ''}`}
+                  id={`home-post-${encodeURIComponent(String(post.id))}`}
+                  key={post.id}
+                >
                   <header className="home-post-header">
                     <button
                       className="home-post-author-avatar"
@@ -751,20 +991,26 @@ function Home({
                   <div className="home-post-action-bar" style={{ display: 'flex', gap: '8px', marginTop: '12px', borderTop: '1px solid var(--color-border, #eee)', paddingTop: '8px', flexWrap: 'wrap' }}>
                     <button
                       type="button"
-                      onClick={() => handleLike(post.id)}
+                      onClick={() => handleLike(post)}
+                      disabled={pendingLikePostIds.includes(String(post.id))}
                       style={{
                         background: post.liked ? '#e8f0fe' : 'transparent',
                         color: post.liked ? '#1a73e8' : 'inherit',
                         border: '1px solid #ddd',
                         padding: '6px 14px',
                         borderRadius: '20px',
-                        cursor: 'pointer',
+                        cursor: pendingLikePostIds.includes(String(post.id)) ? 'wait' : 'pointer',
                         fontWeight: '500',
                         fontSize: '13px'
                       }}
                     >
                       👍 {post.likesCount || 0} {post.liked ? 'Liked' : 'Like'}
                     </button>
+                    {likeErrors[String(post.id)] && (
+                      <span role="alert" style={{ alignSelf: 'center', color: '#b3261e', fontSize: '12px' }}>
+                        {likeErrors[String(post.id)]}
+                      </span>
+                    )}
 
                     <button
                       type="button"
@@ -778,7 +1024,7 @@ function Home({
                         fontSize: '13px'
                       }}
                     >
-                      💬 Comments ({post.comments?.length || 0})
+                      💬 Comments ({post.commentsCount ?? post.comments?.length ?? 0})
                     </button>
 
                     {post.type === 'opportunity' && (
@@ -835,18 +1081,35 @@ function Home({
                     )}
                   </div>
 
-                  {/* Comments section */}
-                  {openCommentsPostId === post.id && (
-                    <div style={{ marginTop: '12px', background: '#f9f9f9', padding: '12px', borderRadius: '8px' }}>
-                      {post.comments && post.comments.length > 0 && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
-                          {post.comments.map((c) => (
-                            <div key={c.id} style={{ fontSize: '13px', background: '#fff', padding: '8px 12px', borderRadius: '6px' }}>
-                              <strong>{c.authorName}</strong> <small style={{ color: '#888' }}>({c.createdAt})</small>: {c.text}
-                            </div>
-                          ))}
+                  {postComments.length > 0 && (
+                    <div className="home-post-comments">
+                      {commentsToShow.map((c) => (
+                        <div className="home-post-comment" key={c.id}>
+                          <strong>{c.authorName}</strong> <small style={{ color: '#888' }}>({c.createdAt})</small>: {c.text}
                         </div>
+                      ))}
+                      {postComments.length > 1 && (
+                        <button
+                          className="home-post-comments-toggle"
+                          type="button"
+                          onClick={() => setExpandedCommentPostIds((current) => (
+                            areCommentsExpanded
+                              ? current.filter((id) => id !== postId)
+                              : [...current, postId]
+                          ))}
+                          aria-expanded={areCommentsExpanded}
+                        >
+                          {areCommentsExpanded
+                            ? 'Show less'
+                            : `Show more comments (${remainingCommentCount})`}
+                        </button>
                       )}
+                    </div>
+                  )}
+
+                  {/* Comment input remains optional; existing comments stay visible below the post. */}
+                  {openCommentsPostId === String(post.id) && (
+                    <div style={{ marginTop: '12px', background: '#f9f9f9', padding: '12px', borderRadius: '8px' }}>
                       <form onSubmit={(e) => handleCommentSubmit(e, post.id)} style={{ display: 'flex', gap: '8px' }}>
                         <input
                           type="text"
@@ -857,12 +1120,17 @@ function Home({
                         />
                         <button
                           type="submit"
-                          disabled={!commentText.trim()}
-                          style={{ background: '#1a73e8', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '20px', cursor: 'pointer', fontSize: '13px' }}
+                          disabled={!commentText.trim() || isCommentSubmitting}
+                          style={{ background: '#1a73e8', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '20px', cursor: !commentText.trim() || isCommentSubmitting ? 'wait' : 'pointer', fontSize: '13px' }}
                         >
-                          Post
+                          {isCommentSubmitting ? 'Posting...' : 'Post'}
                         </button>
                       </form>
+                      {commentErrors[String(post.id)] && (
+                        <p role="alert" style={{ margin: '8px 0 0', color: '#b3261e', fontSize: '12px' }}>
+                          {commentErrors[String(post.id)]}
+                        </p>
+                      )}
                     </div>
                   )}
                 </article>
@@ -872,10 +1140,7 @@ function Home({
           )}
         </div>
 
-        <aside className="home-news-column" aria-label="TrueHunt News">
-          <section className="home-card home-news-card">
-            <h2>TrueHunt News</h2>
-          </section>
+        <aside className="home-promotion-column" aria-label="Promotions and Explore">
           <section className="home-promotion-card" aria-label="Sponsored movie industry promotion">
             <div className="home-promotion-art">
               <span className="home-promotion-label">PROMOTED</span>
@@ -894,6 +1159,39 @@ function Home({
                 Explore film careers
               </button>
             </div>
+          </section>
+          <section className="home-card home-sidebar-stats home-discovery-card" aria-labelledby="home-discovery-heading">
+            <h2 className="home-discovery-heading" id="home-discovery-heading">Explore</h2>
+            <Link className="home-explore-promo home-explore-promo-film" to="/entertainments">
+              <span className="home-explore-promo-art">
+                <img src="/assets/explore-filmmakers.png" alt="" />
+              </span>
+              <span className="home-explore-promo-copy">
+                <strong>Are you a filmmakers</strong>
+                <small>Bring your story to the screen</small>
+                <ArrowUpRight size={16} aria-hidden="true" />
+              </span>
+            </Link>
+            <Link className="home-explore-promo home-explore-promo-invest" to="/lcm-app">
+              <span className="home-explore-promo-art">
+                <img src="/assets/explore-investors.png" alt="" />
+              </span>
+              <span className="home-explore-promo-copy">
+                <strong>Are you an investors</strong>
+                <small>Discover creative opportunities</small>
+                <ArrowUpRight size={16} aria-hidden="true" />
+              </span>
+            </Link>
+            <a className="home-explore-promo home-explore-promo-distribute" href="/distributions">
+              <span className="home-explore-promo-art">
+                <img src="/assets/explore-distribution.png" alt="" />
+              </span>
+              <span className="home-explore-promo-copy">
+                <strong>Are you a distributors</strong>
+                <small>Get stories in front of audiences</small>
+                <ArrowUpRight size={16} aria-hidden="true" />
+              </span>
+            </a>
           </section>
         </aside>
       </div>

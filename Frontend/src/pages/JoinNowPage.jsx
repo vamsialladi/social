@@ -12,7 +12,7 @@ import { getProfileStorageKey } from '../services/profileStorage';
 const SORTED_REGISTRATION_CRAFTS = [...REGISTRATION_CRAFTS].sort((first, second) => first.localeCompare(second));
 
 const generateCaptchaCode = (previousCode = '') => {
-  const characters = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const characters = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Exclude ambiguous characters like I, O, 0, 1
   let code;
   do {
     code = Array.from({ length: 5 }, () => characters[Math.floor(Math.random() * characters.length)]).join('');
@@ -97,6 +97,7 @@ export default function JoinNowPage() {
   const [experienceYears, setExperienceYears] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [headquarters, setHeadquarters] = useState('');
+  const productionProfileType = 'Production';
   const [agreeTerms, setAgreeTerms] = useState(true);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -176,7 +177,7 @@ export default function JoinNowPage() {
         otp: phoneOtp.trim(),
         password,
         role: selectedRole,
-        craft: selectedRole === 'TALENT' ? craft : null,
+        craft: selectedRole === 'TALENT' ? craft : productionProfileType,
         subCraft: selectedRole === 'TALENT' ? subCraft : null,
         secondaryCrafts: selectedRole === 'TALENT' ? secondaryCrafts : null,
         secondarySubCrafts: selectedRole === 'TALENT' ? secondarySubCrafts : null,
@@ -231,22 +232,29 @@ export default function JoinNowPage() {
             console.warn('Backend profile sync notice:', syncErr);
           }
 
-          showNotification(`Welcome to TrueHunt, ${fullName}! Directing to your social feed...`, 'success');
-
-          // Immediately navigate to the existing social frontend
-          navigate('/social');
+          showNotification(`Welcome to TrueHunt, ${fullName}! Your Social profile is ready.`, 'success');
         } else {
           const producerProfileData = {
+            userId: res.user.userId || res.user.id,
+            name: fullName,
             companyName,
+            company: companyName,
             headquarters,
+            address: headquarters,
             fullName,
             email,
+            phone: phoneNumber,
             phoneNumber,
             role: 'Production House',
+            primaryCraft: productionProfileType,
             createdAt: new Date().toISOString()
           };
+          const profileStorageKey = getProfileStorageKey(res.user.userId || res.user.id || email);
+          if (profileStorageKey) {
+            localStorage.setItem(profileStorageKey, JSON.stringify(producerProfileData));
+          }
           localStorage.setItem('truehunt_producer_profile', JSON.stringify(producerProfileData));
-          showNotification(`Welcome to TrueHunt, ${companyName || fullName}! Directing to Protect Producer...`, 'success');
+          showNotification(`Welcome to TrueHunt, ${companyName || fullName}! Your Production profile is ready.`, 'success');
           navigate('/protect-producer');
         }
       } else {
@@ -345,6 +353,12 @@ export default function JoinNowPage() {
                   </>
                 ) : (
                   <>
+                    <div>
+                      <span style={{ color: 'var(--color-text-muted)' }}>Profile Type:</span>{' '}
+                      <Link to="/protect-producer" style={{ color: 'var(--color-maroon)', fontWeight: 700 }}>
+                        {productionProfileType}
+                      </Link>
+                    </div>
                     <div><span style={{ color: 'var(--color-text-muted)' }}>Banner:</span> <strong>{companyName}</strong></div>
                     <div><span style={{ color: 'var(--color-text-muted)' }}>Hub:</span> <strong>{headquarters}</strong></div>
                   </>
@@ -800,6 +814,22 @@ export default function JoinNowPage() {
 
           {selectedRole === 'STUDIO' && (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+              <div className="form-group">
+                <label className="form-label" htmlFor="production-profile-type">Profile Type *</label>
+                <select
+                  id="production-profile-type"
+                  className="form-control"
+                  value={productionProfileType}
+                  disabled
+                  aria-describedby="production-profile-type-help"
+                >
+                  <option value="Production">Production Team</option>
+                </select>
+                <small id="production-profile-type-help" style={{ color: 'var(--color-text-muted)' }}>
+                  Your profile will be available in Social and Production with the same login.
+                </small>
+              </div>
+
               <div className="form-group">
                 <label className="form-label">Production Banner Name *</label>
                 <input 

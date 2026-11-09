@@ -23,14 +23,17 @@ public class PostController {
 
     @GetMapping("/posts")
     public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getPosts(
-            @RequestParam(required = false, defaultValue = "") String type
+            @RequestParam(required = false, defaultValue = "") String type,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail
     ) {
-        return ResponseEntity.ok(ApiResponse.success(postService.getPosts(type)));
+        return ResponseEntity.ok(ApiResponse.success(postService.getPosts(type, userEmail)));
     }
 
     @GetMapping("/opportunities")
-    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getOpportunities() {
-        return ResponseEntity.ok(ApiResponse.success(postService.getOpportunities()));
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getOpportunities(
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(postService.getOpportunities(userEmail)));
     }
 
     @PostMapping("/posts")
@@ -57,16 +60,20 @@ public class PostController {
     }
 
     @PostMapping("/posts/{id}/like")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> likePost(@PathVariable String id) {
-        return ResponseEntity.ok(ApiResponse.success(postService.likePost(id)));
+    public ResponseEntity<ApiResponse<Map<String, Object>>> likePost(
+            @PathVariable String id,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(postService.likePost(id, userEmail)));
     }
 
     @PostMapping("/posts/{id}/comments")
     public ResponseEntity<ApiResponse<Map<String, Object>>> commentOnPost(
             @PathVariable String id,
-            @Valid @RequestBody CommentRequest req
+            @Valid @RequestBody CommentRequest req,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail
     ) {
-        return ResponseEntity.ok(ApiResponse.success(postService.commentOnPost(id, req.getText())));
+        return ResponseEntity.ok(ApiResponse.success(postService.commentOnPost(id, req.getText(), userEmail)));
     }
 
     @PostMapping("/posts/{id}/apply")

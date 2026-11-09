@@ -266,8 +266,8 @@ export const api = {
 
   // Authentication
   auth: {
-    login: async (email, password, role) => {
-      return requestAuth('/auth/login', { email, password, role });
+    login: async (email, password) => {
+      return requestAuth('/auth/login', { email, password });
     },
 
     sendOtp: async (destination) => {

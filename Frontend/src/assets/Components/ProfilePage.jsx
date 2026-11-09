@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Building2, Check, ChevronRight, Eye, EyeOff, Trash2, UserPlus } from 'lucide-react'
 import './StylePage.css'
 import api from '../../api'
+import { useAuth } from '../../context/AuthContext'
 import { EXPERIENCE_OPTIONS, REGISTRATION_CRAFTS, SUB_CRAFTS_BY_PRIMARY_CRAFT } from '../../services/mockData'
 
 export const emptyProfileDetails = {
@@ -461,6 +462,7 @@ function ProfilePage({
   onMessage,
   onViewConnections,
 }) {
+  const { user: authUser, updateUser } = useAuth()
   const [profilePic, setProfilePic] = useState(null)
   const [isProfileImageRemoved, setIsProfileImageRemoved] = useState(false)
   const [pendingProfileCrop, setPendingProfileCrop] = useState(null)
@@ -1372,6 +1374,12 @@ function ProfilePage({
       ...savedDetails,
       posts: nextDetails.posts,
     }
+    if (persistedDetails.userId && persistedDetails.userId !== authUser?.userId) {
+      updateUser({
+        userId: persistedDetails.userId,
+        ...(authUser?.id ? { id: persistedDetails.userId } : {}),
+      })
+    }
     setProfileDetails(persistedDetails)
     return persistedDetails
   }
@@ -1693,18 +1701,13 @@ function ProfilePage({
       let profileImageUrl = isProfileImageRemoved ? '' : profileDetails.profileImageUrl || ''
 
       if (profilePic) {
-        try {
-          const uploaded = await api.uploadMedia(profilePic)
-          profileImageUrl = uploaded.url
-          profileImageUrl = uploaded.url
-        } catch (err) {
-          console.warn('Profile picture upload note:', err)
-        }
+        const uploaded = await api.uploadMedia(profilePic, 'profile-image')
+        profileImageUrl = uploaded.url
       }
 
       const nextDetails = {
         ...profileDetails,
-        userId: profileDetails.userId || 'me',
+        userId: formData.get('userId')?.toString().trim() || '',
         name: formData.get('name') || '',
         phone: formData.get('phone')?.trim() || '',
         professionalPhone: formData.get('professionalPhone')?.trim() || '',
@@ -1730,7 +1733,7 @@ function ProfilePage({
       setIsEditingProfile(false)
     } catch (err) {
       console.error('Failed to save profile:', err)
-      setValidationError('Could not save your profile. Please try again.')
+      setValidationError(err.message || 'Could not save your profile. Please try again.')
     } finally {
       setIsSubmittingProfile(false)
     }
@@ -2057,7 +2060,7 @@ function ProfilePage({
                 )}
               </section>
 
-              <section className="artist-section">
+              <section className="artist-section" id="artist-posts">
                 <div className="preview-section-heading">
                   <h3>Posts</h3>
                 </div>
@@ -3094,11 +3097,15 @@ function ProfilePage({
                 <label htmlFor="user-id">User ID</label>
                 <input
                   id="user-id"
+                  name="userId"
                   type="text"
-                  value={accountUserId}
-                  readOnly
-                  aria-readonly="true"
-                  placeholder="Your TrueHunt ID is assigned at registration"
+                  defaultValue={displayedUserId}
+                  maxLength={14}
+                  pattern="[A-Za-z0-9_-]{3,14}"
+                  title="Use 3 to 14 letters, numbers, underscores, or hyphens."
+                  required
+                  autoComplete="off"
+                  placeholder="Enter a unique TrueHunt ID"
                 />
               </div>
               <div className="form-field">

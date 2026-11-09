@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import '../../App.css'
 import { api } from '../../api'
 import { api as directoryApi } from '../../services/api'
@@ -333,8 +333,12 @@ function Navigation({
   profileDetails,
   onCandidateSelected,
   onShowMyProfile,
+  onShowMyPostsAndActivities,
+  isBusinessExploreOpen,
+  setIsBusinessExploreOpen,
 }) {
   const profileMenuRef = useRef(null)
+  const businessMenuRef = useRef(null)
   const searchTriggerRef = useRef(null)
   const searchQueryInputRef = useRef(null)
   const [isSearchOpen, setIsSearchOpen] = useState(false)
@@ -642,6 +646,19 @@ function Navigation({
       document.removeEventListener('keydown', handleKeyDown)
     }
   }, [isProfileMenuOpen, setIsProfileMenuOpen])
+
+  useEffect(() => {
+    if (!isBusinessExploreOpen) return undefined
+
+    function handleBusinessPointerDown(event) {
+      if (!businessMenuRef.current?.contains(event.target)) {
+        setIsBusinessExploreOpen(false)
+      }
+    }
+
+    document.addEventListener('pointerdown', handleBusinessPointerDown)
+    return () => document.removeEventListener('pointerdown', handleBusinessPointerDown)
+  }, [isBusinessExploreOpen, setIsBusinessExploreOpen])
 
   return (
     <nav className={`linkedin-navbar${isMobileMenuOpen ? ' is-mobile-menu-open' : ''}`} aria-label="Profile navigation">
@@ -1200,16 +1217,16 @@ function Navigation({
                     {profilePreview
                       ? <img src={profilePreview} alt="" />
                       : <ProfileAvatarPlaceholder />}
-                  </span>
-                  <span>
-                    <strong>{profileDetails.name || 'Your name'}</strong>
-                    <small>My profile</small>
-                  </span>
-                </a>
-                <div className="profile-dropdown-divider" />
-                <button
-                  className="profile-dropdown-item"
-                  type="button"
+                  </span                  >
+                    <span>
+                      <strong>{profileDetails.name || 'Your name'}</strong>
+                      <small>My profile</small>
+                    </span>
+                  </a>
+                  <div className="profile-dropdown-divider" />
+                  <button
+                    className="profile-dropdown-item"
+                    type="button"
                   role="menuitem"
                   onClick={() => {
                     selectNavigation('settings')
@@ -1217,6 +1234,18 @@ function Navigation({
                   }}
                 >
                   Settings
+                </button>
+                <button
+                  className="profile-dropdown-item"
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    onShowMyPostsAndActivities()
+                    setIsProfileMenuOpen(false)
+                    setIsMobileMenuOpen(false)
+                  }}
+                >
+                  My Posts and Activities
                 </button>
                 <button
                   className="profile-dropdown-item profile-dropdown-logout"
@@ -1240,14 +1269,57 @@ function Navigation({
             )}
           </div>
           <span className="linkedin-nav-divider" aria-hidden="true" />
-          <button
-            className={`linkedin-nav-item linkedin-business${activeNavigation === 'business' ? ' is-active' : ''}`}
-            type="button"
-            onClick={() => selectNavigation('business')}
-            aria-current={activeNavigation === 'business' ? 'page' : undefined}
-          >
-            <NavigationIcon name="business" /><small>For Business</small>
-          </button>
+          <div className={`linkedin-profile-menu${isBusinessExploreOpen ? ' is-open' : ''}`} ref={businessMenuRef}>
+            <button
+              className={`linkedin-nav-item linkedin-business${isBusinessExploreOpen ? ' is-active' : ''}`}
+              type="button"
+              onClick={() => setIsBusinessExploreOpen((open) => !open)}
+              aria-haspopup="menu"
+              aria-expanded={isBusinessExploreOpen}
+            >
+              <NavigationIcon name="business" /><small>My Business</small>
+            </button>
+            {isBusinessExploreOpen && (
+              <div className="linkedin-profile-dropdown business-explore-dropdown" role="menu" aria-label="Explore">
+                <div className="business-explore-dropdown-heading">Explore</div>
+                <Link
+                  className="profile-dropdown-item business-explore-dropdown-link"
+                  to="/entertainments"
+                  role="menuitem"
+                  onClick={() => setIsBusinessExploreOpen(false)}
+                >
+                  Are you a Film Maker <span aria-hidden="true">↗</span>
+                </Link>
+                <div className="profile-dropdown-divider" />
+                <Link
+                  className="profile-dropdown-item business-explore-dropdown-link"
+                  to="/lcm-app"
+                  role="menuitem"
+                  onClick={() => setIsBusinessExploreOpen(false)}
+                >
+                  Invest and Earn <span aria-hidden="true">↗</span>
+                </Link>
+                <div className="profile-dropdown-divider" />
+                <a
+                  className="profile-dropdown-item business-explore-dropdown-link"
+                  href="https://truehunt.in/entertainments"
+                  role="menuitem"
+                  onClick={() => setIsBusinessExploreOpen(false)}
+                >
+                  Assets <span aria-hidden="true">↗</span>
+                </a>
+                <div className="profile-dropdown-divider" />
+                <Link
+                  className="profile-dropdown-item business-explore-dropdown-link"
+                  to="/entertainments"
+                  role="menuitem"
+                  onClick={() => setIsBusinessExploreOpen(false)}
+                >
+                  advertisement <span aria-hidden="true">↗</span>
+                </Link>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </nav>
@@ -1265,6 +1337,7 @@ export default function SocialApp() {
       : getNavigationFromLocation(location.pathname)
   ))
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false)
+  const [isBusinessExploreOpen, setIsBusinessExploreOpen] = useState(false)
   const [viewingCandidateProfile, setViewingCandidateProfile] = useState(() => {
     const candidateProfile = location.state?.connectTalent
     if (!candidateProfile?.name) return null
@@ -1330,6 +1403,27 @@ export default function SocialApp() {
     setActiveNavigationState('profile')
     navigate(getProfilePath(profileDetails.name || user?.name))
   }
+
+  function showMyPostsAndActivities() {
+    showMyProfile()
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        document.getElementById('artist-posts')
+          ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      })
+    })
+  }
+
+  useEffect(() => {
+    if (!isBusinessExploreOpen) return undefined
+
+    function closeOnEscape(event) {
+      if (event.key === 'Escape') setIsBusinessExploreOpen(false)
+    }
+
+    document.addEventListener('keydown', closeOnEscape)
+    return () => document.removeEventListener('keydown', closeOnEscape)
+  }, [isBusinessExploreOpen])
 
   function showCandidateProfile(candidateProfile) {
     const candidateId = String(
@@ -1469,6 +1563,9 @@ export default function SocialApp() {
         profileDetails={profileDetails}
         onCandidateSelected={showCandidateProfile}
         onShowMyProfile={showMyProfile}
+        onShowMyPostsAndActivities={showMyPostsAndActivities}
+        isBusinessExploreOpen={isBusinessExploreOpen}
+        setIsBusinessExploreOpen={setIsBusinessExploreOpen}
       />
 
       <Home
@@ -1606,6 +1703,7 @@ export default function SocialApp() {
           )}
         </section>
       )}
+
     </main>
   )
 }

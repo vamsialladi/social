@@ -28,25 +28,25 @@ public class PostService {
         this.profileService = profileService;
     }
 
-    public List<Map<String, Object>> getPosts(String type) {
+    public List<Map<String, Object>> getPosts(String type, String userIdentity) {
         List<PostEntity> list = (type != null && !type.isBlank())
                 ? postRepository.findAllByTypeIgnoreCaseOrderByCreatedAtDesc(type)
                 : postRepository.findAllByOrderByCreatedAtDesc();
 
         return list.stream()
-                .map(PostEntity::toDto)
+                .map(post -> post.toDto(userIdentity))
                 .collect(Collectors.toList());
     }
 
-    public List<Map<String, Object>> getPostsByAuthorId(String authorId) {
+    public List<Map<String, Object>> getPostsByAuthorId(String authorId, String userIdentity) {
         return postRepository.findAllByAuthorIdOrderByCreatedAtDesc(authorId).stream()
-                .map(PostEntity::toDto)
+                .map(post -> post.toDto(userIdentity))
                 .collect(Collectors.toList());
     }
 
-    public List<Map<String, Object>> getOpportunities() {
+    public List<Map<String, Object>> getOpportunities(String userIdentity) {
         return postRepository.findAllByTypeIgnoreCaseOrderByCreatedAtDesc("opportunity").stream()
-                .map(PostEntity::toDto)
+                .map(post -> post.toDto(userIdentity))
                 .collect(Collectors.toList());
     }
 
@@ -97,7 +97,10 @@ public class PostService {
     }
 
     @Transactional
-    public Map<String, Object> likePost(String id) {
+    public Map<String, Object> likePost(String id, String userIdentity) {
+        if (userIdentity == null || userIdentity.isBlank()) {
+            throw new BadRequestException("Sign in to like a post.");
+        }
         Long numericId = parseLongId(id);
         if (numericId == null) {
             throw new ResourceNotFoundException("Post", "id", id);
@@ -106,19 +109,19 @@ public class PostService {
         PostEntity post = postRepository.findById(numericId)
                 .orElseThrow(() -> new ResourceNotFoundException("Post", "id", id));
 
-        post.toggleLike();
+        post.toggleLikeForUser(userIdentity);
         postRepository.save(post);
 
         Map<String, Object> res = new HashMap<>();
         res.put("id", id);
         res.put("postId", id);
-        res.put("liked", post.isLiked());
+        res.put("liked", post.isLikedByUser(userIdentity));
         res.put("likesCount", post.getLikesCount());
         return res;
     }
 
     @Transactional
-    public Map<String, Object> commentOnPost(String id, String text) {
+    public Map<String, Object> commentOnPost(String id, String text, String userEmail) {
         if (text == null || text.trim().isEmpty()) {
             throw new BadRequestException("Comment text cannot be empty.");
         }
@@ -130,10 +133,17 @@ public class PostService {
         PostEntity post = postRepository.findById(numericId)
                 .orElseThrow(() -> new ResourceNotFoundException("Post", "id", id));
 
-        post.addComment("Cinema Professional", text);
+        String authorName = "Cinema Professional";
+        if (userEmail != null && !userEmail.isBlank()) {
+            ProfileEntity profile = profileService.findCurrentProfile(userEmail);
+            if (profile.getName() != null && !profile.getName().isBlank()) {
+                authorName = profile.getName();
+            }
+        }
+        post.addComment(authorName, text);
         postRepository.save(post);
 
-        Map<String, Object> res = post.toDto();
+        Map<String, Object> res = post.toDto(userEmail);
         res.put("id", id);
         res.put("postId", id);
         res.put("commentsCount", post.getCommentsCount());

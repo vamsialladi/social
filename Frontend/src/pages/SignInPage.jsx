@@ -24,14 +24,14 @@ export default function SignInPage() {
     setLoading(true);
 
     try {
-      const res = await login(email, password, selectedRole);
+      const res = await login(email, password);
       if (res.success) {
         showNotification(`Welcome back, ${res.user.name}!`, 'success');
         const connectTalent = location.state?.connectTalent;
         if (connectTalent) {
           navigate('/social/profile', { state: { connectTalent } });
         } else {
-          navigate(res.user.role === 'STUDIO' ? '/protect-producer' : '/social');
+          navigate(selectedRole === 'STUDIO' ? '/protect-producer' : '/social');
         }
       } else {
         setErrorMsg(res.message || 'Invalid credentials');

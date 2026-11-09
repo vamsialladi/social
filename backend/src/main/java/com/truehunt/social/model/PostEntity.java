@@ -49,6 +49,10 @@ public class PostEntity {
 
     @Lob
     @Column(columnDefinition = "TEXT")
+    private String likedByUsersJson = "[]";
+
+    @Lob
+    @Column(columnDefinition = "TEXT")
     private String commentsJson = "[]";
 
     private LocalDateTime createdAt = LocalDateTime.now();
@@ -99,6 +103,44 @@ public class PostEntity {
 
     public boolean isLiked() { return likedByMe; }
     public void setLiked(boolean liked) { this.likedByMe = liked; }
+
+    public boolean isLikedByUser(String userIdentity) {
+        return getLikedByUsers().contains(normalizeLikeIdentity(userIdentity));
+    }
+
+    public void toggleLikeForUser(String userIdentity) {
+        String identity = normalizeLikeIdentity(userIdentity);
+        if (identity.isEmpty()) return;
+
+        Set<String> likedByUsers = getLikedByUsers();
+        if (likedByUsers.remove(identity)) {
+            likesCount = Math.max(0, likesCount - 1);
+            likedByMe = false;
+        } else {
+            likedByUsers.add(identity);
+            likesCount++;
+            likedByMe = true;
+        }
+        try {
+            likedByUsersJson = MAPPER.writeValueAsString(likedByUsers);
+        } catch (Exception e) {
+            throw new IllegalStateException("Could not save post likes.", e);
+        }
+    }
+
+    private Set<String> getLikedByUsers() {
+        if (likedByUsersJson == null || likedByUsersJson.isBlank()) return new HashSet<>();
+        try {
+            List<String> users = MAPPER.readValue(likedByUsersJson, new TypeReference<List<String>>() {});
+            return new HashSet<>(users);
+        } catch (Exception e) {
+            throw new IllegalStateException("Could not read post likes.", e);
+        }
+    }
+
+    private String normalizeLikeIdentity(String userIdentity) {
+        return userIdentity == null ? "" : userIdentity.trim().toLowerCase(Locale.ROOT);
+    }
 
     public boolean isAppliedByMe() { return appliedByMe; }
     public void setAppliedByMe(boolean appliedByMe) { this.appliedByMe = appliedByMe; }
@@ -214,6 +256,12 @@ public class PostEntity {
         dto.put("applied", appliedByMe);
         dto.put("comments", getComments());
         dto.put("createdAt", createdAt.format(DateTimeFormatter.ofPattern("MMM dd, yyyy, hh:mm a")));
+        return dto;
+    }
+
+    public Map<String, Object> toDto(String userIdentity) {
+        Map<String, Object> dto = toDto();
+        dto.put("liked", isLikedByUser(userIdentity));
         return dto;
     }
 }

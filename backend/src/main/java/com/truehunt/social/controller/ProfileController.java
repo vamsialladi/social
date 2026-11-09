@@ -180,8 +180,11 @@ public class ProfileController {
 
     // Profile Posts & Suggestions
     @GetMapping("/{id}/posts")
-    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getProfilePosts(@PathVariable String id) {
-        List<Map<String, Object>> posts = postService.getPostsByAuthorId(id);
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getProfilePosts(
+            @PathVariable String id,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail
+    ) {
+        List<Map<String, Object>> posts = postService.getPostsByAuthorId(id, userEmail);
         return ResponseEntity.ok(ApiResponse.success(posts));
     }
 

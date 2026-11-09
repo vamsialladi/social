@@ -64,20 +64,6 @@ public class AuthService {
 
         ensurePublicUserId(user);
 
-        String requestedRole = credentials.getRole();
-        if (requestedRole != null && !requestedRole.isBlank()) {
-            boolean isUserProducer = "PRODUCER".equalsIgnoreCase(user.getRole()) || "STUDIO".equalsIgnoreCase(user.getRole());
-            boolean isReqProducer = "PRODUCER".equalsIgnoreCase(requestedRole) || "STUDIO".equalsIgnoreCase(requestedRole);
-            boolean isUserTalent = "TALENT".equalsIgnoreCase(user.getRole());
-            boolean isReqTalent = "TALENT".equalsIgnoreCase(requestedRole);
-
-            if ((isUserProducer && isReqTalent) || (isUserTalent && isReqProducer)) {
-                String accountType = isUserTalent ? "Social" : "Producer";
-                throw new UnauthorizedException("ACCOUNT_TYPE_MISMATCH",
-                        "This account is registered as " + accountType + ". Select that account type to sign in.");
-            }
-        }
-
         String token = tokenProvider.generateToken(user.getEmail(), user.getRole());
 
         AuthResponse resp = new AuthResponse();
@@ -166,6 +152,11 @@ public class AuthService {
         profile.setPhone(user.getPhone());
         profile.setPrimaryCraft(user.getPrimaryCraft());
         profile.setSubCraft(user.getSubCraft());
+        if ("STUDIO".equals(role)) {
+            profile.setRole("Production House");
+            profile.setCompany(user.getCompanyName());
+            profile.setAddress(user.getHeadquarters());
+        }
         profile.setExperience(user.getExperience());
         if (req.getLanguages() != null) profile.setLanguages(req.getLanguages());
         if (req.getSecondaryCrafts() != null) profile.setSecondaryCrafts(req.getSecondaryCrafts());

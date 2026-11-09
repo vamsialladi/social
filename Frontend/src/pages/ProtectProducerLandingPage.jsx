@@ -20,12 +20,17 @@ import {
   FolderPlus
 } from 'lucide-react';
 import { api } from '../services/api';
+import { useAuth } from '../context/AuthContext';
+import { getProfileStorageKey } from '../services/profileStorage';
 
 export default function ProtectProducerLandingPage() {
   const [categories, setCategories] = useState([]);
   const [projects, setProjects] = useState([]);
+  const [productionProfile, setProductionProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const { user } = useAuth();
   const navigate = useNavigate();
+  const profileStorageKey = getProfileStorageKey(user?.userId || user?.id || user?.email);
 
   useEffect(() => {
     async function loadData() {
@@ -42,6 +47,61 @@ export default function ProtectProducerLandingPage() {
     }
     loadData();
   }, []);
+
+  useEffect(() => {
+    let isCurrentAccount = true;
+
+    async function loadProductionProfile() {
+      let savedProfile = null;
+      try {
+        if (profileStorageKey) {
+          const storedProfile = localStorage.getItem(profileStorageKey);
+          savedProfile = storedProfile ? JSON.parse(storedProfile) : null;
+        }
+
+        const accountProfile = await api.profile.getMe();
+        const companyName = accountProfile.company || accountProfile.companyName;
+        const isProductionProfile = Boolean(
+          companyName
+          || accountProfile.role === 'Production House'
+          || accountProfile.primaryCraft === 'Production'
+        );
+        const profile = {
+          ...savedProfile,
+          userId: accountProfile.userId || accountProfile.id || user?.userId || user?.id,
+          name: (isProductionProfile ? accountProfile.name : savedProfile?.name) || user?.name || '',
+          companyName: companyName || savedProfile?.companyName || '',
+          company: companyName || savedProfile?.company || '',
+          headquarters: accountProfile.address
+            || (accountProfile.location && !accountProfile.location.startsWith('Add your') ? accountProfile.location : '')
+            || savedProfile?.headquarters
+            || '',
+          email: accountProfile.email || savedProfile?.email || user?.email || '',
+          phone: accountProfile.phone || savedProfile?.phone || '',
+          role: accountProfile.role || savedProfile?.role || 'Production House',
+          primaryCraft: accountProfile.primaryCraft || savedProfile?.primaryCraft || 'Production',
+        };
+
+        if (isCurrentAccount) {
+          setProductionProfile(profile);
+          if (profileStorageKey) {
+            localStorage.setItem(profileStorageKey, JSON.stringify(profile));
+            localStorage.setItem('truehunt_producer_profile', JSON.stringify(profile));
+          }
+        }
+      } catch (error) {
+        console.warn('Could not load the Production profile:', error);
+        if (isCurrentAccount && savedProfile) {
+          setProductionProfile(savedProfile);
+        }
+      }
+    }
+
+    loadProductionProfile();
+    return () => {
+      isCurrentAccount = false;
+    };
+  }, [profileStorageKey, user?.email, user?.id, user?.name, user?.userId]);
 
   const scrollToCategories = () => {
     const el = document.getElementById('production-categories');
@@ -173,6 +233,29 @@ export default function ProtectProducerLandingPage() {
           </div>
         </div>
       </section>
+
+      {user?.role === 'STUDIO' && (
+        <section aria-labelledby="production-profile-heading" style={{ padding: '28px 0', backgroundColor: 'var(--color-white)', borderBottom: '1px solid var(--color-border)' }}>
+          <div className="container">
+            <div className="card" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '20px', padding: '22px 24px' }}>
+              <div>
+                <span className="badge badge-maroon" style={{ marginBottom: '8px' }}>Production Profile</span>
+                <h2 id="production-profile-heading" style={{ color: 'var(--color-navy)', fontSize: '22px', marginBottom: '6px' }}>
+                  {productionProfile?.companyName || productionProfile?.company || user.companyName || user.name || 'Your Production Profile'}
+                </h2>
+                <p style={{ color: 'var(--color-text-secondary)', margin: 0 }}>
+                  {productionProfile?.name || user.name}
+                  {productionProfile?.headquarters ? ` · ${productionProfile.headquarters}` : ''}
+                  {productionProfile?.email ? ` · ${productionProfile.email}` : ''}
+                </p>
+              </div>
+              <Link to="/social/profile" className="btn btn-outline-subtle" style={{ textDecoration: 'none' }}>
+                Open Social Profile
+              </Link>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* Trust & Transparency Feature Band */}
       <section style={{ backgroundColor: 'var(--color-white)', borderBottom: '1px solid var(--color-border)', padding: '24px 0' }}>

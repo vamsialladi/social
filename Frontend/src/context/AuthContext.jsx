@@ -23,8 +23,8 @@ export function AuthProvider({ children }) {
     setLoading(false);
   }, []);
 
-  const login = async (email, password, role) => {
-    const res = await api.auth.login(email, password, role);
+  const login = async (email, password) => {
+    const res = await api.auth.login(email, password);
     if (!res.data?.token || !res.data?.user) {
       throw new Error('The authentication service returned an invalid sign-in response.');
     }
@@ -54,8 +54,15 @@ export function AuthProvider({ children }) {
     navigate('/');
   }, [navigate]);
 
+  const updateUser = useCallback((updates) => {
+    if (!user) return;
+    const nextUser = { ...user, ...updates };
+    localStorage.setItem('truehunt_user', JSON.stringify(nextUser));
+    setUser(nextUser);
+  }, [user]);
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, isAuthenticated: !!user }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout, updateUser, isAuthenticated: !!user }}>
       {children}
     </AuthContext.Provider>
   );

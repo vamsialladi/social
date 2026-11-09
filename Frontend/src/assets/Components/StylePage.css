@@ -3969,7 +3969,7 @@
   }
 
   .linkedin-navbar .linkedin-nav-items {
-    gap: 3px;
+    gap: 10px;
   }
 
   .linkedin-navbar .linkedin-nav-item {
@@ -4011,7 +4011,7 @@
     grid-area: navigation;
     width: 100%;
     justify-content: space-between;
-    gap: 0;
+    gap: 10px;
     margin: 0;
   }
 
@@ -4785,7 +4785,7 @@
     flex-direction: row;
     align-items: center;
     justify-content: space-around;
-    gap: 3px;
+    gap: 10px;
     margin: 0;
     overflow-x: auto;
     padding: 4px 6px calc(4px + env(safe-area-inset-bottom));

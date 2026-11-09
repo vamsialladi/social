@@ -1,12 +1,20 @@
 package com.truehunt.social.service;
 
 import com.truehunt.social.dto.*;
+import com.truehunt.social.exception.BadRequestException;
+import com.truehunt.social.exception.ConflictException;
 import com.truehunt.social.exception.ResourceNotFoundException;
 import com.truehunt.social.exception.UnauthorizedException;
 import com.truehunt.social.model.ProfileEntity;
+import com.truehunt.social.model.PostEntity;
+import com.truehunt.social.model.ProfileViewEntity;
 import com.truehunt.social.model.UserAccountEntity;
+import com.truehunt.social.model.UserProfileRelationshipEntity;
+import com.truehunt.social.repository.PostRepository;
 import com.truehunt.social.repository.ProfileRepository;
+import com.truehunt.social.repository.ProfileViewRepository;
 import com.truehunt.social.repository.UserAccountRepository;
+import com.truehunt.social.repository.UserProfileRelationshipRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,10 +27,22 @@ public class ProfileService {
 
     private final ProfileRepository profileRepository;
     private final UserAccountRepository userAccountRepository;
+    private final PostRepository postRepository;
+    private final ProfileViewRepository profileViewRepository;
+    private final UserProfileRelationshipRepository relationshipRepository;
 
-    public ProfileService(ProfileRepository profileRepository, UserAccountRepository userAccountRepository) {
+    public ProfileService(
+            ProfileRepository profileRepository,
+            UserAccountRepository userAccountRepository,
+            PostRepository postRepository,
+            ProfileViewRepository profileViewRepository,
+            UserProfileRelationshipRepository relationshipRepository
+    ) {
         this.profileRepository = profileRepository;
         this.userAccountRepository = userAccountRepository;
+        this.postRepository = postRepository;
+        this.profileViewRepository = profileViewRepository;
+        this.relationshipRepository = relationshipRepository;
     }
 
     public List<Map<String, Object>> getPublicDirectory() {
@@ -125,6 +145,22 @@ public class ProfileService {
     @Transactional
     public ProfileDto updateMyProfile(ProfileUpdateRequest req, String userEmail) {
         ProfileEntity profile = findCurrentProfile(userEmail);
+        UserAccountEntity currentAccount = findAccountByEmail(userEmail)
+                .orElseThrow(() -> new UnauthorizedException("The signed-in account could not be found."));
+        String oldUserId = currentAccount.getPublicUserId();
+        String newUserId = req.getUserId() == null ? oldUserId : req.getUserId().trim().toUpperCase(Locale.ROOT);
+        if (newUserId == null || !newUserId.matches("[A-Z0-9_-]{3,14}")) {
+            throw new BadRequestException("User ID must be 3 to 14 letters, numbers, underscores, or hyphens.");
+        }
+        if (!newUserId.equalsIgnoreCase(oldUserId)) {
+            if (userAccountRepository.existsByPublicUserId(newUserId)
+                    || profileRepository.findByUserId(newUserId).isPresent()) {
+                throw new ConflictException("This User ID is already in use.");
+            }
+            updateProfileReferences(oldUserId, newUserId);
+            currentAccount.setPublicUserId(newUserId);
+            profile.setUserId(newUserId);
+        }
 
         if (req.getName() != null) profile.setName(req.getName());
         else if (req.getFullName() != null) profile.setName(req.getFullName());
@@ -243,18 +279,38 @@ public class ProfileService {
         ProfileEntity saved = profileRepository.save(profile);
 
         // Synchronize with UserAccountEntity if present
-        findAccountByEmail(userEmail).ifPresent(account -> {
-            if (profile.getName() != null) account.setName(profile.getName());
-            if (profile.getPhone() != null) account.setPhone(profile.getPhone());
-            if (profile.getPrimaryCraft() != null) account.setPrimaryCraft(profile.getPrimaryCraft());
-            if (profile.getSubCraft() != null) account.setSubCraft(profile.getSubCraft());
-            if (profile.getExperience() != null) account.setExperience(profile.getExperience());
-            userAccountRepository.save(account);
-        });
+        if (profile.getName() != null) currentAccount.setName(profile.getName());
+        if (profile.getPhone() != null) currentAccount.setPhone(profile.getPhone());
+        if (profile.getPrimaryCraft() != null) currentAccount.setPrimaryCraft(profile.getPrimaryCraft());
+        if (profile.getSubCraft() != null) currentAccount.setSubCraft(profile.getSubCraft());
+        if (profile.getExperience() != null) currentAccount.setExperience(profile.getExperience());
+        userAccountRepository.save(currentAccount);
 
         ProfileDto dto = mapEntityToDto(saved);
         dto.setIsOwner(true);
         return dto;
+    }
+
+    private void updateProfileReferences(String oldUserId, String newUserId) {
+        List<PostEntity> posts = postRepository.findAllByAuthorId(oldUserId);
+        posts.forEach(post -> post.setAuthorId(newUserId));
+        postRepository.saveAll(posts);
+
+        List<ProfileViewEntity> views = profileViewRepository
+                .findAllByOwnerUserIdOrViewerUserId(oldUserId, oldUserId);
+        for (ProfileViewEntity view : views) {
+            if (oldUserId.equals(view.getOwnerUserId())) view.setOwnerUserId(newUserId);
+            if (oldUserId.equals(view.getViewerUserId())) view.setViewerUserId(newUserId);
+        }
+        profileViewRepository.saveAll(views);
+
+        List<UserProfileRelationshipEntity> relationships = relationshipRepository
+                .findAllByOwnerUserIdOrTargetProfileId(oldUserId, oldUserId);
+        for (UserProfileRelationshipEntity relationship : relationships) {
+            if (oldUserId.equals(relationship.getOwnerUserId())) relationship.setOwnerUserId(newUserId);
+            if (oldUserId.equals(relationship.getTargetProfileId())) relationship.setTargetProfileId(newUserId);
+        }
+        relationshipRepository.saveAll(relationships);
     }
 
     // Experience CRUD

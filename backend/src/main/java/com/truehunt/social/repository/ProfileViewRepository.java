@@ -12,4 +12,5 @@ public interface ProfileViewRepository extends JpaRepository<ProfileViewEntity, 
     Optional<ProfileViewEntity> findByOwnerUserIdAndViewerUserId(String ownerUserId, String viewerUserId);
 
     List<ProfileViewEntity> findAllByOwnerUserIdOrderByViewedAtDesc(String ownerUserId);
+    List<ProfileViewEntity> findAllByOwnerUserIdOrViewerUserId(String ownerUserId, String viewerUserId);
 }
