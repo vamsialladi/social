@@ -106,9 +106,81 @@ public class TalentService {
                     dto.setLocation(p.getAddress() != null && !p.getAddress().isBlank() ? p.getAddress() : "Hyderabad, India");
                     dto.setExperience(p.getExperience() != null ? p.getExperience() : "3+ Years");
                     dto.setAvatar(p.getProfileImageUrl());
-                    dto.setBio(p.getHighlights());
+                    dto.setCoverImage(p.getCoverImageUrl());
+                    dto.setCompany(p.getCompany());
+                    dto.setIndustry(p.getIndustry());
+                    dto.setWebsiteUrl(p.getWebsiteUrl());
+                    dto.setAvailability(p.getAvailability() != null ? p.getAvailability() : "Available for New Projects");
+                    if (p.getVideoUrls() != null && !p.getVideoUrls().isEmpty()) {
+                        dto.setShowreel(p.getVideoUrls().get(0));
+                    }
+                    String bio = p.getBio() != null ? p.getBio() : p.getHighlights();
+                    dto.setBio(bio);
                     dto.setSkills(p.getTalents());
                     dto.setVerified(true);
+
+                    // Map experiences
+                    if (p.getExperiences() != null) {
+                        List<ExperienceDto> exps = new ArrayList<>();
+                        for (Map<String, Object> expMap : p.getExperiences()) {
+                            ExperienceDto exp = new ExperienceDto();
+                            exp.setId((String) expMap.get("id"));
+                            String title = (String) expMap.getOrDefault("title", expMap.getOrDefault("workedAs", expMap.get("projectName")));
+                            String comp = (String) expMap.getOrDefault("company", expMap.get("organizationName"));
+                            exp.setTitle(title);
+                            exp.setCompany(comp);
+                            exp.setProjectName((String) expMap.getOrDefault("projectName", title));
+                            exp.setOrganizationName((String) expMap.getOrDefault("organizationName", comp));
+                            exp.setWorkedAs((String) expMap.getOrDefault("workedAs", title));
+                            exp.setLocation((String) expMap.get("location"));
+                            exp.setStartDate((String) expMap.get("startDate"));
+                            exp.setEndDate((String) expMap.get("endDate"));
+                            exp.setDescription((String) expMap.getOrDefault("description", expMap.get("highlights")));
+                            exp.setHighlights((String) expMap.getOrDefault("highlights", expMap.get("description")));
+                            exp.setEmploymentType((String) expMap.get("employmentType"));
+                            String logo = (String) expMap.getOrDefault("organizationLogoUrl", expMap.get("companyLogoUrl"));
+                            exp.setOrganizationLogoUrl(logo);
+                            exp.setCompanyLogoUrl(logo);
+                            exps.add(exp);
+                        }
+                        dto.setExperiences(exps);
+                    }
+
+                    // Map educations
+                    if (p.getEducations() != null) {
+                        List<EducationDto> edus = new ArrayList<>();
+                        for (Map<String, Object> eduMap : p.getEducations()) {
+                            EducationDto edu = new EducationDto();
+                            edu.setId((String) eduMap.get("id"));
+                            edu.setInstitution((String) eduMap.get("institution"));
+                            edu.setDegree((String) eduMap.get("degree"));
+                            edu.setFieldOfStudy((String) eduMap.get("fieldOfStudy"));
+                            edu.setStartDate((String) eduMap.get("startDate"));
+                            edu.setEndDate((String) eduMap.get("endDate"));
+                            edu.setGrade((String) eduMap.get("grade"));
+                            edu.setDescription((String) eduMap.get("description"));
+                            edus.add(edu);
+                        }
+                        dto.setEducations(edus);
+                    }
+
+                    // Map projects
+                    if (p.getProjects() != null) {
+                        List<ProjectDto> projs = new ArrayList<>();
+                        for (Map<String, Object> projMap : p.getProjects()) {
+                            ProjectDto proj = new ProjectDto();
+                            proj.setId((String) projMap.get("id"));
+                            proj.setTitle((String) projMap.get("title"));
+                            proj.setDescription((String) projMap.get("description"));
+                            proj.setTechnologies((String) projMap.get("technologies"));
+                            proj.setProjectUrl((String) projMap.get("projectUrl"));
+                            proj.setStartDate((String) projMap.get("startDate"));
+                            proj.setEndDate((String) projMap.get("endDate"));
+                            projs.add(proj);
+                        }
+                        dto.setProjects(projs);
+                    }
+
                     map.put(uid, dto);
                 }
             }

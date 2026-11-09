@@ -1,6 +1,6 @@
 #FileLock
-#Mon Nov 09 16:25:57 IST 2026
-server=192.168.0.230\:51759
-hostName=chandrabose
+#Mon Nov 09 21:34:10 IST 2026
+hostName=192.168.1.50
+id=1a1c10d832e505f37357cba71fbf5738574bbe7529c
 method=file
-id=1a1bff353bcbe97707da26cc69271a5b71e0aabf043
+server=192.168.1.50\:51311

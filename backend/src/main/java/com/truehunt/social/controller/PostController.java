@@ -29,6 +29,14 @@ public class PostController {
         return ResponseEntity.ok(ApiResponse.success(postService.getPosts(type, userEmail)));
     }
 
+    @GetMapping("/posts/{id}")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getPostById(
+            @PathVariable String id,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(postService.getPostById(id, userEmail)));
+    }
+
     @GetMapping("/opportunities")
     public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getOpportunities(
             @RequestHeader(value = "X-User-Email", required = false) String userEmail

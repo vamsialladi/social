@@ -35,24 +35,27 @@ public class ConnectionController {
 
     @PostMapping("/toggle")
     public ResponseEntity<ApiResponse<Map<String, Object>>> toggleConnection(
-            @RequestBody Map<String, String> req,
+            @RequestBody(required = false) Map<String, String> req,
             @RequestHeader(value = "X-User-Email", required = false) String userEmail
     ) {
-        String profileId = req.get("profileId");
+        String profileId = req != null ? req.get("profileId") : null;
         return ResponseEntity.ok(ApiResponse.success(connectionService.toggleConnection(profileId, userEmail)));
     }
 
     @PostMapping("/follow")
     public ResponseEntity<ApiResponse<Map<String, Object>>> toggleFollow(
-            @RequestBody Map<String, String> req,
+            @RequestBody(required = false) Map<String, String> req,
             @RequestHeader(value = "X-User-Email", required = false) String userEmail
     ) {
-        String profileId = req.get("profileId");
+        String profileId = req != null ? req.get("profileId") : null;
         return ResponseEntity.ok(ApiResponse.success(connectionService.toggleFollow(profileId, userEmail)));
     }
 
     @PostMapping
-    public ResponseEntity<ApiResponse<Map<String, Object>>> connectTalent(@RequestBody ConnectionRequestDto req) {
-        return ResponseEntity.ok(ApiResponse.success(connectionService.connectTalent(req)));
+    public ResponseEntity<ApiResponse<Map<String, Object>>> connectTalent(
+            @RequestBody ConnectionRequestDto req,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(connectionService.connectTalent(req, userEmail)));
     }
 }

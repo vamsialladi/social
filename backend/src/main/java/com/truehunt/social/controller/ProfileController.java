@@ -67,8 +67,11 @@ public class ProfileController {
     }
 
     @GetMapping("/{userId}")
-    public ResponseEntity<ApiResponse<ProfileDto>> getProfileById(@PathVariable String userId) {
-        ProfileDto profile = profileService.getProfileById(userId);
+    public ResponseEntity<ApiResponse<ProfileDto>> getProfileById(
+            @PathVariable String userId,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail
+    ) {
+        ProfileDto profile = profileService.getProfileById(userId, userEmail);
         return ResponseEntity.ok(ApiResponse.success(profile));
     }
 
@@ -206,8 +209,9 @@ public class ProfileController {
     }
 
     @PostMapping("/reference-check")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> verifyReference(@RequestBody ReferenceCheckRequest req) {
-        Map<String, Object> res = profileService.verifyReference(req.getReferenceId());
+    public ResponseEntity<ApiResponse<Map<String, Object>>> verifyReference(@RequestBody(required = false) ReferenceCheckRequest req) {
+        String refId = req != null ? req.getReferenceId() : "";
+        Map<String, Object> res = profileService.verifyReference(refId);
         return ResponseEntity.ok(ApiResponse.success(res));
     }
 }

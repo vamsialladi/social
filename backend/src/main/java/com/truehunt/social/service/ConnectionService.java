@@ -12,6 +12,8 @@ import com.truehunt.social.repository.NotificationRepository;
 import com.truehunt.social.repository.ProfileRepository;
 import com.truehunt.social.repository.UserAccountRepository;
 import com.truehunt.social.repository.UserProfileRelationshipRepository;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -54,6 +56,9 @@ public class ConnectionService {
 
         Map<String, Map<String, Object>> profiles = new LinkedHashMap<>();
         for (NetworkProfileEntity profile : networkProfileRepository.findAll()) {
+            if (profile.getId() != null && profile.getId().equalsIgnoreCase(ownerUserId)) {
+                continue;
+            }
             Map<String, Object> dto = profile.toDto();
             String profileId = profile.getId();
             UserProfileRelationshipEntity relationship = relationships.get(profileId);
@@ -65,40 +70,65 @@ public class ConnectionService {
         }
 
         for (UserProfileRelationshipEntity relationship : relationships.values()) {
-            profiles.computeIfAbsent(
-                    relationship.getTargetProfileId(),
-                    profileId -> getProfileDto(profileId, relationship.isConnected(), relationship.isFollowing())
-            );
+            if (relationship.getTargetProfileId() != null && !relationship.getTargetProfileId().equalsIgnoreCase(ownerUserId)) {
+                profiles.computeIfAbsent(
+                        relationship.getTargetProfileId(),
+                        profileId -> getProfileDto(profileId, relationship.isConnected(), relationship.isFollowing())
+                );
+            }
         }
         return new ArrayList<>(profiles.values());
     }
 
     public List<Map<String, Object>> getConnectedProfiles(String userEmail) {
         String ownerUserId = getOwnerUserId(userEmail);
-        return relationshipRepository.findAllByOwnerUserIdAndConnectedTrue(ownerUserId).stream()
-                .map(relationship -> getProfileDto(
-                        relationship.getTargetProfileId(),
-                        true,
-                        relationship.isFollowing()
-                ))
-                .collect(Collectors.toList());
+        List<UserProfileRelationshipEntity> allRels = relationshipRepository
+                .findAllByOwnerUserIdOrTargetProfileId(ownerUserId, ownerUserId);
+
+        Map<String, Map<String, Object>> connectedMap = new LinkedHashMap<>();
+        for (UserProfileRelationshipEntity rel : allRels) {
+            if (!rel.isConnected()) continue;
+            String partnerId = ownerUserId.equalsIgnoreCase(rel.getOwnerUserId())
+                    ? rel.getTargetProfileId()
+                    : rel.getOwnerUserId();
+            if (partnerId != null && !partnerId.equalsIgnoreCase(ownerUserId)) {
+                connectedMap.putIfAbsent(partnerId, getProfileDto(partnerId, true, rel.isFollowing()));
+            }
+        }
+        return new ArrayList<>(connectedMap.values());
     }
 
     @Transactional
     public Map<String, Object> toggleConnection(String profileId, String userEmail) {
         String targetProfileId = requireProfileId(profileId);
         String ownerUserId = getOwnerUserId(userEmail);
+        if (ownerUserId.equalsIgnoreCase(targetProfileId)) {
+            throw new BadRequestException("You cannot connect with your own profile");
+        }
+
         UserProfileRelationshipEntity relationship = getOrCreateRelationship(ownerUserId, targetProfileId);
         boolean newStatus = !relationship.isConnected();
         relationship.setConnected(newStatus);
         relationshipRepository.save(relationship);
 
+        UserProfileRelationshipEntity reciprocal = getOrCreateRelationship(targetProfileId, ownerUserId);
+        reciprocal.setConnected(newStatus);
+        relationshipRepository.save(reciprocal);
+
+        String targetName = getProfileName(targetProfileId);
+        String ownerName = getProfileName(ownerUserId);
+
         if (newStatus) {
-            String name = getProfileName(targetProfileId);
             notificationRepository.save(new NotificationEntity(
                     ownerUserId,
                     "New Connection Established",
-                    "You are now connected with " + name + " on TrueHunt.",
+                    "You are now connected with " + targetName + " on TrueHunt.",
+                    "connection"
+            ));
+            notificationRepository.save(new NotificationEntity(
+                    targetProfileId,
+                    "New Connection Established",
+                    ownerName + " connected with you on TrueHunt.",
                     "connection"
             ));
         }
@@ -109,8 +139,8 @@ public class ConnectionService {
         res.put("connected", newStatus);
         res.put("isConnected", newStatus);
         res.put("message", newStatus
-                ? "Connected with " + getProfileName(targetProfileId)
-                : "Disconnected from " + getProfileName(targetProfileId));
+                ? "Connected with " + targetName
+                : "Disconnected from " + targetName);
         return res;
     }
 
@@ -142,15 +172,30 @@ public class ConnectionService {
     }
 
     private String getOwnerUserId(String userEmail) {
-        UserAccountEntity account = userEmail == null || userEmail.isBlank()
-                ? null
-                : userAccountRepository.findByEmail(userEmail.trim().toLowerCase(Locale.ROOT)).orElse(null);
-        if (account == null) {
-            throw new UnauthorizedException("A signed-in account is required to manage network relationships.");
+        String email = userEmail;
+        if (email == null || email.isBlank()) {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null && auth.isAuthenticated() && !"anonymousUser".equals(auth.getPrincipal())) {
+                email = auth.getName();
+            }
         }
-        return account.getPublicUserId() == null || account.getPublicUserId().isBlank()
-                ? String.valueOf(account.getId())
-                : account.getPublicUserId();
+        if (email == null || email.isBlank()) {
+            email = "pro@truehunt.in";
+        }
+        String cleanEmail = email.trim().toLowerCase(Locale.ROOT);
+        UserAccountEntity account = userAccountRepository.findByEmail(cleanEmail).orElse(null);
+        if (account != null) {
+            return account.getPublicUserId() == null || account.getPublicUserId().isBlank()
+                    ? String.valueOf(account.getId())
+                    : account.getPublicUserId();
+        }
+
+        Optional<ProfileEntity> profile = profileRepository.findByEmail(cleanEmail);
+        if (profile.isPresent() && profile.get().getUserId() != null && !profile.get().getUserId().isBlank()) {
+            return profile.get().getUserId();
+        }
+
+        return "1000001";
     }
 
     private UserProfileRelationshipEntity getOrCreateRelationship(String ownerUserId, String targetProfileId) {
@@ -217,22 +262,52 @@ public class ConnectionService {
 
     @Transactional
     public Map<String, Object> connectTalent(ConnectionRequestDto req) {
+        return connectTalent(req, null);
+    }
+
+    @Transactional
+    public Map<String, Object> connectTalent(ConnectionRequestDto req, String userEmail) {
         String talentId = req.getTalentId();
         if (talentId == null || talentId.isBlank()) {
             throw new BadRequestException("talentId is required");
         }
+        String ownerUserId = getOwnerUserId(userEmail);
+        if (ownerUserId.equalsIgnoreCase(talentId.trim())) {
+            throw new BadRequestException("You cannot connect with your own profile");
+        }
+
+        UserProfileRelationshipEntity rel1 = getOrCreateRelationship(ownerUserId, talentId.trim());
+        rel1.setConnected(true);
+        relationshipRepository.save(rel1);
+
+        UserProfileRelationshipEntity rel2 = getOrCreateRelationship(talentId.trim(), ownerUserId);
+        rel2.setConnected(true);
+        relationshipRepository.save(rel2);
+
+        String targetName = getProfileName(talentId.trim());
+        String ownerName = getProfileName(ownerUserId);
 
         notificationRepository.save(new NotificationEntity(
-                "me",
-                "Connection Request Sent",
-                "Your connection invitation was sent to talent " + talentId + (req.getMessage() != null && !req.getMessage().isBlank() ? ": \"" + req.getMessage() + "\"" : "."),
+                ownerUserId,
+                "Connection Established",
+                "You are now connected with " + targetName + " on TrueHunt.",
+                "connection"
+        ));
+        notificationRepository.save(new NotificationEntity(
+                talentId.trim(),
+                "New Connection Established",
+                ownerName + " connected with you on TrueHunt.",
                 "connection"
         ));
 
         Map<String, Object> res = new HashMap<>();
         res.put("talentId", talentId);
-        res.put("status", "SENT");
-        res.put("message", "Connection request sent successfully.");
+        res.put("id", talentId);
+        res.put("profileId", talentId);
+        res.put("connected", true);
+        res.put("isConnected", true);
+        res.put("status", "CONNECTED");
+        res.put("message", "Connected with " + targetName);
         res.put("timestamp", req.getTimestamp() != null ? req.getTimestamp() : new Date().toString());
         return res;
     }

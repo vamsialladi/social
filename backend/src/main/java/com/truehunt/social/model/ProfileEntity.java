@@ -381,8 +381,8 @@ public class ProfileEntity {
         dto.put("headline", resolvedHeadline);
 
         dto.put("verified", true);
-        dto.put("connectionsCount", 128);
-        dto.put("followersCount", 430);
+        dto.put("connectionsCount", 0);
+        dto.put("followersCount", 0);
         dto.put("isOwner", true);
         dto.put("isConnected", false);
         dto.put("isFollowing", false);

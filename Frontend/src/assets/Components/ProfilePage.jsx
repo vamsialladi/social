@@ -769,6 +769,20 @@ function ProfilePage({
   }, [targetProfileId])
 
   useEffect(() => {
+    const nextProfileId = String(profileDetails.userId || profileDetails.id || '')
+    if (nextProfileId) {
+      setConnectionState({
+        profileId: nextProfileId,
+        connected: Boolean(profileDetails.isConnected),
+      })
+      setFollowState({
+        profileId: nextProfileId,
+        followed: Boolean(profileDetails.isFollowing),
+      })
+    }
+  }, [profileDetails.userId, profileDetails.id, profileDetails.isConnected, profileDetails.isFollowing])
+
+  useEffect(() => {
     if (!isOwnerView) return undefined
 
     let isCurrent = true
@@ -1953,6 +1967,19 @@ function ProfilePage({
               >
                 Contact
               </button>
+              {!isOwnerView && (
+                <button
+                  className={`identity-contact-button ${isProfileConnected ? 'identity-connected-button' : ''}`}
+                  type="button"
+                  disabled={relationshipAction !== '' || !targetProfileId}
+                  onClick={toggleProfileConnection}
+                  style={isProfileConnected ? { backgroundColor: '#10B981', color: '#FFFFFF', borderColor: '#10B981' } : {}}
+                >
+                  {relationshipAction === 'connect'
+                    ? (isProfileConnected ? 'Removing…' : 'Connecting…')
+                    : (isProfileConnected ? '✓ Connected' : '+ Connect')}
+                </button>
+              )}
               {!isOwnerView && canMessageProfile && (
                 <button
                   className="identity-contact-button"

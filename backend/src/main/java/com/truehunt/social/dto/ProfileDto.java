@@ -49,6 +49,8 @@ public class ProfileDto {
     private String otherLanguage;
 
     private Boolean isOwner = false;
+    private Boolean isConnected = false;
+    private Boolean isFollowing = false;
 
     private List<String> skills = new ArrayList<>();
     private List<String> talents = new ArrayList<>();
@@ -131,6 +133,14 @@ public class ProfileDto {
         this.company = company;
     }
 
+    public String getCompanyName() {
+        return (company != null && !company.isBlank()) ? company : name;
+    }
+
+    public void setCompanyName(String companyName) {
+        this.company = companyName;
+    }
+
     public String getIndustry() {
         return industry;
     }
@@ -145,6 +155,14 @@ public class ProfileDto {
 
     public void setLocation(String location) {
         this.location = location;
+    }
+
+    public String getHeadquarters() {
+        return (address != null && !address.isBlank()) ? address : location;
+    }
+
+    public void setHeadquarters(String headquarters) {
+        this.address = headquarters;
     }
 
     public String getBio() {
@@ -408,6 +426,22 @@ public class ProfileDto {
 
     public void setIsOwner(Boolean owner) {
         isOwner = owner;
+    }
+
+    public Boolean getIsConnected() {
+        return isConnected;
+    }
+
+    public void setIsConnected(Boolean isConnected) {
+        this.isConnected = isConnected;
+    }
+
+    public Boolean getIsFollowing() {
+        return isFollowing;
+    }
+
+    public void setIsFollowing(Boolean isFollowing) {
+        this.isFollowing = isFollowing;
     }
 
     public List<String> getSkills() {

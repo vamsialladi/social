@@ -1,14 +1,58 @@
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { MapPin, CheckCircle2, UserPlus, Eye } from 'lucide-react';
+import { MapPin, CheckCircle2, UserPlus, Eye, Check } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import api from '../../api';
 
 export default function TalentCard({ talent }) {
   const navigate = useNavigate();
   const { isAuthenticated } = useAuth();
+  const [isConnected, setIsConnected] = useState(Boolean(talent.isConnected || talent.connected));
+  const [isConnecting, setIsConnecting] = useState(false);
+
+  useEffect(() => {
+    const targetId = String(talent.userId || talent.id || '');
+    function onConnectionChanged(event) {
+      const { connected, profile } = event.detail || {};
+      const changedId = String(profile?.userId || profile?.id || '');
+      if (changedId && changedId === targetId) {
+        setIsConnected(Boolean(connected));
+      }
+    }
+    window.addEventListener('truehunt-connection-changed', onConnectionChanged);
+    return () => window.removeEventListener('truehunt-connection-changed', onConnectionChanged);
+  }, [talent.userId, talent.id]);
 
   const openSocialProfile = () => {
     const destination = isAuthenticated ? '/social/profile' : '/sign-in';
     navigate(destination, { state: { connectTalent: talent } });
+  };
+
+  const handleConnect = async (e) => {
+    e.stopPropagation();
+    if (!isAuthenticated) {
+      navigate('/sign-in');
+      return;
+    }
+    const targetId = talent.userId || talent.id;
+    if (!targetId || isConnecting) return;
+
+    setIsConnecting(true);
+    try {
+      const res = await api.toggleConnection(targetId);
+      const nextConnected = typeof res?.connected === 'boolean' ? res.connected : !isConnected;
+      setIsConnected(nextConnected);
+      window.dispatchEvent(new CustomEvent('truehunt-connection-changed', {
+        detail: {
+          connected: nextConnected,
+          profile: { ...talent, id: targetId, userId: targetId }
+        }
+      }));
+    } catch (err) {
+      console.error('Failed to toggle connection on talent card:', err);
+    } finally {
+      setIsConnecting(false);
+    }
   };
 
   return (
@@ -176,12 +220,16 @@ export default function TalentCard({ talent }) {
 
             <button
               type="button"
-              onClick={openSocialProfile}
-              className="btn btn-sm btn-maroon"
-              style={{ width: '100%' }}
+              onClick={handleConnect}
+              disabled={isConnecting}
+              className={`btn btn-sm ${isConnected ? 'btn-success' : 'btn-maroon'}`}
+              style={{
+                width: '100%',
+                ...(isConnected ? { backgroundColor: '#10B981', color: '#FFFFFF', borderColor: '#10B981' } : {})
+              }}
             >
-              <UserPlus size={14} />
-              <span>Connect</span>
+              {isConnected ? <Check size={14} /> : <UserPlus size={14} />}
+              <span>{isConnecting ? 'Updating…' : (isConnected ? 'Connected' : 'Connect')}</span>
             </button>
           </div>
 

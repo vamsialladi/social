@@ -1432,7 +1432,25 @@ export default function SocialApp() {
         || candidateProfile.id
         || candidateProfile._id
         || '',
-    )
+    ).trim()
+
+    const myIdentifiers = [
+      user?.userId,
+      user?.id,
+      user?.email,
+      profileDetails.userId,
+      profileDetails.id,
+      profileDetails.email,
+    ].filter(Boolean).map((id) => String(id).trim().toLowerCase())
+
+    const isSelf = myIdentifiers.includes(candidateId.toLowerCase()) ||
+      (profileDetails.name && candidateProfile.name && profileDetails.name.trim().toLowerCase() === candidateProfile.name.trim().toLowerCase())
+
+    if (isSelf) {
+      showMyProfile()
+      return
+    }
+
     const selectedCandidate = {
       ...emptyProfileDetails,
       ...candidateProfile,
@@ -1618,34 +1636,61 @@ export default function SocialApp() {
           onProfileSelect={showCandidateProfile}
         />
       </div>
-      <div hidden={activeNavigation !== 'profile'}>
-        <ProfilePage
-          isOwner={!viewingCandidateProfile && isAuthenticated}
-          isActive={activeNavigation === 'profile'}
-          accountUserId={user?.userId || ''}
-          profileDetails={viewingCandidateProfile || profileDetails}
-          setProfileDetails={(updater) => {
-            setProfileDetails((prev) => {
-              const updated = typeof updater === 'function' ? updater(prev) : updater
-              if (profileStorageKey) {
-                try {
-                  localStorage.setItem(profileStorageKey, JSON.stringify(updated))
-                } catch (error) {
-                  console.warn('Could not save the current account profile cache:', error)
-                }
-              }
-              return updated
-            })
-          }}
-          profilePreview={viewingCandidateProfile?.profileImageUrl || viewingCandidateProfile?.avatar || profilePreview}
-          setProfilePreview={setProfilePreview}
-          onViewConnections={() => setActiveNavigation('connections')}
-          onMessage={(recipient) => {
-            openConversationRef.current?.(recipient)
-            setActiveNavigation('messaging')
-          }}
-        />
-      </div>
+      {(() => {
+        const viewingCandidateId = String(viewingCandidateProfile?.userId || viewingCandidateProfile?.id || viewingCandidateProfile?.email || '').trim().toLowerCase()
+        const myIdentifiers = [
+          user?.userId,
+          user?.id,
+          user?.email,
+          profileDetails.userId,
+          profileDetails.id,
+          profileDetails.email,
+        ].filter(Boolean).map((id) => String(id).trim().toLowerCase())
+
+        const isViewingSelf = Boolean(
+          viewingCandidateProfile && (
+            myIdentifiers.includes(viewingCandidateId) ||
+            (profileDetails.name && viewingCandidateProfile.name && profileDetails.name.trim().toLowerCase() === viewingCandidateProfile.name.trim().toLowerCase())
+          )
+        )
+
+        const isProfileOwner = (!viewingCandidateProfile || isViewingSelf) && isAuthenticated
+        const activeProfileDetails = isViewingSelf ? profileDetails : (viewingCandidateProfile || profileDetails)
+        const activeProfilePreview = isViewingSelf
+          ? (profileDetails.profileImageUrl || profileDetails.avatar || profilePreview)
+          : (viewingCandidateProfile?.profileImageUrl || viewingCandidateProfile?.avatar || profilePreview)
+
+        return (
+          <div hidden={activeNavigation !== 'profile'}>
+            <ProfilePage
+              isOwner={isProfileOwner}
+              isActive={activeNavigation === 'profile'}
+              accountUserId={user?.userId || ''}
+              profileDetails={activeProfileDetails}
+              setProfileDetails={(updater) => {
+                setProfileDetails((prev) => {
+                  const updated = typeof updater === 'function' ? updater(prev) : updater
+                  if (profileStorageKey) {
+                    try {
+                      localStorage.setItem(profileStorageKey, JSON.stringify(updated))
+                    } catch (error) {
+                      console.warn('Could not save the current account profile cache:', error)
+                    }
+                  }
+                  return updated
+                })
+              }}
+              profilePreview={activeProfilePreview}
+              setProfilePreview={setProfilePreview}
+              onViewConnections={() => setActiveNavigation('connections')}
+              onMessage={(recipient) => {
+                openConversationRef.current?.(recipient)
+                setActiveNavigation('messaging')
+              }}
+            />
+          </div>
+        )
+      })()}
 
       {activeNavigation === 'settings' && (
         <Settings

@@ -61,9 +61,9 @@ public class ConversationController {
     @PatchMapping("/{id}/mailbox")
     public ResponseEntity<ApiResponse<Map<String, Object>>> updateMailbox(
             @PathVariable String id,
-            @RequestBody Map<String, String> req
+            @RequestBody(required = false) Map<String, String> req
     ) {
-        String mailbox = req.getOrDefault("mailbox", "Focused");
+        String mailbox = (req != null && req.containsKey("mailbox")) ? req.get("mailbox") : "Focused";
         return ResponseEntity.ok(ApiResponse.success(conversationService.updateMailbox(id, mailbox)));
     }
 

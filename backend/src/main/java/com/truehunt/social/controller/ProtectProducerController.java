@@ -41,7 +41,7 @@ public class ProtectProducerController {
         return ResponseEntity.ok(ApiResponse.success(created));
     }
 
-    @PutMapping("/projects/{id}")
+    @RequestMapping(value = "/projects/{id}", method = {RequestMethod.PUT, RequestMethod.PATCH})
     public ResponseEntity<ApiResponse<ProtectProjectDto>> updateProject(
             @PathVariable String id,
             @RequestBody ProtectProjectDto projectData
@@ -82,7 +82,7 @@ public class ProtectProducerController {
         return ResponseEntity.ok(ApiResponse.success(protectProducerService.createTask(projectId, taskData)));
     }
 
-    @PutMapping("/projects/{projectId}/tasks/{taskId}")
+    @RequestMapping(value = "/projects/{projectId}/tasks/{taskId}", method = {RequestMethod.PUT, RequestMethod.PATCH})
     public ResponseEntity<ApiResponse<TaskDto>> updateTask(
             @PathVariable String projectId,
             @PathVariable String taskId,
@@ -106,6 +106,15 @@ public class ProtectProducerController {
             @RequestBody DocumentDto docData
     ) {
         return ResponseEntity.ok(ApiResponse.success(protectProducerService.createDocument(projectId, docData)));
+    }
+
+    @RequestMapping(value = "/projects/{projectId}/documents/{documentId}", method = {RequestMethod.PUT, RequestMethod.PATCH})
+    public ResponseEntity<ApiResponse<DocumentDto>> updateDocument(
+            @PathVariable String projectId,
+            @PathVariable String documentId,
+            @RequestBody DocumentDto docData
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(protectProducerService.updateDocument(projectId, documentId, docData)));
     }
 
     @PatchMapping("/projects/{projectId}/documents/{documentId}/verify")
@@ -152,7 +161,7 @@ public class ProtectProducerController {
         return ResponseEntity.ok(ApiResponse.success(protectProducerService.createRisk(projectId, riskData)));
     }
 
-    @PutMapping("/projects/{projectId}/risks/{riskId}")
+    @RequestMapping(value = "/projects/{projectId}/risks/{riskId}", method = {RequestMethod.PUT, RequestMethod.PATCH})
     public ResponseEntity<ApiResponse<RiskDto>> updateRisk(
             @PathVariable String projectId,
             @PathVariable String riskId,
@@ -175,7 +184,7 @@ public class ProtectProducerController {
         return ResponseEntity.ok(ApiResponse.success(protectProducerService.createEpisode(projectId, epData)));
     }
 
-    @PutMapping("/projects/{projectId}/episodes/{epId}")
+    @RequestMapping(value = "/projects/{projectId}/episodes/{epId}", method = {RequestMethod.PUT, RequestMethod.PATCH})
     public ResponseEntity<ApiResponse<EpisodeDto>> updateEpisode(
             @PathVariable String projectId,
             @PathVariable String epId,

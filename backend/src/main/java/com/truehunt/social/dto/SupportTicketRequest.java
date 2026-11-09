@@ -10,6 +10,7 @@ public class SupportTicketRequest {
     private String phone;
     private String subject;
     private String category;
+    private String department;
     private String message;
     private String description;
     private String priority = "MEDIUM";
@@ -58,11 +59,19 @@ public class SupportTicketRequest {
     }
 
     public String getCategory() {
-        return category;
+        return (category != null && !category.isBlank()) ? category : department;
     }
 
     public void setCategory(String category) {
         this.category = category;
+    }
+
+    public String getDepartment() {
+        return department;
+    }
+
+    public void setDepartment(String department) {
+        this.department = department;
     }
 
     public String getMessage() {

@@ -20,17 +20,17 @@ public class JobService {
     }
 
     public List<JobDto> getAll(Map<String, String> params) {
-        String c = params.get("craft");
-        if (c == null) c = params.get("category");
-        if (c == null) c = params.get("roleCategory");
-        if (c == null) c = params.get("department");
+        String c = params != null ? params.get("craft") : null;
+        if (c == null && params != null) c = params.get("category");
+        if (c == null && params != null) c = params.get("roleCategory");
+        if (c == null && params != null) c = params.get("department");
         final String craft = c;
 
-        final String location = params.get("location");
+        final String location = params != null ? params.get("location") : null;
 
-        String s = params.get("search");
-        if (s == null) s = params.get("q");
-        if (s == null) s = params.get("query");
+        String s = params != null ? params.get("search") : null;
+        if (s == null && params != null) s = params.get("q");
+        if (s == null && params != null) s = params.get("query");
         final String search = s;
 
         return jobsMap.values().stream()

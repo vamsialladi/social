@@ -25,8 +25,8 @@ public class SettingsController {
     }
 
     @PatchMapping("/theme")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> updateTheme(@RequestBody Map<String, String> req) {
-        String theme = req.get("theme");
+    public ResponseEntity<ApiResponse<Map<String, Object>>> updateTheme(@RequestBody(required = false) Map<String, String> req) {
+        String theme = (req != null && req.containsKey("theme")) ? req.get("theme") : "dark";
         return ResponseEntity.ok(ApiResponse.success(settingsService.updateTheme(theme)));
     }
 

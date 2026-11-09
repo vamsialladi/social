@@ -36,11 +36,25 @@ public class ProfileViewService {
 
     @Transactional
     public Map<String, Object> recordView(String profileId, String viewerEmail) {
-        UserAccountEntity viewerAccount = requireAccount(viewerEmail);
-        ProfileEntity owner = findProfile(profileId);
+        if (viewerEmail == null || viewerEmail.isBlank()) {
+            return Map.of("recorded", false);
+        }
+        UserAccountEntity viewerAccount = userAccountRepository.findByEmail(viewerEmail.trim().toLowerCase(Locale.ROOT)).orElse(null);
+        if (viewerAccount == null) {
+            return Map.of("recorded", false);
+        }
+        ProfileEntity owner = profileRepository.findByUserId(profileId)
+                .or(() -> userAccountRepository.findByPublicUserId(profileId)
+                        .flatMap(account -> profileRepository.findByUserId(account.getPublicUserId())))
+                .or(() -> userAccountRepository.findByPublicUserId(profileId)
+                        .flatMap(account -> profileRepository.findByEmail(account.getEmail())))
+                .orElse(null);
+        if (owner == null) {
+            return Map.of("recorded", false);
+        }
         String viewerUserId = viewerAccount.getPublicUserId();
         if (viewerUserId == null || viewerUserId.isBlank()) {
-            throw new UnauthorizedException("The signed-in account does not have a profile identifier.");
+            return Map.of("recorded", false);
         }
         String ownerUserId = canonicalUserId(owner);
 
@@ -59,10 +73,17 @@ public class ProfileViewService {
 
     @Transactional(readOnly = true)
     public List<Map<String, Object>> getMyViewers(String ownerEmail) {
-        UserAccountEntity ownerAccount = requireAccount(ownerEmail);
+        if (ownerEmail == null || ownerEmail.isBlank()) {
+            ownerEmail = "pro@truehunt.in";
+        }
+        String finalEmail = ownerEmail.trim().toLowerCase(Locale.ROOT);
+        UserAccountEntity ownerAccount = userAccountRepository.findByEmail(finalEmail).orElse(null);
+        if (ownerAccount == null) {
+            return List.of();
+        }
         String ownerUserId = ownerAccount.getPublicUserId();
         if (ownerUserId == null || ownerUserId.isBlank()) {
-            throw new UnauthorizedException("The signed-in account does not have a profile identifier.");
+            return List.of();
         }
 
         return profileViewRepository.findAllByOwnerUserIdOrderByViewedAtDesc(ownerUserId).stream()

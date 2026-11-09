@@ -61,7 +61,7 @@ com\truehunt\social\model\ProfileEntity$2.class
 com\truehunt\social\dto\JobDto.class
 com\truehunt\social\SocialBackendApplication.class
 com\truehunt\social\exception\ResourceNotFoundException.class
-com\truehunt\social\service\PostService.class
+com\truehunt\social\model\PostEntity$3.class
 com\truehunt\social\service\StatsService.class
 com\truehunt\social\config\WebConfig.class
 com\truehunt\social\dto\TaskDto.class
@@ -96,7 +96,6 @@ com\truehunt\social\exception\ConflictException.class
 com\truehunt\social\dto\CommentRequest.class
 com\truehunt\social\model\PostEntity$1.class
 com\truehunt\social\model\ProfileEntity$1.class
-com\truehunt\social\controller\ProfileController.class
 com\truehunt\social\dto\EpisodeDto.class
 com\truehunt\social\model\ProfileEntity$8.class
 com\truehunt\social\dto\CreateConversationRequest.class

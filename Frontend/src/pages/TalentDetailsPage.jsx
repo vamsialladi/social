@@ -9,8 +9,10 @@ import {
   UserPlus, 
   Share2, 
   Lock, 
+  Check,
 } from 'lucide-react';
 import { api } from '../services/api';
+import { api as socialApi } from '../api';
 import { useNotification } from '../context/NotificationContext';
 import { useAuth } from '../context/AuthContext';
 import { FEATURED_TALENTS } from '../services/mockData';
@@ -19,6 +21,8 @@ export default function TalentDetailsPage() {
   const { id } = useParams();
   const [talent, setTalent] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isConnected, setIsConnected] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
   const { showNotification } = useNotification();
   const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
@@ -28,7 +32,11 @@ export default function TalentDetailsPage() {
       setLoading(true);
       try {
         const data = await api.talents.getById(id);
-        setTalent(data || FEATURED_TALENTS[0]);
+        const resolved = data || FEATURED_TALENTS[0];
+        setTalent(resolved);
+        if (resolved && (resolved.isConnected || resolved.connected)) {
+          setIsConnected(true);
+        }
       } catch {
         setTalent(FEATURED_TALENTS[0]);
       } finally {
@@ -38,6 +46,18 @@ export default function TalentDetailsPage() {
     fetchTalent();
   }, [id]);
 
+  useEffect(() => {
+    function onConnectionChanged(event) {
+      const { connected, profile } = event.detail || {};
+      const changedId = String(profile?.userId || profile?.id || '');
+      if (changedId && (changedId === id || (talent && (changedId === String(talent.userId) || changedId === String(talent.id))))) {
+        setIsConnected(Boolean(connected));
+      }
+    }
+    window.addEventListener('truehunt-connection-changed', onConnectionChanged);
+    return () => window.removeEventListener('truehunt-connection-changed', onConnectionChanged);
+  }, [id, talent]);
+
   const handleShare = () => {
     if (navigator.clipboard) {
       navigator.clipboard.writeText(window.location.href);
@@ -45,9 +65,32 @@ export default function TalentDetailsPage() {
     }
   };
 
-  const handleConnect = () => {
-    const destination = isAuthenticated ? '/social/profile' : '/sign-in';
-    navigate(destination, { state: { connectTalent: talent } });
+  const handleConnect = async () => {
+    if (!isAuthenticated) {
+      navigate('/sign-in');
+      return;
+    }
+    const targetId = talent?.userId || talent?.id || id;
+    if (!targetId || isConnecting) return;
+
+    setIsConnecting(true);
+    try {
+      const res = await socialApi.toggleConnection(targetId);
+      const nextConnected = typeof res?.connected === 'boolean' ? res.connected : !isConnected;
+      setIsConnected(nextConnected);
+      showNotification(nextConnected ? 'Connected with ' + (talent?.name || 'talent') : 'Disconnected from ' + (talent?.name || 'talent'), 'success');
+      window.dispatchEvent(new CustomEvent('truehunt-connection-changed', {
+        detail: {
+          connected: nextConnected,
+          profile: { ...talent, id: targetId, userId: targetId }
+        }
+      }));
+    } catch (err) {
+      console.error('Failed to toggle connection on talent details page:', err);
+      showNotification('Could not update connection. Please try again.', 'error');
+    } finally {
+      setIsConnecting(false);
+    }
   };
 
   if (loading || !talent) {
@@ -159,10 +202,12 @@ export default function TalentDetailsPage() {
                 <button
                   type="button"
                   onClick={handleConnect}
-                  className="btn btn-lg btn-maroon"
+                  disabled={isConnecting}
+                  className={`btn btn-lg ${isConnected ? 'btn-success' : 'btn-maroon'}`}
+                  style={isConnected ? { backgroundColor: '#10B981', color: '#FFFFFF', borderColor: '#10B981' } : {}}
                 >
-                  <UserPlus size={18} />
-                  <span>Connect on TrueHunt</span>
+                  {isConnected ? <Check size={18} /> : <UserPlus size={18} />}
+                  <span>{isConnecting ? 'Updating…' : (isConnected ? '✓ Connected on TrueHunt' : 'Connect on TrueHunt')}</span>
                 </button>
               </div>
             </div>

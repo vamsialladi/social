@@ -227,6 +227,23 @@ public class ProtectProducerService {
         throw new ResourceNotFoundException("Document", "id", documentId);
     }
 
+    public DocumentDto updateDocument(String projectId, String documentId, DocumentDto updates) {
+        ProtectProjectDto project = getProjectById(projectId);
+        for (DocumentDto d : project.getDocuments()) {
+            if (Objects.equals(d.getId(), documentId)) {
+                if (updates.getTitle() != null) d.setTitle(updates.getTitle());
+                if (updates.getDocumentType() != null) d.setDocumentType(updates.getDocumentType());
+                if (updates.getFileUrl() != null) d.setFileUrl(updates.getFileUrl());
+                if (updates.getNotes() != null) d.setNotes(updates.getNotes());
+                if (updates.getVerified() != null) d.setVerified(updates.getVerified());
+                if (updates.getStage() != null) d.setStage(updates.getStage());
+                project.setUpdatedAt(LocalDateTime.now().toString());
+                return d;
+            }
+        }
+        throw new ResourceNotFoundException("Document", "id", documentId);
+    }
+
     // Milestones
     public List<MilestoneDto> getMilestones(String projectId, String stage) {
         ProtectProjectDto project = getProjectById(projectId);
