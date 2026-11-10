@@ -229,11 +229,9 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [] }
   useEffect(() => {
     loadNetworkData()
 
-    const interval = setInterval(() => {
-      loadNetworkData()
-    }, 2500)
-
-    const handleFocus = () => loadNetworkData()
+    const handleFocus = () => {
+      if (!document.hidden) loadNetworkData()
+    }
     const handleVisibility = () => {
       if (!document.hidden) loadNetworkData()
     }
@@ -242,7 +240,6 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [] }
     document.addEventListener('visibilitychange', handleVisibility)
 
     return () => {
-      clearInterval(interval)
       window.removeEventListener('focus', handleFocus)
       document.removeEventListener('visibilitychange', handleVisibility)
     }

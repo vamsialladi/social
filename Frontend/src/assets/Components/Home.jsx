@@ -124,14 +124,13 @@ function Home({
     }
 
     loadPosts()
-    const refreshInterval = window.setInterval(() => {
+    const handleFocus = () => {
       if (document.visibilityState === 'visible') loadPosts()
-    }, 15000)
-    window.addEventListener('focus', loadPosts)
+    }
+    window.addEventListener('focus', handleFocus)
     return () => {
       isCurrent = false
-      window.clearInterval(refreshInterval)
-      window.removeEventListener('focus', loadPosts)
+      window.removeEventListener('focus', handleFocus)
     }
   }, [activeNavigation, dismissedPostsStorageKey])
 

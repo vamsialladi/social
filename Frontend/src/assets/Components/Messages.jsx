@@ -462,12 +462,13 @@ function Messages({ conversationToOpen, openConversationRef, onProfileSelect }) 
     }
     window.addEventListener('truehunt-message-received', handleMsgEvent)
 
-    const pollInterval = setInterval(() => {
-      loadBackendConversations(mailbox)
-    }, 3000)
+    const handleFocus = () => {
+      if (!document.hidden) loadBackendConversations(mailbox)
+    }
+    window.addEventListener('focus', handleFocus)
 
     return () => {
-      clearInterval(pollInterval)
+      window.removeEventListener('focus', handleFocus)
       window.removeEventListener('truehunt-message-received', handleMsgEvent)
       unsubStatus()
       unsubMsg()
