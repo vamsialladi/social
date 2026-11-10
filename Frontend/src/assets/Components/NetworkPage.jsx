@@ -94,6 +94,9 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [] }
       const profilesToMerge = [
         ...(Array.isArray(talentProfiles) ? talentProfiles : []),
         ...(Array.isArray(registeredProfiles) ? registeredProfiles : []),
+        ...(Array.isArray(connectedList) ? connectedList : []),
+        ...(Array.isArray(networkProfiles) ? networkProfiles : []),
+        ...(Array.isArray(incomingInvitations) ? incomingInvitations.map((inv) => inv.profile || inv) : []),
       ]
       profilesToMerge.filter((profile) => profile && profile.name).forEach((profile) => {
         const identityKeys = new Set(getProfileIdentityKeys(profile))
@@ -138,7 +141,10 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [] }
           const nameParts = name.split(/\s+/)
           const profileKey = getProfileKey(id)
           const connection = networkProfilesById.get(profileKey)
-          const isConn = serverConnectedKeys.has(profileKey) || Boolean(connection?.isConnected)
+          const isConn = serverConnectedKeys.has(profileKey)
+            || Boolean(connection?.isConnected)
+            || Boolean(profile.isConnected)
+            || Boolean(profile.connected)
           const isPend = !isConn && Boolean(connection?.isPending || connection?.isOutgoingPending)
 
           return {
@@ -154,13 +160,17 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [] }
             profileImageUrl: profile.profileImageUrl || profile.avatar || '',
             coverImageUrl: profile.coverImageUrl || profile.coverImage || '',
             isConnected: isConn,
-            isFollowing: Boolean(connection?.isFollowing),
+            isFollowing: Boolean(connection?.isFollowing || profile.isFollowing || profile.following),
             isPending: isPend,
           }
         })
 
       setProfiles(allProfiles)
-      setConnectedProfiles(allProfiles.filter((profile) => profile.isConnected).map((profile) => getProfileKey(profile.id)))
+      const allConnectedKeys = Array.from(new Set([
+        ...connectedList.map((p) => getProfileKey(p)),
+        ...allProfiles.filter((profile) => profile.isConnected).map((profile) => getProfileKey(profile.id)),
+      ])).filter(Boolean)
+      setConnectedProfiles(allConnectedKeys)
       setFollowedProfiles(allProfiles.filter((profile) => profile.isFollowing).map((profile) => getProfileKey(profile.id)))
       setPendingProfiles(allProfiles.filter((profile) => profile.isPending).map((profile) => getProfileKey(profile.id)))
     } catch (err) {
@@ -296,16 +306,27 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [] }
         connected: true,
         pending: false,
       })
-      setInvitations((current) => current.filter((inv) => getProfileKey(inv.profileId) !== profileKey))
+      const profileData = invitation?.profile
+        || profiles.find((item) => getProfileKey(item) === profileKey)
+        || { id: profileId, userId: profileId, name: invitation?.name || 'TrueHunt Member' }
+
+      setProfiles((current) => {
+        const exists = current.some((item) => getProfileKey(item) === profileKey)
+        if (exists) {
+          return current.map((item) => (
+            getProfileKey(item) === profileKey ? { ...item, isConnected: true, isPending: false } : item
+          ))
+        }
+        return [...current, { ...profileData, isConnected: true, isPending: false }]
+      })
       setConnectedProfiles((current) => (current.includes(profileKey) ? current : [...current, profileKey]))
       setPendingProfiles((current) => current.filter((id) => id !== profileKey))
-      setProfiles((current) => current.map((item) => (
-        getProfileKey(item) === profileKey ? { ...item, isConnected: true, isPending: false } : item
-      )))
-      const profileData = invitation?.profile || profiles.find((item) => getProfileKey(item) === profileKey) || { id: profileId, name: invitation?.name }
+      setInvitations((current) => current.filter((inv) => getProfileKey(inv.profileId) !== profileKey))
+
       window.dispatchEvent(new CustomEvent('truehunt-connection-changed', {
         detail: { connected: true, profile: profileData },
       }))
+      loadNetworkData()
     } catch (err) {
       console.error('Accept invitation error:', err)
       setConnectionError('Could not accept this invitation. Please try again.')
