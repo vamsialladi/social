@@ -6,6 +6,9 @@ import os from 'os'
 export default defineConfig({
   plugins: [react()],
   cacheDir: path.join(os.tmpdir(), 'truehunt-vite-cache'),
+  define: {
+    global: 'window',
+  },
 
   server: {
     host: 'localhost',

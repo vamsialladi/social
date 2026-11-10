@@ -30,14 +30,21 @@ import CinematicIntro from './components/intro/CinematicIntro';
 export default function App() {
   const [showIntro, setShowIntro] = useState(() => {
     if (typeof window !== 'undefined') {
-      const urlParams = new URLSearchParams(window.location.search);
-      if (urlParams.get('intro') === 'true') {
-        return true;
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('intro') === 'true') {
+          return true;
+        }
+        if (urlParams.get('intro') === 'false') {
+          return false;
+        }
+        const pathname = window.location.pathname;
+        const isRoot = pathname === '/' || pathname === '';
+        const hasSeen = sessionStorage.getItem('truehunt_intro_seen');
+        return isRoot && !hasSeen;
+      } catch {
+        return false;
       }
-      const pathname = window.location.pathname;
-      const isRoot = pathname === '/' || pathname === '';
-      const hasSeen = sessionStorage.getItem('truehunt_intro_seen');
-      return isRoot && !hasSeen;
     }
     return false;
   });

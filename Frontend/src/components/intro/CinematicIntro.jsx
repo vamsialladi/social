@@ -188,11 +188,23 @@ export default function CinematicIntro({ onComplete }) {
     }, 350);
   };
 
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' || e.key === ' ' || e.key === 'Enter') {
+        handleSkip();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   return (
     <div
       className={`cinema-intro-wrapper ${phase === 'FADING_OUT' ? 'fading-out' : ''}`}
       role="region"
       aria-label="TrueHunt Movie Production Intro"
+      onDoubleClick={handleSkip}
+      tabIndex={0}
     >
       {/* 2.39:1 Anamorphic Cinema Scope Letterbox Bars */}
       <div className="cinema-letterbox-bar cinema-letterbox-top" />
