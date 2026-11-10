@@ -346,6 +346,8 @@ export default function ProfilePage() {
               onMessage={(recipient) => {
                 const openConversation = {
                   id: recipient?.id || recipient?.userId,
+                  userId: recipient?.userId || recipient?.user_id || recipient?.id || '',
+                  email: recipient?.email || '',
                   name: recipient?.name || 'Cinema Professional',
                   avatar: recipient?.avatar || recipient?.profileImageUrl || '',
                   role: recipient?.role || recipient?.headline || recipient?.category || '',

@@ -153,24 +153,50 @@ public class ConversationEntity {
     }
 
     public Map<String, Object> toDto() {
-        return toDto(null);
+        return toDto(null, Collections.emptySet());
     }
 
     public Map<String, Object> toDto(String currentUserId) {
+        Set<String> ids = new HashSet<>();
+        if (currentUserId != null && !currentUserId.isBlank()) {
+            ids.add(currentUserId.trim().toLowerCase(Locale.ROOT));
+        }
+        return toDto(currentUserId, ids);
+    }
+
+    public Map<String, Object> toDto(String currentUserId, Set<String> callerIdentifiers) {
         Map<String, Object> dto = new HashMap<>();
         dto.put("id", id);
+
+        Set<String> cleanIdentifiers = new HashSet<>();
+        if (currentUserId != null && !currentUserId.isBlank()) {
+            cleanIdentifiers.add(currentUserId.trim().toLowerCase(Locale.ROOT));
+        }
+        if (callerIdentifiers != null) {
+            for (String cid : callerIdentifiers) {
+                if (cid != null && !cid.isBlank()) {
+                    cleanIdentifiers.add(cid.trim().toLowerCase(Locale.ROOT));
+                }
+            }
+        }
 
         String displayName = name != null ? name : "";
         String displayInitials = initials != null ? initials : "";
 
-        if (currentUserId != null) {
-            if (currentUserId.equalsIgnoreCase(user1Id) && user2Name != null && !user2Name.isBlank()) {
-                displayName = user2Name;
-                displayInitials = computeInitials(user2Name);
-            } else if (currentUserId.equalsIgnoreCase(user2Id) && user1Name != null && !user1Name.isBlank()) {
-                displayName = user1Name;
-                displayInitials = computeInitials(user1Name);
-            }
+        String u1Clean = user1Id != null ? user1Id.trim().toLowerCase(Locale.ROOT) : "";
+        String u2Clean = user2Id != null ? user2Id.trim().toLowerCase(Locale.ROOT) : "";
+        String n1Clean = user1Name != null ? user1Name.trim().toLowerCase(Locale.ROOT) : "";
+        String n2Clean = user2Name != null ? user2Name.trim().toLowerCase(Locale.ROOT) : "";
+
+        boolean isUser1 = cleanIdentifiers.contains(u1Clean) || (!n1Clean.isEmpty() && cleanIdentifiers.contains(n1Clean));
+        boolean isUser2 = cleanIdentifiers.contains(u2Clean) || (!n2Clean.isEmpty() && cleanIdentifiers.contains(n2Clean));
+
+        if (isUser1 && user2Name != null && !user2Name.isBlank()) {
+            displayName = user2Name;
+            displayInitials = computeInitials(user2Name);
+        } else if (isUser2 && user1Name != null && !user1Name.isBlank()) {
+            displayName = user1Name;
+            displayInitials = computeInitials(user1Name);
         }
 
         dto.put("name", displayName);
@@ -187,15 +213,20 @@ public class ConversationEntity {
         dto.put("mailbox", mailbox != null ? mailbox : "Focused");
         dto.put("user1Id", user1Id);
         dto.put("user2Id", user2Id);
+        dto.put("user1Name", user1Name);
+        dto.put("user2Name", user2Name);
 
         List<Map<String, Object>> thread = getThread();
-        if (currentUserId != null) {
+        if (!cleanIdentifiers.isEmpty()) {
             List<Map<String, Object>> adaptedThread = new ArrayList<>();
             for (Map<String, Object> msg : thread) {
                 Map<String, Object> adaptedMsg = new HashMap<>(msg);
                 Object msgSenderId = msg.get("senderId");
-                if (msgSenderId != null) {
-                    boolean isOutgoing = currentUserId.equalsIgnoreCase(String.valueOf(msgSenderId));
+                Object msgSenderName = msg.get("senderName");
+                if (msgSenderId != null || msgSenderName != null) {
+                    String sId = msgSenderId != null ? String.valueOf(msgSenderId).trim().toLowerCase(Locale.ROOT) : "";
+                    String sName = msgSenderName != null ? String.valueOf(msgSenderName).trim().toLowerCase(Locale.ROOT) : "";
+                    boolean isOutgoing = cleanIdentifiers.contains(sId) || (!sName.isEmpty() && cleanIdentifiers.contains(sName));
                     adaptedMsg.put("direction", isOutgoing ? "outgoing" : "incoming");
                 }
                 adaptedThread.add(adaptedMsg);

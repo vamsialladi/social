@@ -32,13 +32,15 @@ class WebSocketService {
       if (u) parsedUser = JSON.parse(u)
     } catch {}
 
-    this.currentEmail = userEmail || parsedUser?.email || 'pro@truehunt.in'
-    this.currentUserId = parsedUser?.userId || parsedUser?.publicUserId || parsedUser?.id || ''
+    this.currentEmail = (userEmail || parsedUser?.email || 'pro@truehunt.in').trim()
+    this.currentUserId = String(parsedUser?.userId || parsedUser?.publicUserId || parsedUser?.id || '').trim()
+    this.currentUserName = String(parsedUser?.name || '').trim()
 
     const headers = {
       ...(this.currentToken ? { Authorization: `Bearer ${this.currentToken}` } : {}),
       ...(this.currentEmail ? { 'X-User-Email': this.currentEmail } : {}),
-      ...(this.currentUserId ? { 'X-User-Id': String(this.currentUserId) } : {}),
+      ...(this.currentUserId ? { 'X-User-Id': this.currentUserId } : {}),
+      ...(this.currentUserName ? { 'X-User-Name': this.currentUserName } : {}),
       user: this.currentEmail,
     }
 
@@ -60,14 +62,32 @@ class WebSocketService {
           this.notifyMessage(msg)
         })
 
-        // 2. Direct pub-sub topics for user's email & ID for guaranteed realtime dispatch
+        // 2. Direct pub-sub topics for user's email, ID, and name for guaranteed realtime dispatch
         if (this.currentEmail) {
-          this.doSubscribe(`/topic/user.${this.currentEmail.toLowerCase()}.messages`, (msg) => {
+          const emailLower = this.currentEmail.toLowerCase()
+          this.doSubscribe(`/topic/user.${emailLower}.messages`, (msg) => {
             this.notifyMessage(msg)
           })
+          if (emailLower !== this.currentEmail) {
+            this.doSubscribe(`/topic/user.${this.currentEmail}.messages`, (msg) => {
+              this.notifyMessage(msg)
+            })
+          }
         }
         if (this.currentUserId) {
           this.doSubscribe(`/topic/user.${this.currentUserId}.messages`, (msg) => {
+            this.notifyMessage(msg)
+          })
+          this.doSubscribe(`/topic/user.${this.currentUserId.toLowerCase()}.messages`, (msg) => {
+            this.notifyMessage(msg)
+          })
+        }
+        if (this.currentUserName) {
+          this.doSubscribe(`/topic/user.${this.currentUserName}.messages`, (msg) => {
+            this.notifyMessage(msg)
+          })
+          const nameNoSpaces = this.currentUserName.toLowerCase().replace(/\s+/g, '')
+          this.doSubscribe(`/topic/user.${nameNoSpaces}.messages`, (msg) => {
             this.notifyMessage(msg)
           })
         }

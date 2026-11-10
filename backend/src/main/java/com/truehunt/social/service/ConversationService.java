@@ -5,7 +5,9 @@ import com.truehunt.social.dto.SendMessageRequest;
 import com.truehunt.social.exception.BadRequestException;
 import com.truehunt.social.exception.ResourceNotFoundException;
 import com.truehunt.social.model.ConversationEntity;
+import com.truehunt.social.model.UserAccountEntity;
 import com.truehunt.social.repository.ConversationRepository;
+import com.truehunt.social.repository.UserAccountRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,10 +19,14 @@ public class ConversationService {
 
     private final ConversationRepository conversationRepository;
     private final MessageService messageService;
+    private final UserAccountRepository userAccountRepository;
 
-    public ConversationService(ConversationRepository conversationRepository, MessageService messageService) {
+    public ConversationService(ConversationRepository conversationRepository,
+                               MessageService messageService,
+                               UserAccountRepository userAccountRepository) {
         this.conversationRepository = conversationRepository;
         this.messageService = messageService;
+        this.userAccountRepository = userAccountRepository;
     }
 
     public List<Map<String, Object>> getConversations(String mailbox) {
@@ -34,23 +40,37 @@ public class ConversationService {
 
         if (userEmail != null && !userEmail.isBlank()) {
             final String cleanEmail = userEmail.trim().toLowerCase(Locale.ROOT);
-            Optional<UserAccountEntity> account = userAccountRepository.findByEmail(cleanEmail)
-                    .or(() -> userAccountRepository.findByPublicUserId(userEmail));
-            final String publicUserId = account.map(UserAccountEntity::getPublicUserId).orElse("");
-            final String accountName = account.map(UserAccountEntity::getName).orElse("");
+            final Set<String> callerIdentifiers = new HashSet<>();
+            callerIdentifiers.add(cleanEmail);
+
+            userAccountRepository.findByEmail(cleanEmail)
+                    .or(() -> userAccountRepository.findByPublicUserId(userEmail))
+                    .or(() -> userAccountRepository.findByName(userEmail))
+                    .or(() -> userAccountRepository.findFirstByNameIgnoreCase(userEmail))
+                    .ifPresent(u -> {
+                        if (u.getEmail() != null) callerIdentifiers.add(u.getEmail().trim().toLowerCase(Locale.ROOT));
+                        if (u.getPublicUserId() != null) callerIdentifiers.add(u.getPublicUserId().trim().toLowerCase(Locale.ROOT));
+                        if (u.getName() != null) callerIdentifiers.add(u.getName().trim().toLowerCase(Locale.ROOT));
+                    });
 
             return list.stream()
-                    .filter(c -> c.getUser1Id() == null ||
-                            c.getUser1Id().equalsIgnoreCase(cleanEmail) ||
-                            (!publicUserId.isEmpty() && c.getUser1Id().equalsIgnoreCase(publicUserId)) ||
-                            (!accountName.isEmpty() && c.getUser1Id().equalsIgnoreCase(accountName)) ||
-                            c.getUser2Id() == null ||
-                            (c.getUser2Id() != null && (
-                                    c.getUser2Id().equalsIgnoreCase(cleanEmail) ||
-                                    (!publicUserId.isEmpty() && c.getUser2Id().equalsIgnoreCase(publicUserId)) ||
-                                    (!accountName.isEmpty() && c.getUser2Id().equalsIgnoreCase(accountName))
-                            )))
-                    .map(c -> c.toDto(cleanEmail))
+                    .filter(c -> {
+                        String u1 = c.getUser1Id() != null ? c.getUser1Id().trim().toLowerCase(Locale.ROOT) : "";
+                        String u2 = c.getUser2Id() != null ? c.getUser2Id().trim().toLowerCase(Locale.ROOT) : "";
+                        String n1 = c.getUser1Name() != null ? c.getUser1Name().trim().toLowerCase(Locale.ROOT) : "";
+                        String n2 = c.getUser2Name() != null ? c.getUser2Name().trim().toLowerCase(Locale.ROOT) : "";
+                        String cName = c.getName() != null ? c.getName().trim().toLowerCase(Locale.ROOT) : "";
+
+                        // If unassigned legacy conversation, let it show
+                        if (u1.isEmpty() && u2.isEmpty()) return true;
+
+                        boolean matchU1 = callerIdentifiers.contains(u1) || (!n1.isEmpty() && callerIdentifiers.contains(n1));
+                        boolean matchU2 = callerIdentifiers.contains(u2) || (!n2.isEmpty() && callerIdentifiers.contains(n2));
+                        boolean matchName = !cName.isEmpty() && callerIdentifiers.contains(cName);
+
+                        return matchU1 || matchU2 || matchName;
+                    })
+                    .map(c -> c.toDto(cleanEmail, callerIdentifiers))
                     .collect(Collectors.toList());
         }
 
@@ -65,6 +85,22 @@ public class ConversationService {
 
     public Map<String, Object> getConversation(String id, String userEmail) {
         ConversationEntity entity = findConversationEntity(id);
+        if (userEmail != null && !userEmail.isBlank()) {
+            final String cleanEmail = userEmail.trim().toLowerCase(Locale.ROOT);
+            final Set<String> callerIdentifiers = new HashSet<>();
+            callerIdentifiers.add(cleanEmail);
+
+            userAccountRepository.findByEmail(cleanEmail)
+                    .or(() -> userAccountRepository.findByPublicUserId(userEmail))
+                    .or(() -> userAccountRepository.findByName(userEmail))
+                    .or(() -> userAccountRepository.findFirstByNameIgnoreCase(userEmail))
+                    .ifPresent(u -> {
+                        if (u.getEmail() != null) callerIdentifiers.add(u.getEmail().trim().toLowerCase(Locale.ROOT));
+                        if (u.getPublicUserId() != null) callerIdentifiers.add(u.getPublicUserId().trim().toLowerCase(Locale.ROOT));
+                        if (u.getName() != null) callerIdentifiers.add(u.getName().trim().toLowerCase(Locale.ROOT));
+                    });
+            return entity.toDto(cleanEmail, callerIdentifiers);
+        }
         return entity.toDto(userEmail);
     }
 

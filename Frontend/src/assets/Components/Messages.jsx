@@ -243,6 +243,10 @@ function Messages({ conversationToOpen, openConversationRef, onProfileSelect }) 
           ]
           return merged
         })
+        setSelectedId((current) => {
+          const exists = data.some((d) => String(d.id) === String(current)) || String(current).startsWith('profile-')
+          return exists ? current : (data[0]?.id || current)
+        })
       }
     } catch (err) {
       console.warn('Could not load conversations from backend:', err)
@@ -261,14 +265,21 @@ function Messages({ conversationToOpen, openConversationRef, onProfileSelect }) 
     const convId = newMsg.conversationId
     const content = newMsg.content
     const msgId = newMsg.id || `msg-${Date.now()}`
-    const isOutgoing = newMsg.senderId && (
-      (currentUser?.email && newMsg.senderId.toLowerCase() === currentUser.email.toLowerCase()) ||
-      (currentUser?.userId && newMsg.senderId === currentUser.userId) ||
-      (currentUser?.id && String(newMsg.senderId) === String(currentUser.id)) ||
-      (currentUser?.name && newMsg.senderName && newMsg.senderName.trim().toLowerCase() === currentUser.name.trim().toLowerCase())
+
+    const myEmail = (currentUser?.email || '').trim().toLowerCase()
+    const myId = String(currentUser?.userId || currentUser?.publicUserId || currentUser?.id || '').trim().toLowerCase()
+    const myName = (currentUser?.name || '').trim().toLowerCase()
+
+    const senderEmail = (newMsg.senderId || '').trim().toLowerCase()
+    const senderName = (newMsg.senderName || '').trim().toLowerCase()
+
+    const isOutgoing = Boolean(
+      (myEmail && senderEmail === myEmail) ||
+      (myId && senderEmail === myId) ||
+      (myName && senderName === myName)
     )
 
-    const otherName = isOutgoing ? (newMsg.receiverName || '') : (newMsg.senderName || '')
+    const otherName = isOutgoing ? (newMsg.receiverName || 'Cinema Professional') : (newMsg.senderName || 'Cinema Professional')
     const otherId = isOutgoing ? (newMsg.receiverId || '') : (newMsg.senderId || '')
 
     const threadItem = {
@@ -285,12 +296,22 @@ function Messages({ conversationToOpen, openConversationRef, onProfileSelect }) 
     }
 
     setMessages((prevMessages) => {
+      const otherNameClean = otherName.trim().toLowerCase()
+      const otherIdClean = String(otherId).trim().toLowerCase()
+
       // Find matching conversation across ID, name, or participant user ID
       const matchedIndex = prevMessages.findIndex((m) => {
         if (convId && (String(m.id) === String(convId) || m.id === convId)) return true
-        if (otherName && m.name && m.name.trim().toLowerCase() === otherName.trim().toLowerCase()) return true
-        if (otherId && (m.user1Id === otherId || m.user2Id === otherId)) return true
-        if (m.profile && (m.profile.userId === otherId || m.profile.id === otherId || m.profile.email === otherId)) return true
+        if (otherNameClean && m.name && m.name.trim().toLowerCase() === otherNameClean) return true
+        const u1 = String(m.user1Id || '').trim().toLowerCase()
+        const u2 = String(m.user2Id || '').trim().toLowerCase()
+        if (otherIdClean && (u1 === otherIdClean || u2 === otherIdClean)) return true
+        if (m.profile) {
+          const pId = String(m.profile.id || '').trim().toLowerCase()
+          const pUserId = String(m.profile.userId || '').trim().toLowerCase()
+          const pEmail = String(m.profile.email || '').trim().toLowerCase()
+          if (otherIdClean && (pId === otherIdClean || pUserId === otherIdClean || pEmail === otherIdClean)) return true
+        }
         return false
       })
 
@@ -315,14 +336,18 @@ function Messages({ conversationToOpen, openConversationRef, onProfileSelect }) 
       } else {
         const newConv = {
           id: convId || `conv-${Date.now()}`,
-          name: otherName || 'Cinema Professional',
-          initials: (otherName || 'CP').slice(0, 2).toUpperCase(),
+          name: otherName,
+          initials: otherName.split(/\s+/).map((p) => p[0]).join('').slice(0, 2).toUpperCase() || 'CP',
           color: 'purple',
           preview: content,
           date: 'Just now',
-          category: 'Direct',
+          category: 'Connections',
           mailbox: 'Focused',
           unread: !isOutgoing,
+          user1Id: newMsg.senderId,
+          user1Name: newMsg.senderName,
+          user2Id: newMsg.receiverId,
+          user2Name: newMsg.receiverName,
           thread: [threadItem],
         }
         return [newConv, ...prevMessages]
@@ -526,8 +551,11 @@ function Messages({ conversationToOpen, openConversationRef, onProfileSelect }) 
       selectedMessage.user1Id ||
       selectedMessage.name
 
+    const isTempId = String(selectedMessage.id).startsWith('profile-') || String(selectedMessage.id).startsWith('conv-')
+    const numericConvId = !isTempId && !Number.isNaN(Number(selectedMessage.id)) ? Number(selectedMessage.id) : null
+
     const wsPayload = {
-      conversationId: typeof selectedMessage.id === 'number' ? selectedMessage.id : null,
+      conversationId: numericConvId,
       senderId: myIdentity,
       senderName: currentUser?.name || 'You',
       receiverId: targetReceiverId,
@@ -543,8 +571,8 @@ function Messages({ conversationToOpen, openConversationRef, onProfileSelect }) 
     // 3. Fallback to REST persistence only if WebSocket is disconnected
     if (!sentOverWs) {
       try {
-        if (typeof selectedMessage.id === 'number') {
-          await api.sendMessage(selectedMessage.id, content, attachment)
+        if (numericConvId) {
+          await api.sendMessage(numericConvId, content, attachment)
         } else {
           const created = await api.createConversation(targetReceiverId, content)
           if (created?.id) {
