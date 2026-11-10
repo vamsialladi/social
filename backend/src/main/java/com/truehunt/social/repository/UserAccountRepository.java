@@ -9,14 +9,16 @@ import java.util.Optional;
 
 @Repository
 public interface UserAccountRepository extends JpaRepository<UserAccountEntity, Long> {
-    Optional<UserAccountEntity> findFirstByEmail(String email);
+    Optional<UserAccountEntity> findFirstByEmailIgnoreCase(String email);
     default Optional<UserAccountEntity> findByEmail(String email) {
-        return findFirstByEmail(email);
+        if (email == null) return Optional.empty();
+        return findFirstByEmailIgnoreCase(email.trim());
     }
 
-    Optional<UserAccountEntity> findFirstByPublicUserId(String publicUserId);
+    Optional<UserAccountEntity> findFirstByPublicUserIdIgnoreCase(String publicUserId);
     default Optional<UserAccountEntity> findByPublicUserId(String publicUserId) {
-        return findFirstByPublicUserId(publicUserId);
+        if (publicUserId == null) return Optional.empty();
+        return findFirstByPublicUserIdIgnoreCase(publicUserId.trim());
     }
 
     Optional<UserAccountEntity> findFirstByNameIgnoreCase(String name);

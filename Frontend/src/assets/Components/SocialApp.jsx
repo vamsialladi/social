@@ -1402,6 +1402,11 @@ export default function SocialApp() {
     setViewingCandidateProfile(null)
     setActiveNavigationState('profile')
     navigate(getProfilePath(profileDetails.name || user?.name))
+    api.getProfile().then((fresh) => {
+      if (fresh && fresh.name) {
+        setProfileDetails((prev) => ({ ...prev, ...fresh }))
+      }
+    }).catch(() => {})
   }
 
   function showMyPostsAndActivities() {
@@ -1456,6 +1461,8 @@ export default function SocialApp() {
       ...candidateProfile,
       userId: candidateId,
       profileImageUrl: candidateProfile.profileImageUrl || candidateProfile.avatar || '',
+      isConnected: Boolean(candidateProfile.isConnected),
+      isPending: Boolean(candidateProfile.isPending || candidateProfile.isOutgoingPending),
     }
     setViewingCandidateProfile(selectedCandidate)
     setActiveNavigationState('profile')
@@ -1470,16 +1477,18 @@ export default function SocialApp() {
     if (candidateId && !isImageTarget(candidateId)) {
       api.getProfileById(candidateId).then((profile) => {
         if (!profile) return
-        setViewingCandidateProfile((currentProfile) => (
-          String(currentProfile?.userId || currentProfile?.id || '') === candidateId
-            ? {
-                ...currentProfile,
-                ...profile,
-                userId: profile.userId || candidateId,
-                profileImageUrl: profile.profileImageUrl || profile.avatar || currentProfile.profileImageUrl,
-              }
-            : currentProfile
-        ))
+        setViewingCandidateProfile((currentProfile) => {
+          const curId = String(currentProfile?.userId || currentProfile?.id || '').trim().toLowerCase()
+          if (curId !== candidateId.toLowerCase()) return currentProfile
+          return {
+            ...currentProfile,
+            ...profile,
+            userId: profile.userId || candidateId,
+            profileImageUrl: profile.profileImageUrl || profile.avatar || currentProfile.profileImageUrl,
+            isConnected: typeof profile.isConnected === 'boolean' ? profile.isConnected : currentProfile.isConnected,
+            isPending: typeof profile.isPending === 'boolean' ? profile.isPending : currentProfile.isPending,
+          }
+        })
       }).catch((error) => {
         console.warn('Could not load the complete profile:', error)
       })

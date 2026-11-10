@@ -131,11 +131,33 @@ export default function ConnectionsPage({ onBack, onProfileSelect }) {
                         ...profile,
                         id: profileId,
                         userId: profile.userId || profile.user_id || profileId,
+                        isConnected: true,
                       })}
                     >
                       {image ? <img src={image} alt="" /> : getInitials(profile)}
                     </button>
-                    <span className="social-connection-details">
+                    <span
+                      className="social-connection-details"
+                      style={{ cursor: 'pointer' }}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => onProfileSelect?.({
+                        ...profile,
+                        id: profileId,
+                        userId: profile.userId || profile.user_id || profileId,
+                        isConnected: true,
+                      })}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          onProfileSelect?.({
+                            ...profile,
+                            id: profileId,
+                            userId: profile.userId || profile.user_id || profileId,
+                            isConnected: true,
+                          })
+                        }
+                      }}
+                    >
                       <strong>{name}</strong>
                       {profile.role && <small>{profile.role}</small>}
                     </span>

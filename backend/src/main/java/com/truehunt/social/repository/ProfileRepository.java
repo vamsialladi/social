@@ -9,21 +9,31 @@ import java.util.Optional;
 
 @Repository
 public interface ProfileRepository extends JpaRepository<ProfileEntity, Long> {
-    Optional<ProfileEntity> findFirstByUserId(String userId);
+    Optional<ProfileEntity> findFirstByUserIdIgnoreCase(String userId);
     default Optional<ProfileEntity> findByUserId(String userId) {
-        return findFirstByUserId(userId);
+        if (userId == null) return Optional.empty();
+        return findFirstByUserIdIgnoreCase(userId);
     }
 
-    Optional<ProfileEntity> findFirstByEmail(String email);
+    Optional<ProfileEntity> findFirstByEmailIgnoreCase(String email);
     default Optional<ProfileEntity> findByEmail(String email) {
-        return findFirstByEmail(email);
+        if (email == null) return Optional.empty();
+        return findFirstByEmailIgnoreCase(email);
     }
 
     Optional<ProfileEntity> findFirstByNameIgnoreCase(String name);
     default Optional<ProfileEntity> findByName(String name) {
+        if (name == null) return Optional.empty();
         return findFirstByNameIgnoreCase(name);
     }
 
-    List<ProfileEntity> findAllByEmail(String email);
-    List<ProfileEntity> findAllByUserId(String userId);
+    List<ProfileEntity> findAllByEmailIgnoreCase(String email);
+    default List<ProfileEntity> findAllByEmail(String email) {
+        return findAllByEmailIgnoreCase(email);
+    }
+
+    List<ProfileEntity> findAllByUserIdIgnoreCase(String userId);
+    default List<ProfileEntity> findAllByUserId(String userId) {
+        return findAllByUserIdIgnoreCase(userId);
+    }
 }

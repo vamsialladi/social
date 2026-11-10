@@ -28,19 +28,28 @@ public class ProfileController {
         this.profileViewService = profileViewService;
     }
 
+    private String resolveUserIdentifier(String userEmail, String userId) {
+        if (userId != null && !userId.isBlank()) {
+            return userId.trim();
+        }
+        return userEmail;
+    }
+
     @GetMapping("/me/viewers")
     public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getMyProfileViewers(
-            @RequestHeader(value = "X-User-Email", required = false) String userEmail
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId
     ) {
-        return ResponseEntity.ok(ApiResponse.success(profileViewService.getMyViewers(userEmail)));
+        return ResponseEntity.ok(ApiResponse.success(profileViewService.getMyViewers(resolveUserIdentifier(userEmail, userId))));
     }
 
     @PostMapping("/{profileId}/views")
     public ResponseEntity<ApiResponse<Map<String, Object>>> recordProfileView(
             @PathVariable String profileId,
-            @RequestHeader(value = "X-User-Email", required = false) String userEmail
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId
     ) {
-        return ResponseEntity.ok(ApiResponse.success(profileViewService.recordView(profileId, userEmail)));
+        return ResponseEntity.ok(ApiResponse.success(profileViewService.recordView(profileId, resolveUserIdentifier(userEmail, userId))));
     }
 
     @GetMapping("/directory")
@@ -51,27 +60,30 @@ public class ProfileController {
 
     @GetMapping("/me")
     public ResponseEntity<ApiResponse<ProfileDto>> getMyProfile(
-            @RequestHeader(value = "X-User-Email", required = false) String userEmail
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId
     ) {
-        ProfileDto profile = profileService.getMyProfile(userEmail);
+        ProfileDto profile = profileService.getMyProfile(resolveUserIdentifier(userEmail, userId));
         return ResponseEntity.ok(ApiResponse.success(profile));
     }
 
     @RequestMapping(value = "/me", method = {RequestMethod.PATCH, RequestMethod.PUT, RequestMethod.POST})
     public ResponseEntity<ApiResponse<ProfileDto>> updateMyProfile(
             @RequestBody ProfileUpdateRequest updates,
-            @RequestHeader(value = "X-User-Email", required = false) String userEmail
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId
     ) {
-        ProfileDto profile = profileService.updateMyProfile(updates, userEmail);
+        ProfileDto profile = profileService.updateMyProfile(updates, resolveUserIdentifier(userEmail, userId));
         return ResponseEntity.ok(ApiResponse.success(profile));
     }
 
     @GetMapping("/{userId}")
     public ResponseEntity<ApiResponse<ProfileDto>> getProfileById(
             @PathVariable String userId,
-            @RequestHeader(value = "X-User-Email", required = false) String userEmail
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String currentUserIdHeader
     ) {
-        ProfileDto profile = profileService.getProfileById(userId, userEmail);
+        ProfileDto profile = profileService.getProfileById(userId, resolveUserIdentifier(userEmail, currentUserIdHeader));
         return ResponseEntity.ok(ApiResponse.success(profile));
     }
 

@@ -168,44 +168,150 @@ public class ProfileService {
             }
         }
 
-        String currentUserId = null;
-        try {
-            ProfileEntity currentProfile = findCurrentProfile(userEmail);
-            if (currentProfile != null) {
-                currentUserId = currentProfile.getUserId();
-            }
-        } catch (Exception ignored) {}
+        Set<String> ownerIds = resolveAllUserIdentifiers(userEmail);
+        Set<String> lowerOwnerIds = ownerIds.stream().map(s -> s.toLowerCase(Locale.ROOT)).collect(Collectors.toSet());
 
-        if (currentUserId != null) {
-            String targetId = dto.getUserId() != null ? dto.getUserId() : dto.getId();
-            boolean isOwner = currentUserId.equalsIgnoreCase(targetId);
-            dto.setIsOwner(isOwner);
-            if (!isOwner) {
-                Optional<UserProfileRelationshipEntity> relOpt = relationshipRepository.findByOwnerUserIdAndTargetProfileId(currentUserId, targetId);
-                boolean isConnected = relOpt.map(UserProfileRelationshipEntity::isConnected).orElse(false);
-                boolean isFollowing = relOpt.map(UserProfileRelationshipEntity::isFollowing).orElse(false);
-                boolean isPending = relOpt.map(r -> "PENDING".equalsIgnoreCase(r.getStatus())).orElse(false);
-                String senderId = relOpt.map(UserProfileRelationshipEntity::getSenderUserId).orElse("");
-                boolean isOutgoingPending = isPending && currentUserId.equalsIgnoreCase(senderId);
-                boolean isIncomingPending = isPending && !isOutgoingPending;
+        Set<String> targetIds = new HashSet<>();
+        if (id != null && !id.isBlank()) targetIds.add(id.trim());
+        if (dto.getId() != null && !dto.getId().isBlank()) targetIds.add(dto.getId().trim());
+        if (dto.getUserId() != null && !dto.getUserId().isBlank()) targetIds.add(dto.getUserId().trim());
+        if (dto.getEmail() != null && !dto.getEmail().isBlank()) targetIds.add(dto.getEmail().trim());
+        if (dto.getEmail() != null && !dto.getEmail().isBlank()) {
+            userAccountRepository.findByEmail(dto.getEmail().trim().toLowerCase(Locale.ROOT)).ifPresent(acc -> {
+                if (acc.getPublicUserId() != null) targetIds.add(acc.getPublicUserId());
+                targetIds.add(String.valueOf(acc.getId()));
+            });
+        }
+        if (dto.getUserId() != null && !dto.getUserId().isBlank()) {
+            userAccountRepository.findByPublicUserId(dto.getUserId().trim()).ifPresent(acc -> {
+                if (acc.getEmail() != null) targetIds.add(acc.getEmail());
+                targetIds.add(String.valueOf(acc.getId()));
+            });
+            profileRepository.findByUserId(dto.getUserId().trim()).ifPresent(p -> {
+                if (p.getEmail() != null) targetIds.add(p.getEmail());
+                if (p.getId() != null) targetIds.add(String.valueOf(p.getId()));
+            });
+        }
+        Set<String> lowerTargetIds = targetIds.stream().map(s -> s.toLowerCase(Locale.ROOT)).collect(Collectors.toSet());
 
-                dto.setIsConnected(isConnected);
-                dto.setIsFollowing(isFollowing);
-                dto.setIsPending(isPending);
-                dto.setIsOutgoingPending(isOutgoingPending);
-                dto.setIsIncomingPending(isIncomingPending);
-                dto.setConnectionStatus(isConnected ? "CONNECTED" : (isPending ? (isOutgoingPending ? "PENDING_OUTGOING" : "PENDING_INCOMING") : "NONE"));
-            } else {
-                dto.setIsConnected(false);
-                dto.setIsFollowing(false);
-                dto.setIsPending(false);
-                dto.setIsOutgoingPending(false);
-                dto.setIsIncomingPending(false);
-                dto.setConnectionStatus("NONE");
+        boolean isOwner = lowerTargetIds.stream().anyMatch(lowerOwnerIds::contains);
+        dto.setIsOwner(isOwner);
+
+        if (!isOwner) {
+            boolean isConnected = false;
+            boolean isFollowing = false;
+            boolean isPending = false;
+            boolean isOutgoingPending = false;
+            boolean isIncomingPending = false;
+
+            for (UserProfileRelationshipEntity rel : relationshipRepository.findAll()) {
+                String owner = rel.getOwnerUserId() != null ? rel.getOwnerUserId().trim().toLowerCase(Locale.ROOT) : "";
+                String target = rel.getTargetProfileId() != null ? rel.getTargetProfileId().trim().toLowerCase(Locale.ROOT) : "";
+                String sender = rel.getSenderUserId() != null ? rel.getSenderUserId().trim().toLowerCase(Locale.ROOT) : "";
+
+                boolean matchesOwnerToTarget = lowerOwnerIds.contains(owner) && lowerTargetIds.contains(target);
+                boolean matchesTargetToOwner = lowerTargetIds.contains(owner) && lowerOwnerIds.contains(target);
+
+                if (matchesOwnerToTarget || matchesTargetToOwner) {
+                    if (rel.isConnected()) {
+                        isConnected = true;
+                    }
+                    if ("PENDING".equalsIgnoreCase(rel.getStatus())) {
+                        isPending = true;
+                        if (lowerOwnerIds.contains(sender)) {
+                            isOutgoingPending = true;
+                        } else {
+                            isIncomingPending = true;
+                        }
+                    }
+                    if (matchesOwnerToTarget && rel.isFollowing()) {
+                        isFollowing = true;
+                    }
+                }
             }
+
+            dto.setIsConnected(isConnected);
+            dto.setIsFollowing(isFollowing);
+            dto.setIsPending(isPending);
+            dto.setIsOutgoingPending(isOutgoingPending);
+            dto.setIsIncomingPending(isIncomingPending);
+            dto.setConnectionStatus(isConnected ? "CONNECTED" : (isPending ? (isOutgoingPending ? "PENDING_OUTGOING" : "PENDING_INCOMING") : "NONE"));
+        } else {
+            dto.setIsConnected(false);
+            dto.setIsFollowing(false);
+            dto.setIsPending(false);
+            dto.setIsOutgoingPending(false);
+            dto.setIsIncomingPending(false);
+            dto.setConnectionStatus("NONE");
         }
 
         return dto;
+    }
+
+    public Set<String> resolveAllUserIdentifiers(String identifier) {
+        Set<String> ids = new HashSet<>();
+        if (identifier != null && !identifier.isBlank()) {
+            String clean = identifier.trim().toLowerCase(Locale.ROOT);
+            ids.add(clean);
+            userAccountRepository.findByEmail(clean).ifPresent(acc -> {
+                ids.add(String.valueOf(acc.getId()));
+                if (acc.getPublicUserId() != null && !acc.getPublicUserId().isBlank()) {
+                    ids.add(acc.getPublicUserId());
+                    ids.add(acc.getPublicUserId().toLowerCase(Locale.ROOT));
+                }
+            });
+            userAccountRepository.findByPublicUserId(clean).ifPresent(acc -> {
+                ids.add(String.valueOf(acc.getId()));
+                if (acc.getEmail() != null && !acc.getEmail().isBlank()) {
+                    ids.add(acc.getEmail().toLowerCase(Locale.ROOT));
+                }
+            });
+            try {
+                Long accId = Long.parseLong(clean);
+                userAccountRepository.findById(accId).ifPresent(acc -> {
+                    if (acc.getEmail() != null) ids.add(acc.getEmail().toLowerCase(Locale.ROOT));
+                    if (acc.getPublicUserId() != null) ids.add(acc.getPublicUserId().toLowerCase(Locale.ROOT));
+                });
+            } catch (NumberFormatException ignored) {}
+            profileRepository.findByUserId(clean).ifPresent(p -> {
+                if (p.getEmail() != null && !p.getEmail().isBlank()) {
+                    ids.add(p.getEmail().toLowerCase(Locale.ROOT));
+                }
+                if (p.getId() != null) {
+                    ids.add(String.valueOf(p.getId()));
+                }
+            });
+            profileRepository.findByEmail(clean).ifPresent(p -> {
+                if (p.getUserId() != null && !p.getUserId().isBlank()) {
+                    ids.add(p.getUserId());
+                    ids.add(p.getUserId().toLowerCase(Locale.ROOT));
+                }
+                if (p.getId() != null) {
+                    ids.add(String.valueOf(p.getId()));
+                }
+            });
+        }
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.isAuthenticated() && !"anonymousUser".equals(auth.getPrincipal())) {
+            String name = auth.getName();
+            if (name != null && !name.isBlank()) {
+                String cleanName = name.trim().toLowerCase(Locale.ROOT);
+                ids.add(cleanName);
+                userAccountRepository.findByEmail(cleanName).ifPresent(acc -> {
+                    ids.add(String.valueOf(acc.getId()));
+                    if (acc.getPublicUserId() != null && !acc.getPublicUserId().isBlank()) {
+                        ids.add(acc.getPublicUserId());
+                        ids.add(acc.getPublicUserId().toLowerCase(Locale.ROOT));
+                    }
+                });
+            }
+        }
+        if (ids.isEmpty()) {
+            ids.add("1000001");
+            ids.add("me");
+            ids.add("pro@truehunt.in");
+        }
+        return ids;
     }
 
     @Transactional
@@ -687,12 +793,39 @@ public class ProfileService {
     }
 
     public ProfileEntity findCurrentProfile(String userEmail) {
-        String resolvedEmail = resolveUserEmail(userEmail);
-        Optional<UserAccountEntity> currentAccountOpt = findAccountByEmail(resolvedEmail);
-        if (currentAccountOpt.isEmpty()) {
-            currentAccountOpt = userAccountRepository.findByEmail("pro@truehunt.in");
+        String clean = resolveUserEmail(userEmail);
+        if (clean != null && !clean.isBlank()) {
+            // First try direct profile match by userId or email
+            Optional<ProfileEntity> directProfile = profileRepository.findByUserId(clean)
+                    .or(() -> profileRepository.findByEmail(clean));
+            if (directProfile.isPresent()) {
+                return directProfile.get();
+            }
+
+            // Then try UserAccount by email, publicUserId, or ID
+            Optional<UserAccountEntity> accountOpt = findAccountByEmail(clean);
+            if (accountOpt.isPresent()) {
+                UserAccountEntity account = accountOpt.get();
+                String publicUserId = account.getPublicUserId();
+                if (publicUserId == null || publicUserId.isBlank()) {
+                    publicUserId = String.valueOf(account.getId());
+                }
+                ProfileEntity profile = profileRepository.findByUserId(publicUserId)
+                        .or(() -> profileRepository.findByEmail(account.getEmail()))
+                        .orElseGet(ProfileEntity::new);
+                profile.setUserId(publicUserId);
+                if (profile.getName() == null || profile.getName().isBlank()) {
+                    profile.setName(account.getName());
+                }
+                if (profile.getEmail() == null || profile.getEmail().isBlank()) {
+                    profile.setEmail(account.getEmail());
+                }
+                return profileRepository.save(profile);
+            }
         }
 
+        // Fallback to pro@truehunt.in only if not found
+        Optional<UserAccountEntity> currentAccountOpt = userAccountRepository.findByEmail("pro@truehunt.in");
         if (currentAccountOpt.isPresent()) {
             UserAccountEntity currentAccount = currentAccountOpt.get();
             String publicUserId = currentAccount.getPublicUserId();
@@ -818,6 +951,13 @@ public class ProfileService {
         Set<String> profileIds = new HashSet<>();
         if (entity.getUserId() != null && !entity.getUserId().isBlank()) {
             profileIds.add(entity.getUserId().trim().toLowerCase(Locale.ROOT));
+            userAccountRepository.findByPublicUserId(entity.getUserId().trim()).ifPresent(acc -> {
+                if (acc.getEmail() != null) profileIds.add(acc.getEmail().trim().toLowerCase(Locale.ROOT));
+                if (acc.getId() != null) profileIds.add(String.valueOf(acc.getId()));
+            });
+        }
+        if (entity.getId() != null) {
+            profileIds.add(String.valueOf(entity.getId()));
         }
         if (entity.getEmail() != null && !entity.getEmail().isBlank()) {
             String email = entity.getEmail().trim().toLowerCase(Locale.ROOT);

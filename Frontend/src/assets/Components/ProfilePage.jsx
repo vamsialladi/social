@@ -734,16 +734,17 @@ function ProfilePage({
 
   useEffect(() => {
     function syncConnectionState(event) {
-      const { connected, profile } = event.detail || {}
+      const { connected, pending, profile } = event.detail || {}
       const changedProfileId = String(
         profile?.userId || profile?.id || profile?.user_id || profile?._id || '',
-      )
+      ).trim().toLowerCase()
       if (!changedProfileId) return
-      if (changedProfileId === targetProfileId) {
+      const targetId = String(targetProfileId || '').trim().toLowerCase()
+      if (changedProfileId === targetId) {
         setConnectionState({
           profileId: targetProfileId,
           connected: Boolean(connected),
-          pending: false,
+          pending: typeof pending === 'boolean' ? Boolean(pending) : false,
         })
       }
 
@@ -751,11 +752,17 @@ function ProfilePage({
         const currentProfiles = current || []
         const matchesProfile = (item) => String(
           item.userId || item.id || item.user_id || item._id || '',
-        ) === changedProfileId
+        ).trim().toLowerCase() === changedProfileId
         if (!connected) return currentProfiles.filter((item) => !matchesProfile(item))
         if (currentProfiles.some(matchesProfile)) return currentProfiles
         return [...currentProfiles, { ...profile, id: changedProfileId, userId: changedProfileId }]
       })
+
+      if (isOwnerView) {
+        api.getConnectedProfiles().then((list) => {
+          if (Array.isArray(list)) setConnectedProfiles(list)
+        }).catch(() => {})
+      }
     }
 
     window.addEventListener('truehunt-connection-changed', syncConnectionState)
@@ -790,7 +797,39 @@ function ProfilePage({
         followed: Boolean(profileDetails.isFollowing),
       })
     }
-  }, [profileDetails.userId, profileDetails.id, profileDetails.isConnected, profileDetails.isFollowing])
+  }, [profileDetails.userId, profileDetails.id, profileDetails.isConnected, profileDetails.isFollowing, profileDetails.isPending, profileDetails.isOutgoingPending])
+
+  useEffect(() => {
+    if (isOwnerView || !targetProfileId || !isActive) return undefined
+
+    let isCurrent = true
+    async function loadCandidateProfileStatus() {
+      try {
+        const freshProfile = await api.getProfileById(targetProfileId)
+        if (isCurrent && freshProfile) {
+          const isConn = Boolean(freshProfile.isConnected)
+          const isPend = Boolean(freshProfile.isPending || freshProfile.isOutgoingPending)
+          const isFoll = Boolean(freshProfile.isFollowing)
+          setConnectionState({
+            profileId: targetProfileId,
+            connected: isConn,
+            pending: isPend,
+          })
+          setFollowState({
+            profileId: targetProfileId,
+            followed: isFoll,
+          })
+        }
+      } catch (err) {
+        console.warn('Could not refresh candidate profile relationship:', err)
+      }
+    }
+
+    loadCandidateProfileStatus()
+    return () => {
+      isCurrent = false
+    }
+  }, [isOwnerView, targetProfileId, isActive])
 
   useEffect(() => {
     if (!isOwnerView) return undefined
@@ -807,11 +846,19 @@ function ProfilePage({
       }
     }
 
-    loadConnectionsCount()
+    if (isActive) {
+      loadConnectionsCount()
+      api.getProfile().then((fresh) => {
+        if (isCurrent && fresh && fresh.name) {
+          setProfileDetails?.((prev) => ({ ...prev, ...fresh }))
+        }
+      }).catch(() => {})
+    }
+
     return () => {
       isCurrent = false
     }
-  }, [isOwnerView])
+  }, [isOwnerView, isActive])
 
   useEffect(() => {
     if (!isActive || !isOwnerView) return undefined
@@ -1986,19 +2033,19 @@ function ProfilePage({
               </button>
               {!isOwnerView && (
                 <button
-                  className={`identity-contact-button ${isProfileConnected ? 'identity-connected-button' : isProfilePending ? 'identity-pending-button' : ''}`}
+                  className={`identity-contact-button ${isProfileConnected ? 'identity-connected-button identity-remove-connection-button' : isProfilePending ? 'identity-pending-button' : ''}`}
                   type="button"
                   disabled={relationshipAction !== '' || !targetProfileId}
                   onClick={toggleProfileConnection}
                   style={isProfileConnected
-                    ? { backgroundColor: '#10B981', color: '#FFFFFF', borderColor: '#10B981' }
+                    ? { backgroundColor: '#fff3f0', color: '#a53d2b', borderColor: '#b94b38' }
                     : isProfilePending
                       ? { backgroundColor: '#F3F4F6', color: '#4B5563', borderColor: '#D1D5DB' }
                       : {}}
                 >
                   {relationshipAction === 'connect'
                     ? (isProfileConnected ? 'Removing…' : isProfilePending ? 'Canceling…' : 'Connecting…')
-                    : (isProfileConnected ? '✓ Connected' : isProfilePending ? 'Pending' : '+ Connect')}
+                    : (isProfileConnected ? 'Remove connection' : isProfilePending ? 'Pending' : '+ Connect')}
                 </button>
               )}
               {!isOwnerView && canMessageProfile && (
