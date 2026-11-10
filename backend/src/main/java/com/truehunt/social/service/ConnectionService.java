@@ -33,11 +33,11 @@ public class ConnectionService {
     private final ObjectProvider<TalentService> talentServiceProvider;
 
     public ConnectionService(NetworkProfileRepository networkProfileRepository,
-                             NotificationRepository notificationRepository,
-                             ProfileRepository profileRepository,
-                             UserAccountRepository userAccountRepository,
-                             UserProfileRelationshipRepository relationshipRepository,
-                             ObjectProvider<TalentService> talentServiceProvider) {
+            NotificationRepository notificationRepository,
+            ProfileRepository profileRepository,
+            UserAccountRepository userAccountRepository,
+            UserProfileRelationshipRepository relationshipRepository,
+            ObjectProvider<TalentService> talentServiceProvider) {
         this.networkProfileRepository = networkProfileRepository;
         this.notificationRepository = notificationRepository;
         this.profileRepository = profileRepository;
@@ -76,11 +76,11 @@ public class ConnectionService {
 
         for (UserProfileRelationshipEntity relationship : relationships.values()) {
             String targetId = relationship.getTargetProfileId();
-            if (targetId != null && !lowerOwnerIds.contains(targetId.toLowerCase(Locale.ROOT)) && !isInvalidTarget(targetId)) {
+            if (targetId != null && !lowerOwnerIds.contains(targetId.toLowerCase(Locale.ROOT))
+                    && !isInvalidTarget(targetId)) {
                 profiles.computeIfAbsent(
                         targetId,
-                        profileId -> getProfileDto(profileId, relationship.isConnected(), relationship.isFollowing())
-                );
+                        profileId -> getProfileDto(profileId, relationship.isConnected(), relationship.isFollowing()));
             }
         }
         return new ArrayList<>(profiles.values());
@@ -94,7 +94,8 @@ public class ConnectionService {
         Map<String, Map<String, Object>> connectedMap = new LinkedHashMap<>();
 
         for (UserProfileRelationshipEntity rel : allRels) {
-            if (!rel.isConnected()) continue;
+            if (!rel.isConnected())
+                continue;
             String owner = rel.getOwnerUserId() != null ? rel.getOwnerUserId().trim() : "";
             String target = rel.getTargetProfileId() != null ? rel.getTargetProfileId().trim() : "";
 
@@ -139,14 +140,12 @@ public class ConnectionService {
                     primaryOwnerId,
                     "New Connection Established",
                     "You are now connected with " + targetName + " on TrueHunt.",
-                    "connection"
-            ));
+                    "connection"));
             notificationRepository.save(new NotificationEntity(
                     targetProfileId,
                     "New Connection Established",
                     ownerName + " connected with you on TrueHunt.",
-                    "connection"
-            ));
+                    "connection"));
         }
 
         Map<String, Object> res = new HashMap<>();
@@ -188,7 +187,8 @@ public class ConnectionService {
     }
 
     private boolean isInvalidTarget(String target) {
-        if (target == null || target.isBlank()) return true;
+        if (target == null || target.isBlank())
+            return true;
         String lower = target.toLowerCase(Locale.ROOT);
         return lower.endsWith(".jpg") || lower.endsWith(".png") || lower.endsWith(".jpeg")
                 || lower.endsWith(".webp") || lower.contains("uploads/");
@@ -304,12 +304,14 @@ public class ConnectionService {
             if (networkProfile.isPresent()) {
                 dto.putAll(networkProfile.get().toDto());
             } else {
-                TalentService talentService = talentServiceProvider != null ? talentServiceProvider.getIfAvailable() : null;
+                TalentService talentService = talentServiceProvider != null ? talentServiceProvider.getIfAvailable()
+                        : null;
                 TalentDto talent = null;
                 if (talentService != null) {
                     try {
                         talent = talentService.getById(profileId);
-                    } catch (Exception ignored) {}
+                    } catch (Exception ignored) {
+                    }
                 }
                 if (talent != null) {
                     dto.put("name", talent.getName());
@@ -344,14 +346,16 @@ public class ConnectionService {
                 .or(() -> networkProfileRepository.findById(profileId).map(NetworkProfileEntity::getName))
                 .filter(name -> name != null && !name.isBlank())
                 .or(() -> {
-                    TalentService talentService = talentServiceProvider != null ? talentServiceProvider.getIfAvailable() : null;
+                    TalentService talentService = talentServiceProvider != null ? talentServiceProvider.getIfAvailable()
+                            : null;
                     if (talentService != null) {
                         try {
                             TalentDto t = talentService.getById(profileId);
                             if (t != null && t.getName() != null && !t.getName().isBlank()) {
                                 return Optional.of(t.getName());
                             }
-                        } catch (Exception ignored) {}
+                        } catch (Exception ignored) {
+                        }
                     }
                     return Optional.empty();
                 })
@@ -359,9 +363,11 @@ public class ConnectionService {
     }
 
     private String getInitials(String name) {
-        if (name == null || name.isBlank()) return "TH";
+        if (name == null || name.isBlank())
+            return "TH";
         String[] parts = name.trim().split("\\s+");
-        if (parts.length == 1) return parts[0].substring(0, Math.min(2, parts[0].length())).toUpperCase();
+        if (parts.length == 1)
+            return parts[0].substring(0, Math.min(2, parts[0].length())).toUpperCase();
         return ("" + parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
     }
 
@@ -400,14 +406,12 @@ public class ConnectionService {
                 primaryOwnerId,
                 "Connection Established",
                 "You are now connected with " + targetName + " on TrueHunt.",
-                "connection"
-        ));
+                "connection"));
         notificationRepository.save(new NotificationEntity(
                 targetProfileId,
                 "New Connection Established",
                 ownerName + " connected with you on TrueHunt.",
-                "connection"
-        ));
+                "connection"));
 
         Map<String, Object> res = new HashMap<>();
         res.put("talentId", targetProfileId);
