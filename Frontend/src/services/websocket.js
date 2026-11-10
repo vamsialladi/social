@@ -8,6 +8,7 @@ class WebSocketService {
     this.subscriptions = new Map()
     this.statusListeners = new Set()
     this.messageListeners = new Set()
+    this.recentMessageIds = new Set()
     this.currentEmail = ''
     this.currentToken = ''
   }
@@ -189,6 +190,19 @@ class WebSocketService {
   }
 
   notifyMessage(message) {
+    if (!message) return
+    const dedupKey = message.id
+      ? String(message.id)
+      : `${message.senderId}_${message.content}_${message.sentAt || ''}`
+
+    if (this.recentMessageIds.has(dedupKey)) {
+      return
+    }
+    this.recentMessageIds.add(dedupKey)
+    setTimeout(() => {
+      this.recentMessageIds.delete(dedupKey)
+    }, 5000)
+
     this.messageListeners.forEach((fn) => {
       try { fn(message) } catch (e) { console.error(e) }
     })

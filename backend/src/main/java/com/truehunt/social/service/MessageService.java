@@ -126,8 +126,12 @@ public class MessageService {
         );
         messageEntity = messageRepository.save(messageEntity);
 
+        String outId = (req.getId() != null && !req.getId().isBlank())
+                ? req.getId()
+                : "msg-" + messageEntity.getId();
+
         // 6. Update conversation entity
-        conversation.addMessage(senderEmail, senderName, receiverEmail, req.getContent().trim(), "outgoing", req.getAttachment());
+        conversation.addMessage(outId, senderEmail, senderName, receiverEmail, req.getContent().trim(), "outgoing", req.getAttachment());
         conversation.setPreview(req.getContent().trim());
         conversation.setDate("Just now");
         conversation.setUnread(true);
@@ -136,7 +140,7 @@ public class MessageService {
 
         // 7. Construct DTO for dispatch
         ChatMessageDto outDto = new ChatMessageDto(
-                "msg-" + messageEntity.getId(),
+                outId,
                 conversationId,
                 senderEmail,
                 senderName,

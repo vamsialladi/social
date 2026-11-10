@@ -132,9 +132,14 @@ public class ConversationEntity {
 
     public void addMessage(String senderId, String senderName, String receiverId,
                            String content, String direction, Object attachment) {
+        addMessage(null, senderId, senderName, receiverId, content, direction, attachment);
+    }
+
+    public void addMessage(String msgId, String senderId, String senderName, String receiverId,
+                           String content, String direction, Object attachment) {
         List<Map<String, Object>> thread = getThread();
         Map<String, Object> msg = new HashMap<>();
-        msg.put("id", "msg-" + System.currentTimeMillis() + "-" + thread.size());
+        msg.put("id", (msgId != null && !msgId.isBlank()) ? msgId : "msg-" + System.currentTimeMillis() + "-" + thread.size());
         msg.put("content", content);
         msg.put("direction", direction != null ? direction : "outgoing");
         if (senderId != null) msg.put("senderId", senderId);

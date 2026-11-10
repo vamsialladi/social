@@ -376,9 +376,38 @@ function Messages({ conversationToOpen, openConversationRef, onProfileSelect }) 
         return prevMessages.map((m, idx) => {
           if (idx === matchedIndex) {
             const thread = m.thread || []
+
+            // 1. Exact ID check
             if (thread.some((t) => String(t.id) === String(msgId))) {
               return m
             }
+
+            // 2. Reconciliation for optimistic outgoing message:
+            // If this is an outgoing message (sent by ME), find if an optimistic pending item exists
+            if (isOutgoing) {
+              const pendingIdx = thread.findIndex((t) =>
+                (t.direction === 'outgoing' || isMessageOutgoing(t, m, currentUser)) &&
+                t.content === content &&
+                (String(t.id).startsWith('msg-') || !t.sentAt || (Math.abs(new Date(t.sentAt || 0).getTime() - new Date(newMsg.sentAt || Date.now()).getTime()) < 60000))
+              )
+              if (pendingIdx !== -1) {
+                // Reconcile optimistic item with server confirmation (avoids duplicate bubble)
+                const updatedThread = [...thread]
+                updatedThread[pendingIdx] = {
+                  ...updatedThread[pendingIdx],
+                  ...threadItem,
+                  id: msgId,
+                }
+                return {
+                  ...m,
+                  id: convId || m.id,
+                  thread: updatedThread,
+                  preview: content,
+                  date: 'Just now',
+                }
+              }
+            }
+
             return {
               ...m,
               id: convId || m.id,
@@ -632,6 +661,7 @@ function Messages({ conversationToOpen, openConversationRef, onProfileSelect }) 
     const numericConvId = !isTempId && !Number.isNaN(Number(selectedMessage.id)) ? Number(selectedMessage.id) : null
 
     const wsPayload = {
+      id: messageId,
       conversationId: numericConvId,
       senderId: myIdentity,
       senderName: currentUser?.name || 'You',
