@@ -188,8 +188,13 @@ public class ConversationEntity {
         String n1Clean = user1Name != null ? user1Name.trim().toLowerCase(Locale.ROOT) : "";
         String n2Clean = user2Name != null ? user2Name.trim().toLowerCase(Locale.ROOT) : "";
 
-        boolean isUser1 = cleanIdentifiers.contains(u1Clean) || (!n1Clean.isEmpty() && cleanIdentifiers.contains(n1Clean));
-        boolean isUser2 = cleanIdentifiers.contains(u2Clean) || (!n2Clean.isEmpty() && cleanIdentifiers.contains(n2Clean));
+        boolean isUser1 = !u1Clean.isEmpty() && cleanIdentifiers.contains(u1Clean);
+        boolean isUser2 = !u2Clean.isEmpty() && cleanIdentifiers.contains(u2Clean);
+
+        if (!isUser1 && !isUser2) {
+            if (!n1Clean.isEmpty() && cleanIdentifiers.contains(n1Clean)) isUser1 = true;
+            else if (!n2Clean.isEmpty() && cleanIdentifiers.contains(n2Clean)) isUser2 = true;
+        }
 
         if (isUser1 && user2Name != null && !user2Name.isBlank()) {
             displayName = user2Name;
@@ -222,12 +227,22 @@ public class ConversationEntity {
             for (Map<String, Object> msg : thread) {
                 Map<String, Object> adaptedMsg = new HashMap<>(msg);
                 Object msgSenderId = msg.get("senderId");
-                Object msgSenderName = msg.get("senderName");
-                if (msgSenderId != null || msgSenderName != null) {
-                    String sId = msgSenderId != null ? String.valueOf(msgSenderId).trim().toLowerCase(Locale.ROOT) : "";
-                    String sName = msgSenderName != null ? String.valueOf(msgSenderName).trim().toLowerCase(Locale.ROOT) : "";
-                    boolean isOutgoing = cleanIdentifiers.contains(sId) || (!sName.isEmpty() && cleanIdentifiers.contains(sName));
+                Object msgReceiverId = msg.get("receiverId");
+
+                String sId = msgSenderId != null ? String.valueOf(msgSenderId).trim().toLowerCase(Locale.ROOT) : "";
+                String rId = msgReceiverId != null ? String.valueOf(msgReceiverId).trim().toLowerCase(Locale.ROOT) : "";
+
+                if (!sId.isEmpty()) {
+                    boolean isOutgoing = cleanIdentifiers.contains(sId);
                     adaptedMsg.put("direction", isOutgoing ? "outgoing" : "incoming");
+                } else if (!rId.isEmpty()) {
+                    boolean isIncoming = cleanIdentifiers.contains(rId);
+                    adaptedMsg.put("direction", isIncoming ? "incoming" : "outgoing");
+                } else {
+                    Object legacyDir = msg.get("direction");
+                    if (legacyDir != null) {
+                        adaptedMsg.put("direction", legacyDir);
+                    }
                 }
                 adaptedThread.add(adaptedMsg);
             }

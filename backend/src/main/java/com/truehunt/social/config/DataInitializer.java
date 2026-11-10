@@ -282,6 +282,29 @@ public class DataInitializer {
                     relationshipRepository.delete(rel);
                 }
             }
+
+            // Sanitize conversation thread directions and receiver IDs
+            conversationRepository.findAll().forEach(conv -> {
+                String u1 = conv.getUser1Id();
+                String u2 = conv.getUser2Id();
+                if (u1 != null && u2 != null) {
+                    List<Map<String, Object>> thread = conv.getThread();
+                    boolean modified = false;
+                    for (Map<String, Object> m : thread) {
+                        String sId = (String) m.get("senderId");
+                        String rId = (String) m.get("receiverId");
+                        if (sId != null && (rId == null || rId.equalsIgnoreCase(sId))) {
+                            String correctReceiver = sId.equalsIgnoreCase(u1) ? u2 : u1;
+                            m.put("receiverId", correctReceiver);
+                            modified = true;
+                        }
+                    }
+                    if (modified) {
+                        conv.setThread(thread);
+                        conversationRepository.save(conv);
+                    }
+                }
+            });
         };
     }
 

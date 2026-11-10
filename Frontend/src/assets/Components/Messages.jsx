@@ -182,6 +182,47 @@ function createProfileConversation(conversation) {
   }
 }
 
+function isMessageOutgoing(msg, currentConversation, user) {
+  if (!msg) return false
+
+  let effectiveUser = user
+  if (!effectiveUser) {
+    try {
+      const u = localStorage.getItem('truehunt_user')
+      if (u) effectiveUser = JSON.parse(u)
+    } catch {}
+  }
+
+  const myEmail = (effectiveUser?.email || '').trim().toLowerCase()
+  const myId = String(effectiveUser?.userId || effectiveUser?.publicUserId || effectiveUser?.id || '').trim().toLowerCase()
+
+  const msgSender = String(msg.senderId || '').trim().toLowerCase()
+  const msgReceiver = String(msg.receiverId || '').trim().toLowerCase()
+
+  // 1. Primary check: Unique sender ID (email, publicUserId, or user ID)
+  if (msgSender) {
+    if ((myEmail && msgSender === myEmail) || (myId && msgSender === myId) || msgSender === 'me') {
+      return true
+    }
+    // Sender ID is present and does not match current user -> incoming message
+    return false
+  }
+
+  // 2. Primary check: Unique receiver ID
+  if (msgReceiver) {
+    if ((myEmail && msgReceiver === myEmail) || (myId && msgReceiver === myId)) {
+      return false
+    }
+    return true
+  }
+
+  // 3. Fallback to message.direction property (which backend toDto computes accurately)
+  if (msg.direction === 'incoming') return false
+  if (msg.direction === 'outgoing') return true
+
+  return false
+}
+
 function Messages({ conversationToOpen, openConversationRef, onProfileSelect }) {
   const initialProfileConversation = createProfileConversation(conversationToOpen)
   const initialExistingConversation = initialProfileConversation && initialMessages.find((message) => (
@@ -228,6 +269,15 @@ function Messages({ conversationToOpen, openConversationRef, onProfileSelect }) 
   const attachmentInputRef = useRef(null)
   const emojiPickerRef = useRef(null)
 
+  const currentUser = useMemo(() => {
+    try {
+      const u = localStorage.getItem('truehunt_user')
+      return u ? JSON.parse(u) : null
+    } catch {
+      return null
+    }
+  }, [])
+
   const loadBackendConversations = useCallback(async (currentMailbox = 'Focused') => {
     try {
       const data = await api.getConversations(currentMailbox)
@@ -268,16 +318,23 @@ function Messages({ conversationToOpen, openConversationRef, onProfileSelect }) 
 
     const myEmail = (currentUser?.email || '').trim().toLowerCase()
     const myId = String(currentUser?.userId || currentUser?.publicUserId || currentUser?.id || '').trim().toLowerCase()
-    const myName = (currentUser?.name || '').trim().toLowerCase()
 
     const senderEmail = (newMsg.senderId || '').trim().toLowerCase()
-    const senderName = (newMsg.senderName || '').trim().toLowerCase()
+    const receiverEmail = (newMsg.receiverId || '').trim().toLowerCase()
 
-    const isOutgoing = Boolean(
+    // Explicit unique ID checks
+    const isSenderMe = Boolean(
       (myEmail && senderEmail === myEmail) ||
       (myId && senderEmail === myId) ||
-      (myName && senderName === myName)
+      senderEmail === 'me'
     )
+
+    const isReceiverMe = Boolean(
+      (myEmail && receiverEmail === myEmail) ||
+      (myId && receiverEmail === myId)
+    )
+
+    const isOutgoing = isSenderMe ? true : isReceiverMe ? false : Boolean(newMsg.direction === 'outgoing')
 
     const otherName = isOutgoing ? (newMsg.receiverName || 'Cinema Professional') : (newMsg.senderName || 'Cinema Professional')
     const otherId = isOutgoing ? (newMsg.receiverId || '') : (newMsg.senderId || '')
@@ -507,6 +564,31 @@ function Messages({ conversationToOpen, openConversationRef, onProfileSelect }) 
     } catch {}
 
     const myIdentity = currentUser?.email || currentUser?.userId || 'me'
+    const myEmail = (currentUser?.email || '').trim().toLowerCase()
+    const myId = String(currentUser?.userId || currentUser?.publicUserId || currentUser?.id || '').trim().toLowerCase()
+    const isMe = (val) => {
+      if (!val) return false
+      const v = String(val).trim().toLowerCase()
+      return v === myEmail || v === myId
+    }
+
+    let targetReceiverId = ''
+    if (selectedMessage.profile?.email && !isMe(selectedMessage.profile.email)) {
+      targetReceiverId = selectedMessage.profile.email
+    } else if (selectedMessage.profile?.userId && !isMe(selectedMessage.profile.userId)) {
+      targetReceiverId = selectedMessage.profile.userId
+    } else if (selectedMessage.user1Id && !isMe(selectedMessage.user1Id)) {
+      targetReceiverId = selectedMessage.user1Id
+    } else if (selectedMessage.user2Id && !isMe(selectedMessage.user2Id)) {
+      targetReceiverId = selectedMessage.user2Id
+    } else if (selectedMessage.profile?.id && !isMe(selectedMessage.profile.id)) {
+      targetReceiverId = selectedMessage.profile.id
+    } else if (selectedMessage.name && !isMe(selectedMessage.name)) {
+      targetReceiverId = selectedMessage.name
+    } else {
+      targetReceiverId = selectedMessage.user2Id || selectedMessage.user1Id || selectedMessage.name
+    }
+
     const messageId = `msg-${Date.now()}`
     const attachment = replyAttachment
 
@@ -519,6 +601,8 @@ function Messages({ conversationToOpen, openConversationRef, onProfileSelect }) 
       createdAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       senderId: myIdentity,
       senderName: currentUser?.name || 'You',
+      receiverId: targetReceiverId,
+      receiverName: selectedMessage.name,
     }
 
     // 1. Optimistic update
@@ -544,13 +628,6 @@ function Messages({ conversationToOpen, openConversationRef, onProfileSelect }) 
     setIsEmojiPickerOpen(false)
 
     // 2. Real-time WebSocket transmission
-    const targetReceiverId = selectedMessage.profile?.email ||
-      selectedMessage.profile?.userId ||
-      selectedMessage.profile?.id ||
-      selectedMessage.user2Id ||
-      selectedMessage.user1Id ||
-      selectedMessage.name
-
     const isTempId = String(selectedMessage.id).startsWith('profile-') || String(selectedMessage.id).startsWith('conv-')
     const numericConvId = !isTempId && !Number.isNaN(Number(selectedMessage.id)) ? Number(selectedMessage.id) : null
 
@@ -883,18 +960,9 @@ function Messages({ conversationToOpen, openConversationRef, onProfileSelect }) 
                         ? `${previousSentDate.getFullYear()}-${previousSentDate.getMonth()}-${previousSentDate.getDate()}`
                         : ''
                       const showDate = Boolean(dateKey && dateKey !== previousDateKey)
-                      const bubbleClassName = `conversation-bubble${message.direction === 'outgoing' ? ' is-outgoing' : ''}`
-                      const bubbleContent = (
-                        <>
-                          {message.content && <span>{message.content}</span>}
-                          {message.attachment && (
-                            <span className="conversation-attachment">
-                              <Paperclip size={14} aria-hidden="true" />
-                              {message.attachment.name}
-                            </span>
-                          )}
-                        </>
-                      )
+                      const isOutgoing = isMessageOutgoing(message, selectedMessage, currentUser)
+                      const bubbleClassName = `conversation-bubble ${isOutgoing ? 'is-outgoing' : 'is-incoming'}`
+                      const timeString = message.createdAt || (message.sentAt ? formatMessageTime(message.sentAt) : '')
 
                       return (
                         <Fragment key={message.id}>
@@ -903,29 +971,19 @@ function Messages({ conversationToOpen, openConversationRef, onProfileSelect }) 
                               {formatMessageDate(message.sentAt)}
                             </time>
                           )}
-                          {message.sentAt ? (
-                            <button
-                              className={bubbleClassName}
-                              type="button"
-                              aria-label={`Message sent ${formatMessageTimestamp(message.sentAt)}`}
-                              aria-expanded={expandedMessageTimeId === message.id}
-                              onClick={() => setExpandedMessageTimeId((currentId) => (
-                                currentId === message.id ? null : message.id
-                              ))}
-                            >
-                              {bubbleContent}
-                            </button>
-                          ) : (
-                            <div className={bubbleClassName}>{bubbleContent}</div>
-                          )}
-                          {message.sentAt && expandedMessageTimeId === message.id && (
-                            <time
-                              className={`conversation-message-time${message.direction === 'outgoing' ? ' is-outgoing' : ''}`}
-                              dateTime={message.sentAt}
-                            >
-                              {formatMessageTime(message.sentAt)}
-                            </time>
-                          )}
+                          <div className={bubbleClassName}>
+                            {message.content && <span className="conversation-bubble-text">{message.content}</span>}
+                            {message.attachment && (
+                              <span className="conversation-attachment">
+                                <Paperclip size={14} aria-hidden="true" />
+                                {message.attachment.name}
+                              </span>
+                            )}
+                            <span className="conversation-bubble-footer">
+                              {timeString && <span className="conversation-bubble-time">{timeString}</span>}
+                              {isOutgoing && <span className="conversation-check" aria-hidden="true">✓✓</span>}
+                            </span>
+                          </div>
                         </Fragment>
                       )
                     })}

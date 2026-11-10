@@ -103,12 +103,15 @@ public class MessageService {
 
         Long conversationId = conversation.getId();
 
-        // 4. Update receiver if not yet known
-        if (receiverEmail == null || receiverEmail.isBlank()) {
-            receiverEmail = senderEmail.equalsIgnoreCase(conversation.getUser1Id())
-                    ? conversation.getUser2Id()
-                    : conversation.getUser1Id();
-            receiverName = resolveUserName(receiverEmail);
+        // 4. Update receiver if not yet known or accidentally set to sender
+        if (receiverEmail == null || receiverEmail.isBlank() || receiverEmail.equalsIgnoreCase(senderEmail)) {
+            String partner = (conversation.getUser1Id() != null && !conversation.getUser1Id().equalsIgnoreCase(senderEmail))
+                    ? conversation.getUser1Id()
+                    : conversation.getUser2Id();
+            if (partner != null && !partner.isBlank() && !partner.equalsIgnoreCase(senderEmail)) {
+                receiverEmail = partner;
+                receiverName = resolveUserName(receiverEmail);
+            }
         }
 
         // 5. Persist message in database

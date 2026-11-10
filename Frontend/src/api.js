@@ -7,8 +7,13 @@ async function fetchJson(endpoint, options = {}) {
     const token = localStorage.getItem('truehunt_token')
     if (token) headers['Authorization'] = `Bearer ${token}`
     const storedUser = localStorage.getItem('truehunt_user')
-    const email = storedUser ? JSON.parse(storedUser)?.email : ''
-    if (email) headers['X-User-Email'] = email
+    if (storedUser) {
+      const u = JSON.parse(storedUser)
+      if (u.email) headers['X-User-Email'] = u.email
+      const uId = u.userId || u.publicUserId || u.id
+      if (uId) headers['X-User-Id'] = String(uId)
+      if (u.name) headers['X-User-Name'] = u.name
+    }
   } catch (error) {
     console.warn('Could not read the signed-in user for the profile request:', error)
   }

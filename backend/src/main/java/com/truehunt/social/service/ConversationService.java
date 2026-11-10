@@ -45,27 +45,23 @@ public class ConversationService {
 
             userAccountRepository.findByEmail(cleanEmail)
                     .or(() -> userAccountRepository.findByPublicUserId(userEmail))
-                    .or(() -> userAccountRepository.findByName(userEmail))
-                    .or(() -> userAccountRepository.findFirstByNameIgnoreCase(userEmail))
                     .ifPresent(u -> {
                         if (u.getEmail() != null) callerIdentifiers.add(u.getEmail().trim().toLowerCase(Locale.ROOT));
                         if (u.getPublicUserId() != null) callerIdentifiers.add(u.getPublicUserId().trim().toLowerCase(Locale.ROOT));
-                        if (u.getName() != null) callerIdentifiers.add(u.getName().trim().toLowerCase(Locale.ROOT));
+                        if (u.getId() != null) callerIdentifiers.add(String.valueOf(u.getId()));
                     });
 
             return list.stream()
                     .filter(c -> {
                         String u1 = c.getUser1Id() != null ? c.getUser1Id().trim().toLowerCase(Locale.ROOT) : "";
                         String u2 = c.getUser2Id() != null ? c.getUser2Id().trim().toLowerCase(Locale.ROOT) : "";
-                        String n1 = c.getUser1Name() != null ? c.getUser1Name().trim().toLowerCase(Locale.ROOT) : "";
-                        String n2 = c.getUser2Name() != null ? c.getUser2Name().trim().toLowerCase(Locale.ROOT) : "";
                         String cName = c.getName() != null ? c.getName().trim().toLowerCase(Locale.ROOT) : "";
 
                         // If unassigned legacy conversation, let it show
                         if (u1.isEmpty() && u2.isEmpty()) return true;
 
-                        boolean matchU1 = callerIdentifiers.contains(u1) || (!n1.isEmpty() && callerIdentifiers.contains(n1));
-                        boolean matchU2 = callerIdentifiers.contains(u2) || (!n2.isEmpty() && callerIdentifiers.contains(n2));
+                        boolean matchU1 = callerIdentifiers.contains(u1);
+                        boolean matchU2 = callerIdentifiers.contains(u2);
                         boolean matchName = !cName.isEmpty() && callerIdentifiers.contains(cName);
 
                         return matchU1 || matchU2 || matchName;
@@ -92,12 +88,10 @@ public class ConversationService {
 
             userAccountRepository.findByEmail(cleanEmail)
                     .or(() -> userAccountRepository.findByPublicUserId(userEmail))
-                    .or(() -> userAccountRepository.findByName(userEmail))
-                    .or(() -> userAccountRepository.findFirstByNameIgnoreCase(userEmail))
                     .ifPresent(u -> {
                         if (u.getEmail() != null) callerIdentifiers.add(u.getEmail().trim().toLowerCase(Locale.ROOT));
                         if (u.getPublicUserId() != null) callerIdentifiers.add(u.getPublicUserId().trim().toLowerCase(Locale.ROOT));
-                        if (u.getName() != null) callerIdentifiers.add(u.getName().trim().toLowerCase(Locale.ROOT));
+                        if (u.getId() != null) callerIdentifiers.add(String.valueOf(u.getId()));
                     });
             return entity.toDto(cleanEmail, callerIdentifiers);
         }

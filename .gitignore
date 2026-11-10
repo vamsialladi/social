@@ -1,8 +1,6 @@
 *.lock.db
-backend/target/*.jar
-backend/target/*.jar.original
-backend/target/maven-archiver/
-backend/target/surefire-reports/
+backend/target/
+backend/data/
 data/
 scratch/
 

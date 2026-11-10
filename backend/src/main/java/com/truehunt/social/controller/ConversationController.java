@@ -24,34 +24,42 @@ public class ConversationController {
     @GetMapping
     public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getConversations(
             @RequestParam(required = false) String mailbox,
-            @RequestHeader(value = "X-User-Email", required = false) String userEmail
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId
     ) {
-        return ResponseEntity.ok(ApiResponse.success(conversationService.getConversations(mailbox, userEmail)));
+        String caller = (userEmail != null && !userEmail.isBlank()) ? userEmail : userId;
+        return ResponseEntity.ok(ApiResponse.success(conversationService.getConversations(mailbox, caller)));
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getConversation(
             @PathVariable String id,
-            @RequestHeader(value = "X-User-Email", required = false) String userEmail
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId
     ) {
-        return ResponseEntity.ok(ApiResponse.success(conversationService.getConversation(id, userEmail)));
+        String caller = (userEmail != null && !userEmail.isBlank()) ? userEmail : userId;
+        return ResponseEntity.ok(ApiResponse.success(conversationService.getConversation(id, caller)));
     }
 
     @PostMapping("/{id}/messages")
     public ResponseEntity<ApiResponse<Map<String, Object>>> sendMessage(
             @PathVariable String id,
             @Valid @RequestBody SendMessageRequest req,
-            @RequestHeader(value = "X-User-Email", required = false) String userEmail
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId
     ) {
-        return ResponseEntity.ok(ApiResponse.success(conversationService.sendMessage(id, req, userEmail)));
+        String caller = (userEmail != null && !userEmail.isBlank()) ? userEmail : userId;
+        return ResponseEntity.ok(ApiResponse.success(conversationService.sendMessage(id, req, caller)));
     }
 
     @PostMapping
     public ResponseEntity<ApiResponse<Map<String, Object>>> createConversation(
             @Valid @RequestBody CreateConversationRequest req,
-            @RequestHeader(value = "X-User-Email", required = false) String userEmail
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId
     ) {
-        return ResponseEntity.ok(ApiResponse.success(conversationService.createConversation(req, userEmail)));
+        String caller = (userEmail != null && !userEmail.isBlank()) ? userEmail : userId;
+        return ResponseEntity.ok(ApiResponse.success(conversationService.createConversation(req, caller)));
     }
 
     @PatchMapping("/{id}/read")
