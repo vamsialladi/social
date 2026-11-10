@@ -65,12 +65,25 @@ public class ConnectionService {
                 payload.put("isPending", isPending);
                 payload.put("timestamp", java.time.LocalDateTime.now().toString());
 
-                template.convertAndSend("/topic/connections", payload);
                 if (senderId != null && !senderId.isBlank()) {
-                    template.convertAndSend("/topic/user." + senderId.trim().toLowerCase(Locale.ROOT) + ".connections", payload);
+                    payload.put("senderProfile", getProfileDto(senderId, isConnected, false));
                 }
                 if (receiverId != null && !receiverId.isBlank()) {
-                    template.convertAndSend("/topic/user." + receiverId.trim().toLowerCase(Locale.ROOT) + ".connections", payload);
+                    payload.put("receiverProfile", getProfileDto(receiverId, isConnected, false));
+                }
+
+                template.convertAndSend("/topic/connections", payload);
+                if (senderId != null && !senderId.isBlank()) {
+                    Set<String> allSenderIds = resolveAllUserIdentifiers(senderId);
+                    for (String sId : allSenderIds) {
+                        template.convertAndSend("/topic/user." + sId.trim().toLowerCase(Locale.ROOT) + ".connections", payload);
+                    }
+                }
+                if (receiverId != null && !receiverId.isBlank()) {
+                    Set<String> allReceiverIds = resolveAllUserIdentifiers(receiverId);
+                    for (String rId : allReceiverIds) {
+                        template.convertAndSend("/topic/user." + rId.trim().toLowerCase(Locale.ROOT) + ".connections", payload);
+                    }
                 }
             }
         } catch (Exception ignored) {
@@ -581,53 +594,19 @@ public class ConnectionService {
 
     private Set<String> getOwnerUserIdentifiers(String userEmail) {
         Set<String> ids = new HashSet<>();
-        String email = userEmail;
-        if (email == null || email.isBlank()) {
-            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-            if (auth != null && auth.isAuthenticated() && !"anonymousUser".equals(auth.getPrincipal())) {
-                email = auth.getName();
-            }
+        if (userEmail != null && !userEmail.isBlank()) {
+            ids.addAll(resolveAllUserIdentifiers(userEmail));
         }
-        if (email != null && !email.isBlank()) {
-            String cleanEmail = email.trim().toLowerCase(Locale.ROOT);
-            ids.add(cleanEmail);
-            userAccountRepository.findByEmail(cleanEmail).ifPresent(acc -> {
-                if (acc.getPublicUserId() != null && !acc.getPublicUserId().isBlank()) {
-                    ids.add(acc.getPublicUserId());
-                    ids.add(acc.getPublicUserId().toLowerCase(Locale.ROOT));
-                }
-                ids.add(String.valueOf(acc.getId()));
-            });
-            profileRepository.findByEmail(cleanEmail).ifPresent(p -> {
-                if (p.getUserId() != null && !p.getUserId().isBlank()) {
-                    ids.add(p.getUserId());
-                    ids.add(p.getUserId().toLowerCase(Locale.ROOT));
-                }
-            });
-            userAccountRepository.findByPublicUserId(cleanEmail).ifPresent(acc -> {
-                if (acc.getEmail() != null) ids.add(acc.getEmail().toLowerCase(Locale.ROOT));
-                ids.add(String.valueOf(acc.getId()));
-            });
-            profileRepository.findByUserId(cleanEmail).ifPresent(p -> {
-                if (p.getEmail() != null) ids.add(p.getEmail().toLowerCase(Locale.ROOT));
-                if (p.getUserId() != null) ids.add(p.getUserId().toLowerCase(Locale.ROOT));
-            });
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.isAuthenticated() && !"anonymousUser".equals(auth.getPrincipal())) {
+            ids.addAll(resolveAllUserIdentifiers(auth.getName()));
         }
         String primaryId = getPrimaryOwnerUserId(userEmail);
         if (primaryId != null && !primaryId.isBlank()) {
-            ids.add(primaryId);
-            ids.add(primaryId.toLowerCase(Locale.ROOT));
+            ids.addAll(resolveAllUserIdentifiers(primaryId));
         }
         if (ids.isEmpty()) {
-            ids.add("1000001");
-            ids.add("me");
-            ids.add("pro@truehunt.in");
-            userAccountRepository.findByEmail("pro@truehunt.in").ifPresent(acc -> {
-                if (acc.getPublicUserId() != null && !acc.getPublicUserId().isBlank()) {
-                    ids.add(acc.getPublicUserId());
-                    ids.add(acc.getPublicUserId().toLowerCase(Locale.ROOT));
-                }
-            });
+            ids.addAll(resolveAllUserIdentifiers("pro@truehunt.in"));
         }
         return ids;
     }
@@ -643,9 +622,15 @@ public class ConnectionService {
         if (email == null || email.isBlank()) {
             email = "pro@truehunt.in";
         }
-        String cleanEmail = email.trim().toLowerCase(Locale.ROOT);
+        String cleanEmail = email.trim();
+        String lowerEmail = cleanEmail.toLowerCase(Locale.ROOT);
+        String upperEmail = cleanEmail.toUpperCase(Locale.ROOT);
+
         UserAccountEntity account = userAccountRepository.findByEmail(cleanEmail)
+                .or(() -> userAccountRepository.findByEmail(lowerEmail))
                 .or(() -> userAccountRepository.findByPublicUserId(cleanEmail))
+                .or(() -> userAccountRepository.findByPublicUserId(upperEmail))
+                .or(() -> userAccountRepository.findByPublicUserId(lowerEmail))
                 .orElse(null);
         if (account != null) {
             return account.getPublicUserId() == null || account.getPublicUserId().isBlank()
@@ -654,7 +639,10 @@ public class ConnectionService {
         }
 
         Optional<ProfileEntity> profile = profileRepository.findByEmail(cleanEmail)
-                .or(() -> profileRepository.findByUserId(cleanEmail));
+                .or(() -> profileRepository.findByEmail(lowerEmail))
+                .or(() -> profileRepository.findByUserId(cleanEmail))
+                .or(() -> profileRepository.findByUserId(upperEmail))
+                .or(() -> profileRepository.findByUserId(lowerEmail));
         if (profile.isPresent() && profile.get().getUserId() != null && !profile.get().getUserId().isBlank()) {
             return profile.get().getUserId();
         }
@@ -678,11 +666,20 @@ public class ConnectionService {
 
     private Map<String, Object> getProfileDto(String profileId, boolean connected, boolean following) {
         Map<String, Object> dto = new HashMap<>();
-        Optional<ProfileEntity> profile = profileRepository.findByUserId(profileId);
+        String cleanId = profileId != null ? profileId.trim() : "";
+        String upperId = cleanId.toUpperCase(Locale.ROOT);
+        String lowerId = cleanId.toLowerCase(Locale.ROOT);
+
+        Optional<ProfileEntity> profile = profileRepository.findByUserId(cleanId)
+                .or(() -> profileRepository.findByUserId(upperId))
+                .or(() -> profileRepository.findByUserId(lowerId));
         if (profile.isEmpty()) {
-            profile = userAccountRepository.findByPublicUserId(profileId)
+            profile = userAccountRepository.findByPublicUserId(cleanId)
+                    .or(() -> userAccountRepository.findByPublicUserId(upperId))
+                    .or(() -> userAccountRepository.findByPublicUserId(lowerId))
                     .flatMap(acc -> profileRepository.findByUserId(acc.getPublicUserId()))
-                    .or(() -> userAccountRepository.findByEmail(profileId.toLowerCase(Locale.ROOT))
+                    .or(() -> userAccountRepository.findByEmail(cleanId)
+                            .or(() -> userAccountRepository.findByEmail(lowerId))
                             .flatMap(acc -> profileRepository.findByEmail(acc.getEmail())));
         }
 
@@ -692,44 +689,62 @@ public class ConnectionService {
                     ? "TrueHunt Member"
                     : entity.getName();
             dto.put("name", name);
-            dto.put("role", entity.getHeadline() != null ? entity.getHeadline() : entity.getPrimaryCraft());
+            dto.put("role", entity.getHeadline() != null ? entity.getHeadline() : (entity.getPrimaryCraft() != null ? entity.getPrimaryCraft() : "Cinema Professional"));
             dto.put("location", entity.getAddress() != null ? entity.getAddress() : "");
             dto.put("profileImageUrl", entity.getProfileImageUrl() != null ? entity.getProfileImageUrl() : "");
             dto.put("avatar", entity.getProfileImageUrl() != null ? entity.getProfileImageUrl() : "");
             dto.put("initials", getInitials(name));
         } else {
-            Optional<NetworkProfileEntity> networkProfile = networkProfileRepository.findById(profileId);
-            if (networkProfile.isPresent()) {
-                dto.putAll(networkProfile.get().toDto());
+            // Check UserAccountEntity if registered user without full profile
+            Optional<UserAccountEntity> account = userAccountRepository.findByPublicUserId(cleanId)
+                    .or(() -> userAccountRepository.findByPublicUserId(upperId))
+                    .or(() -> userAccountRepository.findByPublicUserId(lowerId))
+                    .or(() -> userAccountRepository.findByEmail(cleanId))
+                    .or(() -> userAccountRepository.findByEmail(lowerId));
+            if (account.isPresent()) {
+                UserAccountEntity acc = account.get();
+                String accName = acc.getName() != null && !acc.getName().isBlank() ? acc.getName() : "TrueHunt Member";
+                dto.put("name", accName);
+                dto.put("role", acc.getRole() != null ? acc.getRole() : (acc.getCraft() != null ? acc.getCraft() : "Cinema Professional"));
+                dto.put("location", acc.getHeadquarters() != null ? acc.getHeadquarters() : "");
+                dto.put("profileImageUrl", "");
+                dto.put("avatar", "");
+                dto.put("initials", getInitials(accName));
             } else {
-                TalentService talentService = talentServiceProvider != null ? talentServiceProvider.getIfAvailable()
-                        : null;
-                TalentDto talent = null;
-                if (talentService != null) {
-                    try {
-                        talent = talentService.getById(profileId);
-                    } catch (Exception ignored) {
-                    }
-                }
-                if (talent != null) {
-                    dto.put("name", talent.getName());
-                    dto.put("role", talent.getRole() != null ? talent.getRole() : talent.getPrimaryCraft());
-                    dto.put("location", talent.getLocation() != null ? talent.getLocation() : "");
-                    dto.put("profileImageUrl", talent.getAvatar() != null ? talent.getAvatar() : "");
-                    dto.put("avatar", talent.getAvatar() != null ? talent.getAvatar() : "");
-                    dto.put("initials", getInitials(talent.getName()));
+                Optional<NetworkProfileEntity> networkProfile = networkProfileRepository.findById(cleanId)
+                        .or(() -> networkProfileRepository.findById(upperId))
+                        .or(() -> networkProfileRepository.findById(lowerId));
+                if (networkProfile.isPresent()) {
+                    dto.putAll(networkProfile.get().toDto());
                 } else {
-                    dto.put("name", "TrueHunt Member");
-                    dto.put("initials", "TH");
-                    dto.put("role", "Cinema Professional");
-                    dto.put("location", "");
-                    dto.put("profileImageUrl", "");
-                    dto.put("avatar", "");
+                    TalentService talentService = talentServiceProvider != null ? talentServiceProvider.getIfAvailable() : null;
+                    TalentDto talent = null;
+                    if (talentService != null) {
+                        try {
+                            talent = talentService.getById(cleanId);
+                        } catch (Exception ignored) {
+                        }
+                    }
+                    if (talent != null) {
+                        dto.put("name", talent.getName());
+                        dto.put("role", talent.getRole() != null ? talent.getRole() : talent.getPrimaryCraft());
+                        dto.put("location", talent.getLocation() != null ? talent.getLocation() : "");
+                        dto.put("profileImageUrl", talent.getAvatar() != null ? talent.getAvatar() : "");
+                        dto.put("avatar", talent.getAvatar() != null ? talent.getAvatar() : "");
+                        dto.put("initials", getInitials(talent.getName()));
+                    } else {
+                        dto.put("name", "TrueHunt Member");
+                        dto.put("initials", "TH");
+                        dto.put("role", "Cinema Professional");
+                        dto.put("location", "");
+                        dto.put("profileImageUrl", "");
+                        dto.put("avatar", "");
+                    }
                 }
             }
         }
-        dto.put("id", profileId);
-        dto.put("userId", profileId);
+        dto.put("id", cleanId);
+        dto.put("userId", cleanId);
         dto.put("isConnected", connected);
         dto.put("connected", connected);
         dto.put("isFollowing", following);
@@ -738,17 +753,31 @@ public class ConnectionService {
     }
 
     private String getProfileName(String profileId) {
-        return profileRepository.findByUserId(profileId)
+        if (profileId == null || profileId.isBlank()) return "TrueHunt Member";
+        String cleanId = profileId.trim();
+        String upperId = cleanId.toUpperCase(Locale.ROOT);
+        String lowerId = cleanId.toLowerCase(Locale.ROOT);
+
+        return profileRepository.findByUserId(cleanId)
+                .or(() -> profileRepository.findByUserId(upperId))
+                .or(() -> profileRepository.findByUserId(lowerId))
                 .map(ProfileEntity::getName)
                 .filter(name -> name != null && !name.isBlank())
-                .or(() -> networkProfileRepository.findById(profileId).map(NetworkProfileEntity::getName))
+                .or(() -> userAccountRepository.findByPublicUserId(cleanId)
+                        .or(() -> userAccountRepository.findByPublicUserId(upperId))
+                        .or(() -> userAccountRepository.findByPublicUserId(lowerId))
+                        .or(() -> userAccountRepository.findByEmail(cleanId))
+                        .or(() -> userAccountRepository.findByEmail(lowerId))
+                        .map(UserAccountEntity::getName))
+                .filter(name -> name != null && !name.isBlank())
+                .or(() -> networkProfileRepository.findById(cleanId).map(NetworkProfileEntity::getName))
                 .filter(name -> name != null && !name.isBlank())
                 .or(() -> {
                     TalentService talentService = talentServiceProvider != null ? talentServiceProvider.getIfAvailable()
                             : null;
                     if (talentService != null) {
                         try {
-                            TalentDto t = talentService.getById(profileId);
+                            TalentDto t = talentService.getById(cleanId);
                             if (t != null && t.getName() != null && !t.getName().isBlank()) {
                                 return Optional.of(t.getName());
                             }

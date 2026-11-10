@@ -68,6 +68,15 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [] }
     && !followedProfiles.includes(getProfileKey(profile))
     && !pendingProfiles.includes(getProfileKey(profile))
   ))
+  const displayedProfiles = (
+    activeSection === 'connections'
+      ? profiles.filter((profile) => connectedProfiles.includes(getProfileKey(profile)) || Boolean(profile.isConnected))
+      : activeSection === 'following'
+        ? profiles.filter((profile) => followedProfiles.includes(getProfileKey(profile)) || Boolean(profile.isFollowing))
+        : activeSection === 'requests'
+          ? profiles.filter((profile) => pendingProfiles.includes(getProfileKey(profile)) || Boolean(profile.isPending))
+          : []
+  )
 
   function openConversation(profile) {
     if (!profile?.name) return
@@ -101,10 +110,15 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [] }
       profilesToMerge.filter((profile) => profile && profile.name).forEach((profile) => {
         const identityKeys = new Set(getProfileIdentityKeys(profile))
         const normalizedName = getNormalizedProfileName(profile)
-        const existingIndex = directory.findIndex((existingProfile) => (
-          getProfileIdentityKeys(existingProfile).some((key) => identityKeys.has(key))
-          || getNormalizedProfileName(existingProfile) === normalizedName
-        ))
+        const isGenericName = ['truehunt member', 'cinema professional', 'member', ''].includes(normalizedName)
+        const existingIndex = directory.findIndex((existingProfile) => {
+          const hasMatchingKey = getProfileIdentityKeys(existingProfile).some((key) => identityKeys.has(key))
+          if (hasMatchingKey) return true
+          if (!isGenericName) {
+            return getNormalizedProfileName(existingProfile) === normalizedName
+          }
+          return false
+        })
 
         if (existingIndex === -1) {
           directory.push(profile)
@@ -137,7 +151,7 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [] }
         })
         .map((profile, index) => {
           const id = String(profile.id || profile.userId)
-          const name = profile.name.trim()
+          const name = (profile.name || 'TrueHunt Member').trim()
           const nameParts = name.split(/\s+/)
           const profileKey = getProfileKey(id)
           const connection = networkProfilesById.get(profileKey)
@@ -145,13 +159,13 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [] }
             || Boolean(connection?.isConnected)
             || Boolean(profile.isConnected)
             || Boolean(profile.connected)
-          const isPend = !isConn && Boolean(connection?.isPending || connection?.isOutgoingPending)
+          const isPend = !isConn && Boolean(connection?.isPending || connection?.isOutgoingPending || profile.isPending)
 
           return {
             ...profile,
             id,
             name,
-            initials: nameParts.slice(0, 2).map((part) => part[0]).join('').toUpperCase(),
+            initials: profile.initials || nameParts.slice(0, 2).map((part) => part[0]).join('').toUpperCase() || 'TH',
             status: connection?.status || 'active',
             role: profile.headline || profile.role || profile.primaryCraft || profile.category || 'Cinema Professional',
             location: profile.location || profile.address || '',
@@ -164,6 +178,38 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [] }
             isPending: isPend,
           }
         })
+
+      // Ensure every profile in connectedList is explicitly present in allProfiles with isConnected = true
+      for (const conn of connectedList) {
+        if (!conn) continue
+        const cKey = getProfileKey(conn)
+        if (!cKey || normalizedCurrentUserIdentifiers.has(cKey)) continue
+        const existingIdx = allProfiles.findIndex((p) => getProfileKey(p) === cKey)
+        if (existingIdx !== -1) {
+          allProfiles[existingIdx].isConnected = true
+          allProfiles[existingIdx].isPending = false
+        } else {
+          const name = (conn.name || 'TrueHunt Member').trim()
+          const nameParts = name.split(/\s+/)
+          allProfiles.unshift({
+            ...conn,
+            id: conn.id || conn.userId || cKey,
+            userId: conn.userId || conn.id || cKey,
+            name,
+            initials: conn.initials || nameParts.slice(0, 2).map((part) => part[0]).join('').toUpperCase() || 'TH',
+            status: 'active',
+            role: conn.role || conn.headline || conn.primaryCraft || 'Cinema Professional',
+            location: conn.location || conn.address || '',
+            mutualConnections: conn.mutualConnections || 'TrueHunt member',
+            avatarClass: 'network-avatar-coral',
+            profileImageUrl: conn.profileImageUrl || conn.avatar || '',
+            coverImageUrl: conn.coverImageUrl || conn.coverImage || '',
+            isConnected: true,
+            isFollowing: Boolean(conn.isFollowing || conn.following),
+            isPending: false,
+          })
+        }
+      }
 
       setProfiles(allProfiles)
       const allConnectedKeys = Array.from(new Set([
@@ -185,7 +231,7 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [] }
 
     const interval = setInterval(() => {
       loadNetworkData()
-    }, 4000)
+    }, 2500)
 
     const handleFocus = () => loadNetworkData()
     const handleVisibility = () => {
@@ -205,9 +251,10 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [] }
   useEffect(() => {
     function handleConnectionChanged(event) {
       loadNetworkData()
-      const { connected, pending, profile } = event.detail || {}
+      const { connected, pending, profile, senderProfile, receiverProfile, senderId, receiverId } = event.detail || {}
+      const targetProfile = profile || senderProfile || receiverProfile
       const profileId = String(
-        profile?.userId || profile?.id || profile?.user_id || profile?._id || '',
+        targetProfile?.userId || targetProfile?.id || targetProfile?.user_id || targetProfile?._id || receiverId || senderId || '',
       )
       if (!profileId) return
       const profileKey = getProfileKey(profileId)
@@ -232,15 +279,38 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [] }
             : current.filter((id) => id !== profileKey)
         ))
       }
-      setProfiles((current) => current.map((item) => (
-        getProfileKey(item) === profileKey
-          ? {
-              ...item,
-              isConnected: Boolean(connected),
-              isPending: typeof pending === 'boolean' ? Boolean(pending) : (connected ? false : item.isPending),
-            }
-          : item
-      )))
+      setProfiles((current) => {
+        const exists = current.some((item) => getProfileKey(item) === profileKey)
+        if (!exists && targetProfile && targetProfile.name) {
+          const name = targetProfile.name.trim()
+          const nameParts = name.split(/\s+/)
+          return [{
+            ...targetProfile,
+            id: profileId,
+            userId: profileId,
+            name,
+            initials: targetProfile.initials || nameParts.slice(0, 2).map((part) => part[0]).join('').toUpperCase() || 'TH',
+            status: 'active',
+            role: targetProfile.role || targetProfile.headline || 'Cinema Professional',
+            location: targetProfile.location || '',
+            mutualConnections: 'TrueHunt member',
+            avatarClass: 'network-avatar-coral',
+            profileImageUrl: targetProfile.profileImageUrl || targetProfile.avatar || '',
+            coverImageUrl: targetProfile.coverImageUrl || targetProfile.coverImage || '',
+            isConnected: Boolean(connected),
+            isPending: typeof pending === 'boolean' ? Boolean(pending) : (connected ? false : false),
+          }, ...current]
+        }
+        return current.map((item) => (
+          getProfileKey(item) === profileKey
+            ? {
+                ...item,
+                isConnected: Boolean(connected),
+                isPending: typeof pending === 'boolean' ? Boolean(pending) : (connected ? false : item.isPending),
+              }
+            : item
+        ))
+      })
     }
 
     function handleFollowChanged(event) {
@@ -570,11 +640,11 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [] }
                 )
                 const displayCount = (
                   label === 'Connections'
-                    ? connectedProfiles.length
+                    ? Math.max(connectedProfiles.length, profiles.filter((p) => p.isConnected).length)
                     : label === 'Following & followers'
-                      ? followedProfiles.length
+                      ? Math.max(followedProfiles.length, profiles.filter((p) => p.isFollowing).length)
                       : label === 'Requests'
-                        ? pendingProfiles.length
+                        ? Math.max(pendingProfiles.length, profiles.filter((p) => p.isPending).length)
                         : count ?? 0
                 )
                 return (
@@ -671,10 +741,10 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [] }
                 </div>
                 <span className="network-suggestion-count">
                   {activeSection === 'connections'
-                    ? `${connectedProfiles.length} connections`
+                    ? `${displayedProfiles.length} connections`
                     : activeSection === 'following'
-                      ? `${followedProfiles.length} following`
-                      : `${pendingProfiles.length} requests`}
+                      ? `${displayedProfiles.length} following`
+                      : `${displayedProfiles.length} requests`}
                 </span>
               </header>
               {followError && activeSection === 'following' && (
@@ -683,22 +753,9 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [] }
               {connectionError && (activeSection === 'connections' || activeSection === 'requests') && (
                 <p className="network-connection-error" role="alert">{connectionError}</p>
               )}
-              {(activeSection === 'connections'
-                ? connectedProfiles
-                : activeSection === 'following'
-                  ? followedProfiles
-                  : pendingProfiles
-              ).length > 0 ? (
+              {displayedProfiles.length > 0 ? (
                 <div className="network-profile-grid">
-                  {profiles
-                    .filter((profile) => (
-                      activeSection === 'connections'
-                        ? connectedProfiles.includes(getProfileKey(profile))
-                        : activeSection === 'following'
-                          ? followedProfiles.includes(getProfileKey(profile))
-                          : pendingProfiles.includes(getProfileKey(profile))
-                    ))
-                    .map((profile) => renderProfileCard(profile, activeSection === 'requests'))}
+                  {displayedProfiles.map((profile) => renderProfileCard(profile, activeSection === 'requests'))}
                 </div>
               ) : (
                 <div className="network-connections-empty">

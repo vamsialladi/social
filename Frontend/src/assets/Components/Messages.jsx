@@ -457,7 +457,18 @@ function Messages({ conversationToOpen, openConversationRef, onProfileSelect }) 
 
     loadBackendConversations(mailbox)
 
+    const handleMsgEvent = (event) => {
+      if (event.detail) handleIncomingWebSocketMessage(event.detail)
+    }
+    window.addEventListener('truehunt-message-received', handleMsgEvent)
+
+    const pollInterval = setInterval(() => {
+      loadBackendConversations(mailbox)
+    }, 3000)
+
     return () => {
+      clearInterval(pollInterval)
+      window.removeEventListener('truehunt-message-received', handleMsgEvent)
       unsubStatus()
       unsubMsg()
     }

@@ -167,9 +167,11 @@ public class MessageService {
                                  String receiverEmail, String receiverPublicId, String receiverName,
                                  Long conversationId) {
         try {
-            // A. Broadcast to conversation room topics
+            // A. Broadcast to conversation room topics and general message streams
             messagingTemplate.convertAndSend("/topic/conversations/" + conversationId, outDto);
             messagingTemplate.convertAndSend("/topic/messages/" + conversationId, outDto);
+            messagingTemplate.convertAndSend("/topic/messages", outDto);
+            messagingTemplate.convertAndSend("/topic/chat", outDto);
 
             // B. Send to receiver's private queue destinations & pub-sub topics
             Set<String> receiverTargets = new LinkedHashSet<>();
