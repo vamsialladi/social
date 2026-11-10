@@ -4,16 +4,20 @@ import { api as directoryApi } from '../../services/api'
 import {
   ArrowLeft,
   CalendarDays,
+  Check,
   MessageCircle,
+  UserPlus,
   UserRound,
   UsersRound,
+  UserX,
+  X,
 } from 'lucide-react'
 import './NetworkPage.css'
 
 const networkSections = [
   { label: 'Connections', count: 0, Icon: UsersRound },
   { label: 'Following & followers', Icon: UserRound },
-  { label: 'Groups', count: 0, Icon: UsersRound },
+  { label: 'Requests', count: 0, Icon: UserPlus },
   { label: 'Events', count: 0, Icon: CalendarDays },
 ]
 
@@ -62,6 +66,7 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [] }
   const suggestionProfiles = profiles.filter((profile) => (
     !connectedProfiles.includes(getProfileKey(profile))
     && !followedProfiles.includes(getProfileKey(profile))
+    && !pendingProfiles.includes(getProfileKey(profile))
   ))
 
   function openConversation(profile) {
@@ -164,7 +169,7 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [] }
 
   useEffect(() => {
     function handleConnectionChanged(event) {
-      const { connected, profile } = event.detail || {}
+      const { connected, pending, profile } = event.detail || {}
       const profileId = String(
         profile?.userId || profile?.id || profile?.user_id || profile?._id || '',
       )
@@ -173,7 +178,7 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [] }
       relationshipOverrides.current.set(profileKey, {
         ...relationshipOverrides.current.get(profileKey),
         connected: Boolean(connected),
-        pending: false,
+        pending: typeof pending === 'boolean' ? Boolean(pending) : false,
       })
 
       setConnectedProfiles((current) => (
@@ -184,10 +189,20 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [] }
       if (connected) {
         setPendingProfiles((current) => current.filter((id) => id !== profileKey))
         setInvitations((current) => current.filter((inv) => getProfileKey(inv.profileId) !== profileKey))
+      } else if (typeof pending === 'boolean') {
+        setPendingProfiles((current) => (
+          pending
+            ? current.includes(profileKey) ? current : [...current, profileKey]
+            : current.filter((id) => id !== profileKey)
+        ))
       }
       setProfiles((current) => current.map((item) => (
         getProfileKey(item) === profileKey
-          ? { ...item, isConnected: Boolean(connected), ...(connected ? { isPending: false } : {}) }
+          ? {
+              ...item,
+              isConnected: Boolean(connected),
+              isPending: typeof pending === 'boolean' ? Boolean(pending) : (connected ? false : item.isPending),
+            }
           : item
       )))
     }
@@ -289,6 +304,36 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [] }
     }
   }
 
+  async function handleRemoveRequest(profileId) {
+    if (updatingConnectionProfileId) return
+    const profileKey = getProfileKey(profileId)
+    const profile = profiles.find((item) => getProfileKey(item) === profileKey)
+    setConnectionError('')
+    setUpdatingConnectionProfileId(profileId)
+    try {
+      await api.cancelConnectionRequest(profileId)
+      relationshipOverrides.current.set(profileKey, {
+        ...relationshipOverrides.current.get(profileKey),
+        connected: false,
+        pending: false,
+      })
+      setPendingProfiles((current) => current.filter((id) => id !== profileKey))
+      setProfiles((current) => current.map((item) => (
+        getProfileKey(item) === profileKey
+          ? { ...item, isConnected: false, isPending: false }
+          : item
+      )))
+      window.dispatchEvent(new CustomEvent('truehunt-connection-changed', {
+        detail: { connected: false, pending: false, profile },
+      }))
+    } catch (err) {
+      console.error('Cancel connection request error:', err)
+      setConnectionError('Could not remove connection request. Please try again.')
+    } finally {
+      setUpdatingConnectionProfileId('')
+    }
+  }
+
   async function toggleConnection(profileId) {
     if (updatingConnectionProfileId) return
     const profileKey = getProfileKey(profileId)
@@ -366,7 +411,7 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [] }
     }
   }
 
-  function renderProfileCard(profile) {
+  function renderProfileCard(profile, isRequestView = false) {
     const profileKey = getProfileKey(profile)
     const isConnected = connectedProfiles.includes(profileKey)
     const isPending = pendingProfiles.includes(profileKey)
@@ -437,14 +482,26 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [] }
               {isFollowing ? 'Unfollow' : 'Follow'}
             </button>
           </div>
-          <button
-            className="network-message-button"
-            type="button"
-            onClick={() => openConversation(profile)}
-          >
-            <MessageCircle size={15} aria-hidden="true" />
-            Message
-          </button>
+          {isRequestView ? (
+            <button
+              className="network-remove-request-button"
+              type="button"
+              disabled={Boolean(updatingConnectionProfileId)}
+              onClick={() => handleRemoveRequest(profile.id)}
+            >
+              <UserX size={15} aria-hidden="true" />
+              {updatingConnectionProfileId === profile.id ? 'Removing request…' : 'Remove request'}
+            </button>
+          ) : (
+            <button
+              className="network-message-button"
+              type="button"
+              onClick={() => openConversation(profile)}
+            >
+              <MessageCircle size={15} aria-hidden="true" />
+              Message
+            </button>
+          )}
         </div>
       </article>
     )
@@ -457,37 +514,43 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [] }
           <section className="network-manage-card" aria-labelledby="network-manage-title">
             <h1 id="network-manage-title">Manage my network</h1>
             <nav aria-label="Network sections">
-              {networkSections.map(({ label, count, Icon }) => (
-                <button
-                  className={`network-manage-item${(
-                    (label === 'Connections' && activeSection === 'connections')
-                    || (label === 'Following & followers' && activeSection === 'following')
-                  ) ? ' is-selected' : ''}`}
-                  key={label}
-                  type="button"
-                  aria-pressed={
-                    (label === 'Connections' && activeSection === 'connections')
-                    || (label === 'Following & followers' && activeSection === 'following')
-                  }
-                  onClick={() => setActiveSection(
-                    label === 'Connections'
-                      ? 'connections'
-                      : label === 'Following & followers'
-                        ? 'following'
-                        : 'grow',
-                  )}
-                >
-                  <Icon size={19} strokeWidth={2.2} aria-hidden="true" />
-                  <span>{label}</span>
-                  <small>
-                    {label === 'Connections'
-                      ? connectedProfiles.length
-                      : label === 'Following & followers'
-                        ? followedProfiles.length
-                        : count ?? 0}
-                  </small>
-                </button>
-              ))}
+              {networkSections.map(({ label, count, Icon }) => {
+                const isSelected = (
+                  (label === 'Connections' && activeSection === 'connections')
+                  || (label === 'Following & followers' && activeSection === 'following')
+                  || (label === 'Requests' && activeSection === 'requests')
+                )
+                const displayCount = (
+                  label === 'Connections'
+                    ? connectedProfiles.length
+                    : label === 'Following & followers'
+                      ? followedProfiles.length
+                      : label === 'Requests'
+                        ? pendingProfiles.length
+                        : count ?? 0
+                )
+                return (
+                  <button
+                    className={`network-manage-item${isSelected ? ' is-selected' : ''}`}
+                    key={label}
+                    type="button"
+                    aria-pressed={isSelected}
+                    onClick={() => setActiveSection(
+                      label === 'Connections'
+                        ? 'connections'
+                        : label === 'Following & followers'
+                          ? 'following'
+                          : label === 'Requests'
+                            ? 'requests'
+                            : 'grow',
+                    )}
+                  >
+                    <Icon size={19} strokeWidth={2.2} aria-hidden="true" />
+                    <span>{label}</span>
+                    <small>{displayCount}</small>
+                  </button>
+                )
+              })}
             </nav>
           </section>
           <section className="network-tip-card">
@@ -524,7 +587,7 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [] }
         </aside>
 
         <div className="network-main">
-          {activeSection === 'connections' || activeSection === 'following' ? (
+          {activeSection === 'connections' || activeSection === 'following' || activeSection === 'requests' ? (
             <section className="network-suggestions" aria-labelledby="network-connections-title">
               <button
                 className="network-connections-back"
@@ -538,41 +601,71 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [] }
                 <div>
                   <span className="network-section-eyebrow">YOUR NETWORK</span>
                   <h2 id="network-connections-title">
-                    {activeSection === 'connections' ? 'Connections' : 'Following & followers'}
+                    {activeSection === 'connections'
+                      ? 'Connections'
+                      : activeSection === 'following'
+                        ? 'Following & followers'
+                        : 'Requests'}
                   </h2>
                   <p>
                     {activeSection === 'connections'
                       ? 'People you’ve connected with.'
-                      : 'Profiles you follow.'}
+                      : activeSection === 'following'
+                        ? 'Profiles you follow.'
+                        : 'Connection requests you’ve sent. When accepted, they will show in your connections.'}
                   </p>
                 </div>
                 <span className="network-suggestion-count">
                   {activeSection === 'connections'
                     ? `${connectedProfiles.length} connections`
-                    : `${followedProfiles.length} following`}
+                    : activeSection === 'following'
+                      ? `${followedProfiles.length} following`
+                      : `${pendingProfiles.length} requests`}
                 </span>
               </header>
               {followError && activeSection === 'following' && (
                 <p className="network-connection-error" role="alert">{followError}</p>
               )}
-              {(activeSection === 'connections' ? connectedProfiles : followedProfiles).length > 0 ? (
+              {connectionError && (activeSection === 'connections' || activeSection === 'requests') && (
+                <p className="network-connection-error" role="alert">{connectionError}</p>
+              )}
+              {(activeSection === 'connections'
+                ? connectedProfiles
+                : activeSection === 'following'
+                  ? followedProfiles
+                  : pendingProfiles
+              ).length > 0 ? (
                 <div className="network-profile-grid">
                   {profiles
                     .filter((profile) => (
                       activeSection === 'connections'
                         ? connectedProfiles.includes(getProfileKey(profile))
-                        : followedProfiles.includes(getProfileKey(profile))
+                        : activeSection === 'following'
+                          ? followedProfiles.includes(getProfileKey(profile))
+                          : pendingProfiles.includes(getProfileKey(profile))
                     ))
-                    .map(renderProfileCard)}
+                    .map((profile) => renderProfileCard(profile, activeSection === 'requests'))}
                 </div>
               ) : (
                 <div className="network-connections-empty">
-                  <div className="network-catch-up-icon"><UsersRound size={24} aria-hidden="true" /></div>
-                  <h3>{activeSection === 'connections' ? 'No connections yet' : 'You’re not following anyone yet'}</h3>
+                  <div className="network-catch-up-icon">
+                    {activeSection === 'requests'
+                      ? <UserPlus size={24} aria-hidden="true" />
+                      : <UsersRound size={24} aria-hidden="true" />}
+                  </div>
+                  <h3>
+                    {activeSection === 'connections'
+                      ? 'No connections yet'
+                      : activeSection === 'following'
+                        ? 'You’re not following anyone yet'
+                        : 'No pending requests'}
+                  </h3>
                   <p>
                     {activeSection === 'connections'
                       ? 'Explore suggested profiles and connect with people in your community.'
-                      : 'Explore profiles and follow people to see them here.'}
+                      : activeSection === 'following'
+                        ? 'Explore profiles and follow people to see them here.'
+                        : 'You haven’t sent any pending connection requests.'}
                   </p>
                   <button type="button" onClick={() => setActiveSection('grow')}>Find people</button>
                 </div>
@@ -648,7 +741,8 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [] }
                             disabled={Boolean(processingInvitationId)}
                             onClick={() => handleRejectInvitation(inv.profileId)}
                           >
-                            Ignore
+                            <X size={14} aria-hidden="true" />
+                            Reject
                           </button>
                           <button
                             type="button"
@@ -656,6 +750,7 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [] }
                             disabled={Boolean(processingInvitationId)}
                             onClick={() => handleAcceptInvitation(inv.profileId, inv)}
                           >
+                            <Check size={14} aria-hidden="true" />
                             Accept
                           </button>
                         </div>

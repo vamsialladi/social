@@ -302,6 +302,10 @@
 }
 
 .network-invitation-reject {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
   padding: 7px 16px;
   border-radius: 999px;
   border: 1px solid #d1d5db;
@@ -314,12 +318,16 @@
 }
 
 .network-invitation-reject:hover {
-  background: #f3f4f6;
-  color: #1f2937;
-  border-color: #9ca3af;
+  background: #fef2f2;
+  color: #dc2626;
+  border-color: #fca5a5;
 }
 
 .network-invitation-accept {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
   padding: 7px 18px;
   border-radius: 999px;
   border: 1px solid #0a66c2;
@@ -664,9 +672,45 @@
   background: #f6f5f7;
 }
 
+.network-remove-request-button {
+  display: flex;
+  width: 100%;
+  min-height: 32px;
+  margin-top: 7px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid #f87171;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #dc2626;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+
+.network-remove-request-button:hover {
+  background: #fef2f2;
+  border-color: #ef4444;
+  color: #b91c1c;
+}
+
+.network-remove-request-button:focus-visible {
+  outline: 2px solid #ef4444;
+  outline-offset: 2px;
+}
+
+.network-remove-request-button:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
 .network-profile-actions .network-connect-button:focus-visible,
 .network-follow-button:focus-visible,
-.network-message-button:focus-visible {
+.network-message-button:focus-visible,
+.network-remove-request-button:focus-visible {
   outline: 2px solid #0a66c2;
   outline-offset: 2px;
 }
