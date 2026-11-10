@@ -49,13 +49,10 @@ public class ConnectionService {
     public List<Map<String, Object>> getSuggestions(String userEmail) {
         Set<String> ownerIds = getOwnerUserIdentifiers(userEmail);
         Set<String> lowerOwnerIds = ownerIds.stream().map(s -> s.toLowerCase(Locale.ROOT)).collect(Collectors.toSet());
-        String primaryOwnerId = getPrimaryOwnerUserId(userEmail);
 
         Map<String, UserProfileRelationshipEntity> relationships = new HashMap<>();
         for (String id : ownerIds) {
-            relationshipRepository.findAllByOwnerUserIdAndConnectedTrue(id)
-                    .forEach(r -> relationships.put(r.getTargetProfileId(), r));
-            relationshipRepository.findAllByOwnerUserIdAndFollowingTrue(id)
+            relationshipRepository.findAllByOwnerUserId(id)
                     .forEach(r -> relationships.put(r.getTargetProfileId(), r));
         }
 
@@ -67,10 +64,24 @@ public class ConnectionService {
             Map<String, Object> dto = profile.toDto();
             String profileId = profile.getId();
             UserProfileRelationshipEntity relationship = relationships.get(profileId);
-            dto.put("isConnected", relationship != null && relationship.isConnected());
-            dto.put("connected", relationship != null && relationship.isConnected());
-            dto.put("isFollowing", relationship != null && relationship.isFollowing());
-            dto.put("following", relationship != null && relationship.isFollowing());
+            boolean isConnected = relationship != null && relationship.isConnected();
+            boolean isFollowing = relationship != null && relationship.isFollowing();
+            boolean isPending = relationship != null && "PENDING".equalsIgnoreCase(relationship.getStatus());
+            String sender = relationship != null && relationship.getSenderUserId() != null
+                    ? relationship.getSenderUserId().toLowerCase(Locale.ROOT)
+                    : "";
+            boolean isOutgoingPending = isPending && lowerOwnerIds.contains(sender);
+            boolean isIncomingPending = isPending && !isOutgoingPending;
+
+            dto.put("isConnected", isConnected);
+            dto.put("connected", isConnected);
+            dto.put("isFollowing", isFollowing);
+            dto.put("following", isFollowing);
+            dto.put("isPending", isPending);
+            dto.put("isOutgoingPending", isOutgoingPending);
+            dto.put("isIncomingPending", isIncomingPending);
+            dto.put("connectionStatus", isConnected ? "CONNECTED"
+                    : (isPending ? (isOutgoingPending ? "PENDING_OUTGOING" : "PENDING_INCOMING") : "NONE"));
             profiles.put(profileId, dto);
         }
 
@@ -80,10 +91,79 @@ public class ConnectionService {
                     && !isInvalidTarget(targetId)) {
                 profiles.computeIfAbsent(
                         targetId,
-                        profileId -> getProfileDto(profileId, relationship.isConnected(), relationship.isFollowing()));
+                        profileId -> {
+                            Map<String, Object> dto = getProfileDto(profileId, relationship.isConnected(), relationship.isFollowing());
+                            boolean isPend = "PENDING".equalsIgnoreCase(relationship.getStatus());
+                            String sender = relationship.getSenderUserId() != null
+                                    ? relationship.getSenderUserId().toLowerCase(Locale.ROOT)
+                                    : "";
+                            boolean isOutPending = isPend && lowerOwnerIds.contains(sender);
+                            boolean isInPending = isPend && !isOutPending;
+                            dto.put("isPending", isPend);
+                            dto.put("isOutgoingPending", isOutPending);
+                            dto.put("isIncomingPending", isInPending);
+                            dto.put("connectionStatus", relationship.isConnected() ? "CONNECTED"
+                                    : (isPend ? (isOutPending ? "PENDING_OUTGOING" : "PENDING_INCOMING") : "NONE"));
+                            return dto;
+                        });
             }
         }
         return new ArrayList<>(profiles.values());
+    }
+
+    public List<Map<String, Object>> getInvitations(String userEmail) {
+        Set<String> ownerIds = getOwnerUserIdentifiers(userEmail);
+        Set<String> lowerOwnerIds = ownerIds.stream().map(s -> s.toLowerCase(Locale.ROOT)).collect(Collectors.toSet());
+
+        List<UserProfileRelationshipEntity> allRels = relationshipRepository.findAll();
+        Map<String, Map<String, Object>> invitationMap = new LinkedHashMap<>();
+
+        for (UserProfileRelationshipEntity rel : allRels) {
+            if (rel == null || !"PENDING".equalsIgnoreCase(rel.getStatus())) {
+                continue;
+            }
+            String owner = rel.getOwnerUserId() != null ? rel.getOwnerUserId().trim().toLowerCase(Locale.ROOT) : "";
+            String target = rel.getTargetProfileId() != null ? rel.getTargetProfileId().trim().toLowerCase(Locale.ROOT) : "";
+            String sender = rel.getSenderUserId() != null ? rel.getSenderUserId().trim().toLowerCase(Locale.ROOT) : "";
+
+            // Check if current user is the recipient of this invitation
+            boolean isRecipient = (lowerOwnerIds.contains(owner) && !lowerOwnerIds.contains(sender))
+                    || (lowerOwnerIds.contains(target) && !lowerOwnerIds.contains(sender));
+
+            if (!isRecipient) {
+                continue;
+            }
+
+            // The sender profile ID is the one that is NOT the current user
+            String senderProfileId = !lowerOwnerIds.contains(sender) && !sender.isBlank()
+                    ? rel.getSenderUserId().trim()
+                    : (lowerOwnerIds.contains(owner) ? rel.getTargetProfileId().trim() : rel.getOwnerUserId().trim());
+
+            if (isInvalidTarget(senderProfileId) || lowerOwnerIds.contains(senderProfileId.toLowerCase(Locale.ROOT))) {
+                continue;
+            }
+
+            if (!invitationMap.containsKey(senderProfileId)) {
+                Map<String, Object> senderDto = getProfileDto(senderProfileId, false, false);
+                Map<String, Object> inv = new LinkedHashMap<>();
+                inv.put("id", rel.getId());
+                inv.put("invitationId", rel.getId());
+                inv.put("profileId", senderProfileId);
+                inv.put("senderId", senderProfileId);
+                inv.put("name", senderDto.get("name"));
+                inv.put("role", senderDto.get("role"));
+                inv.put("location", senderDto.get("location"));
+                inv.put("avatar", senderDto.get("avatar"));
+                inv.put("profileImageUrl", senderDto.get("profileImageUrl"));
+                inv.put("initials", senderDto.get("initials"));
+                inv.put("mutualConnections", "Cinema Industry member");
+                inv.put("createdAt", rel.getCreatedAt() != null ? rel.getCreatedAt().toString() : "");
+                inv.put("profile", senderDto);
+                invitationMap.put(senderProfileId, inv);
+            }
+        }
+
+        return new ArrayList<>(invitationMap.values());
     }
 
     public List<Map<String, Object>> getConnectedProfiles(String userEmail) {
@@ -113,6 +193,197 @@ public class ConnectionService {
     }
 
     @Transactional
+    public Map<String, Object> sendConnectionRequest(String profileId, String message, String userEmail) {
+        String targetProfileId = requireProfileId(profileId);
+        Set<String> ownerIds = getOwnerUserIdentifiers(userEmail);
+        Set<String> lowerOwnerIds = ownerIds.stream().map(s -> s.toLowerCase(Locale.ROOT)).collect(Collectors.toSet());
+
+        if (lowerOwnerIds.contains(targetProfileId.toLowerCase(Locale.ROOT))) {
+            throw new BadRequestException("You cannot connect with your own profile");
+        }
+
+        String primaryOwnerId = getPrimaryOwnerUserId(userEmail);
+        UserProfileRelationshipEntity relationship = getOrCreateRelationship(primaryOwnerId, targetProfileId);
+        UserProfileRelationshipEntity reciprocal = getOrCreateRelationship(targetProfileId, primaryOwnerId);
+
+        if (relationship.isConnected()) {
+            Map<String, Object> res = new HashMap<>();
+            res.put("id", targetProfileId);
+            res.put("profileId", targetProfileId);
+            res.put("connected", true);
+            res.put("isConnected", true);
+            res.put("isPending", false);
+            res.put("status", "ACCEPTED");
+            res.put("message", "Already connected with " + getProfileName(targetProfileId));
+            return res;
+        }
+
+        // If target already sent us an invitation, sending connect is accepting it!
+        if ("PENDING".equalsIgnoreCase(relationship.getStatus())
+                && relationship.getSenderUserId() != null
+                && !lowerOwnerIds.contains(relationship.getSenderUserId().toLowerCase(Locale.ROOT))) {
+            return acceptConnection(targetProfileId, userEmail);
+        }
+
+        java.time.LocalDateTime now = java.time.LocalDateTime.now();
+
+        relationship.setConnected(false);
+        relationship.setStatus("PENDING");
+        relationship.setSenderUserId(primaryOwnerId);
+        relationship.setCreatedAt(now);
+        relationship.setUpdatedAt(now);
+        relationshipRepository.save(relationship);
+
+        reciprocal.setConnected(false);
+        reciprocal.setStatus("PENDING");
+        reciprocal.setSenderUserId(primaryOwnerId);
+        reciprocal.setCreatedAt(now);
+        reciprocal.setUpdatedAt(now);
+        relationshipRepository.save(reciprocal);
+
+        String targetName = getProfileName(targetProfileId);
+        String ownerName = getProfileName(primaryOwnerId);
+
+        notificationRepository.save(new NotificationEntity(
+                targetProfileId,
+                "New Connection Request",
+                ownerName + " sent you an invitation to connect on TrueHunt.",
+                "connection_request"));
+
+        notificationRepository.save(new NotificationEntity(
+                primaryOwnerId,
+                "Invitation Sent",
+                "You sent a connection invitation to " + targetName + ".",
+                "connection_request"));
+
+        Map<String, Object> res = new HashMap<>();
+        res.put("id", targetProfileId);
+        res.put("profileId", targetProfileId);
+        res.put("connected", false);
+        res.put("isConnected", false);
+        res.put("isPending", true);
+        res.put("isOutgoingPending", true);
+        res.put("status", "PENDING");
+        res.put("message", "Connection request sent to " + targetName);
+        return res;
+    }
+
+    @Transactional
+    public Map<String, Object> acceptConnection(String profileId, String userEmail) {
+        String requesterProfileId = requireProfileId(profileId);
+        Set<String> ownerIds = getOwnerUserIdentifiers(userEmail);
+        Set<String> lowerOwnerIds = ownerIds.stream().map(s -> s.toLowerCase(Locale.ROOT)).collect(Collectors.toSet());
+
+        if (lowerOwnerIds.contains(requesterProfileId.toLowerCase(Locale.ROOT))) {
+            throw new BadRequestException("You cannot connect with your own profile");
+        }
+
+        String primaryOwnerId = getPrimaryOwnerUserId(userEmail);
+        UserProfileRelationshipEntity relationship = getOrCreateRelationship(primaryOwnerId, requesterProfileId);
+        UserProfileRelationshipEntity reciprocal = getOrCreateRelationship(requesterProfileId, primaryOwnerId);
+
+        java.time.LocalDateTime now = java.time.LocalDateTime.now();
+
+        relationship.setConnected(true);
+        relationship.setStatus("ACCEPTED");
+        relationship.setUpdatedAt(now);
+        relationshipRepository.save(relationship);
+
+        reciprocal.setConnected(true);
+        reciprocal.setStatus("ACCEPTED");
+        reciprocal.setUpdatedAt(now);
+        relationshipRepository.save(reciprocal);
+
+        String requesterName = getProfileName(requesterProfileId);
+        String ownerName = getProfileName(primaryOwnerId);
+
+        notificationRepository.save(new NotificationEntity(
+                requesterProfileId,
+                "Connection Request Accepted",
+                ownerName + " accepted your connection request on TrueHunt.",
+                "connection_accepted"));
+
+        notificationRepository.save(new NotificationEntity(
+                primaryOwnerId,
+                "New Connection Established",
+                "You are now connected with " + requesterName + " on TrueHunt.",
+                "connection"));
+
+        Map<String, Object> res = new HashMap<>();
+        res.put("id", requesterProfileId);
+        res.put("profileId", requesterProfileId);
+        res.put("connected", true);
+        res.put("isConnected", true);
+        res.put("isPending", false);
+        res.put("status", "ACCEPTED");
+        res.put("message", "Connected with " + requesterName);
+        return res;
+    }
+
+    @Transactional
+    public Map<String, Object> rejectConnection(String profileId, String userEmail) {
+        String requesterProfileId = requireProfileId(profileId);
+        String primaryOwnerId = getPrimaryOwnerUserId(userEmail);
+
+        UserProfileRelationshipEntity relationship = getOrCreateRelationship(primaryOwnerId, requesterProfileId);
+        UserProfileRelationshipEntity reciprocal = getOrCreateRelationship(requesterProfileId, primaryOwnerId);
+
+        java.time.LocalDateTime now = java.time.LocalDateTime.now();
+        relationship.setConnected(false);
+        relationship.setStatus("REJECTED");
+        relationship.setUpdatedAt(now);
+        relationshipRepository.save(relationship);
+
+        reciprocal.setConnected(false);
+        reciprocal.setStatus("REJECTED");
+        reciprocal.setUpdatedAt(now);
+        relationshipRepository.save(reciprocal);
+
+        Map<String, Object> res = new HashMap<>();
+        res.put("id", requesterProfileId);
+        res.put("profileId", requesterProfileId);
+        res.put("connected", false);
+        res.put("isConnected", false);
+        res.put("isPending", false);
+        res.put("status", "REJECTED");
+        res.put("message", "Invitation ignored");
+        return res;
+    }
+
+    @Transactional
+    public Map<String, Object> cancelConnectionRequest(String profileId, String userEmail) {
+        String targetProfileId = requireProfileId(profileId);
+        String primaryOwnerId = getPrimaryOwnerUserId(userEmail);
+
+        UserProfileRelationshipEntity relationship = getOrCreateRelationship(primaryOwnerId, targetProfileId);
+        UserProfileRelationshipEntity reciprocal = getOrCreateRelationship(targetProfileId, primaryOwnerId);
+
+        java.time.LocalDateTime now = java.time.LocalDateTime.now();
+        relationship.setConnected(false);
+        relationship.setStatus(null);
+        relationship.setSenderUserId(null);
+        relationship.setUpdatedAt(now);
+        relationshipRepository.save(relationship);
+
+        reciprocal.setConnected(false);
+        reciprocal.setStatus(null);
+        reciprocal.setSenderUserId(null);
+        reciprocal.setUpdatedAt(now);
+        relationshipRepository.save(reciprocal);
+
+        Map<String, Object> res = new HashMap<>();
+        res.put("id", targetProfileId);
+        res.put("profileId", targetProfileId);
+        res.put("connected", false);
+        res.put("isConnected", false);
+        res.put("isPending", false);
+        res.put("isOutgoingPending", false);
+        res.put("status", null);
+        res.put("message", "Connection request withdrawn");
+        return res;
+    }
+
+    @Transactional
     public Map<String, Object> toggleConnection(String profileId, String userEmail) {
         String targetProfileId = requireProfileId(profileId);
         Set<String> ownerIds = getOwnerUserIdentifiers(userEmail);
@@ -124,39 +395,51 @@ public class ConnectionService {
 
         String primaryOwnerId = getPrimaryOwnerUserId(userEmail);
         UserProfileRelationshipEntity relationship = getOrCreateRelationship(primaryOwnerId, targetProfileId);
-        boolean newStatus = !relationship.isConnected();
-        relationship.setConnected(newStatus);
-        relationshipRepository.save(relationship);
 
-        UserProfileRelationshipEntity reciprocal = getOrCreateRelationship(targetProfileId, primaryOwnerId);
-        reciprocal.setConnected(newStatus);
-        relationshipRepository.save(reciprocal);
+        // 1. If currently connected -> disconnect
+        if (relationship.isConnected()) {
+            java.time.LocalDateTime now = java.time.LocalDateTime.now();
+            relationship.setConnected(false);
+            relationship.setStatus(null);
+            relationship.setSenderUserId(null);
+            relationship.setUpdatedAt(now);
+            relationshipRepository.save(relationship);
 
-        String targetName = getProfileName(targetProfileId);
-        String ownerName = getProfileName(primaryOwnerId);
+            UserProfileRelationshipEntity reciprocal = getOrCreateRelationship(targetProfileId, primaryOwnerId);
+            reciprocal.setConnected(false);
+            reciprocal.setStatus(null);
+            reciprocal.setSenderUserId(null);
+            reciprocal.setUpdatedAt(now);
+            relationshipRepository.save(reciprocal);
 
-        if (newStatus) {
-            notificationRepository.save(new NotificationEntity(
-                    primaryOwnerId,
-                    "New Connection Established",
-                    "You are now connected with " + targetName + " on TrueHunt.",
-                    "connection"));
-            notificationRepository.save(new NotificationEntity(
-                    targetProfileId,
-                    "New Connection Established",
-                    ownerName + " connected with you on TrueHunt.",
-                    "connection"));
+            String targetName = getProfileName(targetProfileId);
+            Map<String, Object> res = new HashMap<>();
+            res.put("id", targetProfileId);
+            res.put("profileId", targetProfileId);
+            res.put("connected", false);
+            res.put("isConnected", false);
+            res.put("isPending", false);
+            res.put("status", null);
+            res.put("message", "Disconnected from " + targetName);
+            return res;
         }
 
-        Map<String, Object> res = new HashMap<>();
-        res.put("id", targetProfileId);
-        res.put("profileId", targetProfileId);
-        res.put("connected", newStatus);
-        res.put("isConnected", newStatus);
-        res.put("message", newStatus
-                ? "Connected with " + targetName
-                : "Disconnected from " + targetName);
-        return res;
+        // 2. If currently pending:
+        if ("PENDING".equalsIgnoreCase(relationship.getStatus())) {
+            String sender = relationship.getSenderUserId() != null
+                    ? relationship.getSenderUserId().toLowerCase(Locale.ROOT)
+                    : "";
+            if (lowerOwnerIds.contains(sender)) {
+                // Sent by current user -> cancel request
+                return cancelConnectionRequest(targetProfileId, userEmail);
+            } else {
+                // Sent by other user -> accept invitation
+                return acceptConnection(targetProfileId, userEmail);
+            }
+        }
+
+        // 3. Otherwise, send connection request!
+        return sendConnectionRequest(targetProfileId, null, userEmail);
     }
 
     @Transactional
@@ -226,6 +509,19 @@ public class ConnectionService {
                     ids.add(p.getUserId().toLowerCase(Locale.ROOT));
                 }
             });
+            userAccountRepository.findByPublicUserId(cleanEmail).ifPresent(acc -> {
+                if (acc.getEmail() != null) ids.add(acc.getEmail().toLowerCase(Locale.ROOT));
+                ids.add(String.valueOf(acc.getId()));
+            });
+            profileRepository.findByUserId(cleanEmail).ifPresent(p -> {
+                if (p.getEmail() != null) ids.add(p.getEmail().toLowerCase(Locale.ROOT));
+                if (p.getUserId() != null) ids.add(p.getUserId().toLowerCase(Locale.ROOT));
+            });
+        }
+        String primaryId = getPrimaryOwnerUserId(userEmail);
+        if (primaryId != null && !primaryId.isBlank()) {
+            ids.add(primaryId);
+            ids.add(primaryId.toLowerCase(Locale.ROOT));
         }
         if (ids.isEmpty()) {
             ids.add("1000001");
@@ -253,16 +549,23 @@ public class ConnectionService {
             email = "pro@truehunt.in";
         }
         String cleanEmail = email.trim().toLowerCase(Locale.ROOT);
-        UserAccountEntity account = userAccountRepository.findByEmail(cleanEmail).orElse(null);
+        UserAccountEntity account = userAccountRepository.findByEmail(cleanEmail)
+                .or(() -> userAccountRepository.findByPublicUserId(cleanEmail))
+                .orElse(null);
         if (account != null) {
             return account.getPublicUserId() == null || account.getPublicUserId().isBlank()
                     ? String.valueOf(account.getId())
                     : account.getPublicUserId();
         }
 
-        Optional<ProfileEntity> profile = profileRepository.findByEmail(cleanEmail);
+        Optional<ProfileEntity> profile = profileRepository.findByEmail(cleanEmail)
+                .or(() -> profileRepository.findByUserId(cleanEmail));
         if (profile.isPresent() && profile.get().getUserId() != null && !profile.get().getUserId().isBlank()) {
             return profile.get().getUserId();
+        }
+
+        if (userEmail != null && !userEmail.isBlank()) {
+            return userEmail.trim();
         }
 
         return "1000001";
@@ -393,10 +696,14 @@ public class ConnectionService {
         String primaryOwnerId = getPrimaryOwnerUserId(userEmail);
         UserProfileRelationshipEntity rel1 = getOrCreateRelationship(primaryOwnerId, targetProfileId);
         rel1.setConnected(true);
+        rel1.setStatus("ACCEPTED");
+        rel1.setUpdatedAt(java.time.LocalDateTime.now());
         relationshipRepository.save(rel1);
 
         UserProfileRelationshipEntity rel2 = getOrCreateRelationship(targetProfileId, primaryOwnerId);
         rel2.setConnected(true);
+        rel2.setStatus("ACCEPTED");
+        rel2.setUpdatedAt(java.time.LocalDateTime.now());
         relationshipRepository.save(rel2);
 
         String targetName = getProfileName(targetProfileId);

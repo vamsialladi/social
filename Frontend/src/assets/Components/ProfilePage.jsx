@@ -517,6 +517,7 @@ function ProfilePage({
   const [connectionState, setConnectionState] = useState({
     profileId: String(profileDetails.userId || profileDetails.id || ''),
     connected: Boolean(profileDetails.isConnected),
+    pending: Boolean(profileDetails.isPending || profileDetails.isOutgoingPending),
   })
   const [connectedProfiles, setConnectedProfiles] = useState(null)
   const [followState, setFollowState] = useState({
@@ -717,6 +718,9 @@ function ProfilePage({
   const isProfileConnected = !isOwnerView && (connectionState.profileId === targetProfileId
     ? connectionState.connected
     : Boolean(profileDetails.isConnected))
+  const isProfilePending = !isOwnerView && !isProfileConnected && (connectionState.profileId === targetProfileId
+    ? connectionState.pending
+    : Boolean(profileDetails.isPending || profileDetails.isOutgoingPending))
   const isProfileFollowed = !isOwnerView && (followState.profileId === targetProfileId
     ? followState.followed
     : Boolean(profileDetails.isFollowing))
@@ -736,7 +740,11 @@ function ProfilePage({
       )
       if (!changedProfileId) return
       if (changedProfileId === targetProfileId) {
-        setConnectionState({ profileId: targetProfileId, connected: Boolean(connected) })
+        setConnectionState({
+          profileId: targetProfileId,
+          connected: Boolean(connected),
+          pending: false,
+        })
       }
 
       setConnectedProfiles((current) => {
@@ -775,6 +783,7 @@ function ProfilePage({
       setConnectionState({
         profileId: nextProfileId,
         connected: Boolean(profileDetails.isConnected),
+        pending: Boolean(profileDetails.isPending || profileDetails.isOutgoingPending),
       })
       setFollowState({
         profileId: nextProfileId,
@@ -972,13 +981,14 @@ function ProfilePage({
     setRelationshipErrorState({ profileId: effectiveProfileId, message: '' })
     try {
       const result = await api.toggleConnection(effectiveProfileId)
-      const connected = typeof result?.connected === 'boolean' ? result.connected : !isProfileConnected
+      const connected = Boolean(result?.connected)
+      const pending = Boolean(result?.isPending)
       const profile = {
         ...profileDetails,
         id: effectiveProfileId,
         userId: effectiveProfileId,
       }
-      setConnectionState({ profileId: effectiveProfileId, connected })
+      setConnectionState({ profileId: effectiveProfileId, connected, pending })
       window.dispatchEvent(new CustomEvent('truehunt-connection-changed', {
         detail: { connected, profile },
       }))
@@ -1851,7 +1861,7 @@ function ProfilePage({
                     {isProfileActionsOpen && (
                       <div className="profile-relationship-popover" role="group" aria-label="Profile actions">
                         <button
-                          className={`profile-relationship-action${isProfileConnected ? ' is-active' : ''}`}
+                          className={`profile-relationship-action${isProfileConnected ? ' is-active' : isProfilePending ? ' is-pending' : ''}`}
                           type="button"
                           aria-pressed={isProfileConnected}
                           disabled={relationshipAction !== '' || !targetProfileId}
@@ -1860,8 +1870,8 @@ function ProfilePage({
                           {isProfileConnected ? <Check size={17} /> : <UserPlus size={17} />}
                           <span>
                             {relationshipAction === 'connect'
-                              ? isProfileConnected ? 'Removing connection…' : 'Connecting…'
-                              : isProfileConnected ? 'Remove connection' : 'Connect'}
+                              ? isProfileConnected ? 'Removing connection…' : isProfilePending ? 'Canceling…' : 'Connecting…'
+                              : isProfileConnected ? 'Remove connection' : isProfilePending ? 'Pending' : 'Connect'}
                           </span>
                         </button>
                         <button
@@ -1976,15 +1986,19 @@ function ProfilePage({
               </button>
               {!isOwnerView && (
                 <button
-                  className={`identity-contact-button ${isProfileConnected ? 'identity-connected-button' : ''}`}
+                  className={`identity-contact-button ${isProfileConnected ? 'identity-connected-button' : isProfilePending ? 'identity-pending-button' : ''}`}
                   type="button"
                   disabled={relationshipAction !== '' || !targetProfileId}
                   onClick={toggleProfileConnection}
-                  style={isProfileConnected ? { backgroundColor: '#10B981', color: '#FFFFFF', borderColor: '#10B981' } : {}}
+                  style={isProfileConnected
+                    ? { backgroundColor: '#10B981', color: '#FFFFFF', borderColor: '#10B981' }
+                    : isProfilePending
+                      ? { backgroundColor: '#F3F4F6', color: '#4B5563', borderColor: '#D1D5DB' }
+                      : {}}
                 >
                   {relationshipAction === 'connect'
-                    ? (isProfileConnected ? 'Removing…' : 'Connecting…')
-                    : (isProfileConnected ? '✓ Connected' : '+ Connect')}
+                    ? (isProfileConnected ? 'Removing…' : isProfilePending ? 'Canceling…' : 'Connecting…')
+                    : (isProfileConnected ? '✓ Connected' : isProfilePending ? 'Pending' : '+ Connect')}
                 </button>
               )}
               {!isOwnerView && canMessageProfile && (

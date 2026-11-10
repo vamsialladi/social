@@ -181,17 +181,27 @@ public class ProfileService {
             boolean isOwner = currentUserId.equalsIgnoreCase(targetId);
             dto.setIsOwner(isOwner);
             if (!isOwner) {
-                boolean isConnected = relationshipRepository.findByOwnerUserIdAndTargetProfileId(currentUserId, targetId)
-                        .map(UserProfileRelationshipEntity::isConnected)
-                        .orElse(false);
-                boolean isFollowing = relationshipRepository.findByOwnerUserIdAndTargetProfileId(currentUserId, targetId)
-                        .map(UserProfileRelationshipEntity::isFollowing)
-                        .orElse(false);
+                Optional<UserProfileRelationshipEntity> relOpt = relationshipRepository.findByOwnerUserIdAndTargetProfileId(currentUserId, targetId);
+                boolean isConnected = relOpt.map(UserProfileRelationshipEntity::isConnected).orElse(false);
+                boolean isFollowing = relOpt.map(UserProfileRelationshipEntity::isFollowing).orElse(false);
+                boolean isPending = relOpt.map(r -> "PENDING".equalsIgnoreCase(r.getStatus())).orElse(false);
+                String senderId = relOpt.map(UserProfileRelationshipEntity::getSenderUserId).orElse("");
+                boolean isOutgoingPending = isPending && currentUserId.equalsIgnoreCase(senderId);
+                boolean isIncomingPending = isPending && !isOutgoingPending;
+
                 dto.setIsConnected(isConnected);
                 dto.setIsFollowing(isFollowing);
+                dto.setIsPending(isPending);
+                dto.setIsOutgoingPending(isOutgoingPending);
+                dto.setIsIncomingPending(isIncomingPending);
+                dto.setConnectionStatus(isConnected ? "CONNECTED" : (isPending ? (isOutgoingPending ? "PENDING_OUTGOING" : "PENDING_INCOMING") : "NONE"));
             } else {
                 dto.setIsConnected(false);
                 dto.setIsFollowing(false);
+                dto.setIsPending(false);
+                dto.setIsOutgoingPending(false);
+                dto.setIsIncomingPending(false);
+                dto.setConnectionStatus("NONE");
             }
         }
 

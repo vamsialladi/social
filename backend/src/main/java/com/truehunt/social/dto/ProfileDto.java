@@ -51,6 +51,10 @@ public class ProfileDto {
     private Boolean isOwner = false;
     private Boolean isConnected = false;
     private Boolean isFollowing = false;
+    private Boolean isPending = false;
+    private Boolean isOutgoingPending = false;
+    private Boolean isIncomingPending = false;
+    private String connectionStatus = "NONE";
 
     private List<String> skills = new ArrayList<>();
     private List<String> talents = new ArrayList<>();
@@ -442,6 +446,38 @@ public class ProfileDto {
 
     public void setIsFollowing(Boolean isFollowing) {
         this.isFollowing = isFollowing;
+    }
+
+    public Boolean getIsPending() {
+        return isPending;
+    }
+
+    public void setIsPending(Boolean isPending) {
+        this.isPending = isPending;
+    }
+
+    public Boolean getIsOutgoingPending() {
+        return isOutgoingPending;
+    }
+
+    public void setIsOutgoingPending(Boolean isOutgoingPending) {
+        this.isOutgoingPending = isOutgoingPending;
+    }
+
+    public Boolean getIsIncomingPending() {
+        return isIncomingPending;
+    }
+
+    public void setIsIncomingPending(Boolean isIncomingPending) {
+        this.isIncomingPending = isIncomingPending;
+    }
+
+    public String getConnectionStatus() {
+        return connectionStatus;
+    }
+
+    public void setConnectionStatus(String connectionStatus) {
+        this.connectionStatus = connectionStatus;
     }
 
     public List<String> getSkills() {

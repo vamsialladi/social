@@ -25,6 +25,10 @@ public interface UserProfileRelationshipRepository extends JpaRepository<UserPro
 
     List<UserProfileRelationshipEntity> findAllByOwnerUserIdAndFollowingTrue(String ownerUserId);
 
+    List<UserProfileRelationshipEntity> findAllByOwnerUserId(String ownerUserId);
+
+    List<UserProfileRelationshipEntity> findAllByOwnerUserIdAndStatus(String ownerUserId, String status);
+
     List<UserProfileRelationshipEntity> findAllByOwnerUserIdOrTargetProfileId(
             String ownerUserId,
             String targetProfileId

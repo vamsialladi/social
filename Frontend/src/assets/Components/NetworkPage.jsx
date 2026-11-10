@@ -48,6 +48,9 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [] }
   const [loadingProfiles, setLoadingProfiles] = useState(true)
   const [connectedProfiles, setConnectedProfiles] = useState([])
   const [followedProfiles, setFollowedProfiles] = useState([])
+  const [pendingProfiles, setPendingProfiles] = useState([])
+  const [invitations, setInvitations] = useState([])
+  const [processingInvitationId, setProcessingInvitationId] = useState('')
   const [updatingConnectionProfileId, setUpdatingConnectionProfileId] = useState('')
   const [updatingFollowProfileId, setUpdatingFollowProfileId] = useState('')
   const [connectionError, setConnectionError] = useState('')
@@ -76,11 +79,18 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [] }
           directoryApi.talents.getAll(),
         ])
         let networkProfiles = []
+        let incomingInvitations = []
         try {
-          networkProfiles = await api.getNetworkSuggestions()
+          const [suggestionsData, invitationsData] = await Promise.all([
+            api.getNetworkSuggestions(),
+            api.getInvitations(),
+          ])
+          networkProfiles = Array.isArray(suggestionsData) ? suggestionsData : []
+          incomingInvitations = Array.isArray(invitationsData) ? invitationsData : []
         } catch (err) {
           console.warn('Network connection status load error:', err)
         }
+        setInvitations(incomingInvitations)
         const directory = []
         const profilesToMerge = [
           ...(Array.isArray(talentProfiles) ? talentProfiles : []),
@@ -136,11 +146,13 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [] }
               coverImageUrl: profile.coverImageUrl || profile.coverImage || '',
               isConnected: overrides?.connected ?? Boolean(connection?.isConnected),
               isFollowing: overrides?.following ?? Boolean(connection?.isFollowing),
+              isPending: overrides?.pending ?? Boolean(connection?.isPending || connection?.isOutgoingPending),
             }
           })
         setProfiles(allProfiles)
         setConnectedProfiles(allProfiles.filter((profile) => profile.isConnected).map((profile) => getProfileKey(profile.id)))
         setFollowedProfiles(allProfiles.filter((profile) => profile.isFollowing).map((profile) => getProfileKey(profile.id)))
+        setPendingProfiles(allProfiles.filter((profile) => profile.isPending).map((profile) => getProfileKey(profile.id)))
       } catch (err) {
         console.warn('Network profiles load error:', err)
       } finally {
@@ -161,6 +173,7 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [] }
       relationshipOverrides.current.set(profileKey, {
         ...relationshipOverrides.current.get(profileKey),
         connected: Boolean(connected),
+        pending: false,
       })
 
       setConnectedProfiles((current) => (
@@ -168,8 +181,14 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [] }
           ? current.includes(profileKey) ? current : [...current, profileKey]
           : current.filter((id) => id !== profileKey)
       ))
+      if (connected) {
+        setPendingProfiles((current) => current.filter((id) => id !== profileKey))
+        setInvitations((current) => current.filter((inv) => getProfileKey(inv.profileId) !== profileKey))
+      }
       setProfiles((current) => current.map((item) => (
-        getProfileKey(item) === profileKey ? { ...item, isConnected: Boolean(connected) } : item
+        getProfileKey(item) === profileKey
+          ? { ...item, isConnected: Boolean(connected), ...(connected ? { isPending: false } : {}) }
+          : item
       )))
     }
 
@@ -224,27 +243,84 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [] }
     }
   }, [])
 
+  async function handleAcceptInvitation(profileId, invitation) {
+    if (processingInvitationId) return
+    const profileKey = getProfileKey(profileId)
+    setProcessingInvitationId(profileId)
+    try {
+      const result = await api.acceptConnectionRequest(profileId)
+      const connected = typeof result?.connected === 'boolean' ? result.connected : true
+      relationshipOverrides.current.set(profileKey, {
+        ...relationshipOverrides.current.get(profileKey),
+        connected: true,
+        pending: false,
+      })
+      setInvitations((current) => current.filter((inv) => getProfileKey(inv.profileId) !== profileKey))
+      setConnectedProfiles((current) => (current.includes(profileKey) ? current : [...current, profileKey]))
+      setPendingProfiles((current) => current.filter((id) => id !== profileKey))
+      setProfiles((current) => current.map((item) => (
+        getProfileKey(item) === profileKey ? { ...item, isConnected: true, isPending: false } : item
+      )))
+      const profileData = invitation?.profile || profiles.find((item) => getProfileKey(item) === profileKey) || { id: profileId, name: invitation?.name }
+      window.dispatchEvent(new CustomEvent('truehunt-connection-changed', {
+        detail: { connected: true, profile: profileData },
+      }))
+    } catch (err) {
+      console.error('Accept invitation error:', err)
+      setConnectionError('Could not accept this invitation. Please try again.')
+    } finally {
+      setProcessingInvitationId('')
+    }
+  }
+
+  async function handleRejectInvitation(profileId) {
+    if (processingInvitationId) return
+    const profileKey = getProfileKey(profileId)
+    setProcessingInvitationId(profileId)
+    try {
+      await api.rejectConnectionRequest(profileId)
+      setInvitations((current) => current.filter((inv) => getProfileKey(inv.profileId) !== profileKey))
+      setPendingProfiles((current) => current.filter((id) => id !== profileKey))
+    } catch (err) {
+      console.error('Reject invitation error:', err)
+      setConnectionError('Could not ignore this invitation. Please try again.')
+    } finally {
+      setProcessingInvitationId('')
+    }
+  }
+
   async function toggleConnection(profileId) {
     if (updatingConnectionProfileId) return
     const profileKey = getProfileKey(profileId)
     const isConnected = connectedProfiles.includes(profileKey)
+    const isPending = pendingProfiles.includes(profileKey)
     const profile = profiles.find((item) => getProfileKey(item) === profileKey)
     setConnectionError('')
     setUpdatingConnectionProfileId(profileId)
     try {
       const result = await api.toggleConnection(profileId)
-      const connected = typeof result?.connected === 'boolean' ? result.connected : !isConnected
+      const connected = Boolean(result?.connected)
+      const pending = Boolean(result?.isPending)
+
       relationshipOverrides.current.set(profileKey, {
         ...relationshipOverrides.current.get(profileKey),
         connected,
+        pending,
       })
       setConnectedProfiles((current) => (
         connected
           ? current.includes(profileKey) ? current : [...current, profileKey]
           : current.filter((id) => id !== profileKey)
       ))
+      setPendingProfiles((current) => (
+        pending
+          ? current.includes(profileKey) ? current : [...current, profileKey]
+          : current.filter((id) => id !== profileKey)
+      ))
       setProfiles((current) => current.map((item) => (
-        getProfileKey(item) === profileKey ? { ...item, isConnected: connected } : item
+        getProfileKey(item) === profileKey
+          ? { ...item, isConnected: connected, isPending: pending }
+          : item
       )))
       window.dispatchEvent(new CustomEvent('truehunt-connection-changed', {
         detail: { connected, profile },
@@ -293,6 +369,7 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [] }
   function renderProfileCard(profile) {
     const profileKey = getProfileKey(profile)
     const isConnected = connectedProfiles.includes(profileKey)
+    const isPending = pendingProfiles.includes(profileKey)
     const isFollowing = followedProfiles.includes(profileKey)
 
     return (
@@ -340,15 +417,15 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [] }
           </p>
           <div className="network-profile-actions">
             <button
-              className={`network-connect-button${isConnected ? ' is-connected' : ''}`}
+              className={`network-connect-button${isConnected ? ' is-connected' : isPending ? ' is-pending' : ''}`}
               type="button"
               disabled={Boolean(updatingConnectionProfileId)}
               aria-pressed={isConnected}
               onClick={() => toggleConnection(profile.id)}
             >
               {updatingConnectionProfileId === profile.id
-                ? isConnected ? 'Removing…' : 'Connecting…'
-                : isConnected ? 'Remove connection' : 'Connect'}
+                ? (isConnected ? 'Removing…' : isPending ? 'Canceling…' : 'Connecting…')
+                : (isConnected ? '✓ Connected' : isPending ? 'Pending' : '+ Connect')}
             </button>
             <button
               className={`network-follow-button${isFollowing ? ' is-following' : ''}`}
@@ -526,13 +603,75 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [] }
 
           {activeTab === 'grow' ? (
             <>
-              <section className="network-invitations">
-                <div>
-                  <strong>No pending invitations</strong>
-                  <p>Invitations you receive will appear here.</p>
-                </div>
-                <span aria-hidden="true">✓</span>
-              </section>
+              {invitations.length > 0 ? (
+                <section className="network-invitations-card" aria-labelledby="network-invitations-title">
+                  <header className="network-invitations-card-header">
+                    <h2 id="network-invitations-title">Invitations ({invitations.length})</h2>
+                  </header>
+                  <div className="network-invitations-list">
+                    {invitations.map((inv) => (
+                      <div className="network-invitation-item" key={inv.id || inv.profileId}>
+                        <div className="network-invitation-sender">
+                          <button
+                            type="button"
+                            className="network-invitation-avatar"
+                            aria-label={`View ${inv.name}'s profile`}
+                            onClick={() => onProfileSelect?.(inv.profile || { id: inv.profileId, name: inv.name })}
+                          >
+                            {inv.avatar || inv.profileImageUrl ? (
+                              <img src={inv.avatar || inv.profileImageUrl} alt="" />
+                            ) : (
+                              <span>{inv.initials || 'TH'}</span>
+                            )}
+                          </button>
+                          <div className="network-invitation-details">
+                            <h3
+                              role="button"
+                              tabIndex={0}
+                              onClick={() => onProfileSelect?.(inv.profile || { id: inv.profileId, name: inv.name })}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  onProfileSelect?.(inv.profile || { id: inv.profileId, name: inv.name })
+                                }
+                              }}
+                            >
+                              {inv.name}
+                            </h3>
+                            <p className="network-invitation-role">{inv.role || 'Cinema Professional'}</p>
+                            {inv.location && <p className="network-invitation-location">{inv.location}</p>}
+                          </div>
+                        </div>
+                        <div className="network-invitation-actions">
+                          <button
+                            type="button"
+                            className="network-invitation-reject"
+                            disabled={Boolean(processingInvitationId)}
+                            onClick={() => handleRejectInvitation(inv.profileId)}
+                          >
+                            Ignore
+                          </button>
+                          <button
+                            type="button"
+                            className="network-invitation-accept"
+                            disabled={Boolean(processingInvitationId)}
+                            onClick={() => handleAcceptInvitation(inv.profileId, inv)}
+                          >
+                            Accept
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              ) : (
+                <section className="network-invitations">
+                  <div>
+                    <strong>No pending invitations</strong>
+                    <p>Invitations you receive will appear here.</p>
+                  </div>
+                  <span aria-hidden="true">✓</span>
+                </section>
+              )}
 
               <section className="network-suggestions" aria-labelledby="network-suggestions-title">
                 <header className="network-section-heading">

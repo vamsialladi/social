@@ -92,7 +92,12 @@ export const api = {
 
   // Network & Connections
   getNetworkSuggestions: () => fetchJson('/connections/suggestions'),
+  getInvitations: () => fetchJson('/connections/invitations'),
   getConnectedProfiles: () => fetchJson('/connections'),
+  sendConnectionRequest: (profileId, message = '') => fetchJson('/connections/request', { method: 'POST', body: { profileId, message } }),
+  acceptConnectionRequest: (profileId) => fetchJson('/connections/accept', { method: 'POST', body: { profileId } }),
+  rejectConnectionRequest: (profileId) => fetchJson('/connections/reject', { method: 'POST', body: { profileId } }),
+  cancelConnectionRequest: (profileId) => fetchJson('/connections/cancel', { method: 'POST', body: { profileId } }),
   connectTalent: (talentId, message = '') => fetchJson('/connections', { method: 'POST', body: { talentId, message } }),
   toggleConnection: (profileId) => fetchJson('/connections/toggle', { method: 'POST', body: { profileId } }),
   toggleFollow: (profileId) => fetchJson('/connections/follow', { method: 'POST', body: { profileId } }),
