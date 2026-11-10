@@ -805,15 +805,46 @@ public class ProfileService {
         dto.setAvailability(entity.getAvailability() != null ? entity.getAvailability() : "Available for New Projects");
         dto.setVerified(true);
 
-        int connectionCount = 0;
-        int followerCount = 0;
+        Set<String> profileIds = new HashSet<>();
         if (entity.getUserId() != null && !entity.getUserId().isBlank()) {
-            try {
-                connectionCount = relationshipRepository.findAllByOwnerUserIdAndConnectedTrue(entity.getUserId()).size();
-                followerCount = relationshipRepository.findAllByOwnerUserIdAndFollowingTrue(entity.getUserId()).size();
-            } catch (Exception ignored) {}
+            profileIds.add(entity.getUserId().trim().toLowerCase(Locale.ROOT));
         }
-        dto.setConnectionsCount(connectionCount);
+        if (entity.getEmail() != null && !entity.getEmail().isBlank()) {
+            String email = entity.getEmail().trim().toLowerCase(Locale.ROOT);
+            profileIds.add(email);
+            userAccountRepository.findByEmail(email).ifPresent(acc -> {
+                if (acc.getPublicUserId() != null && !acc.getPublicUserId().isBlank()) {
+                    profileIds.add(acc.getPublicUserId().trim().toLowerCase(Locale.ROOT));
+                }
+                if (acc.getId() != null) {
+                    profileIds.add(String.valueOf(acc.getId()));
+                }
+            });
+        }
+
+        Set<String> distinctConnected = new HashSet<>();
+        int followerCount = 0;
+        try {
+            for (UserProfileRelationshipEntity rel : relationshipRepository.findAll()) {
+                if (rel.isConnected()) {
+                    String owner = rel.getOwnerUserId() != null ? rel.getOwnerUserId().trim().toLowerCase(Locale.ROOT) : "";
+                    String target = rel.getTargetProfileId() != null ? rel.getTargetProfileId().trim().toLowerCase(Locale.ROOT) : "";
+                    if (profileIds.contains(owner) && !profileIds.contains(target) && !isInvalidTarget(target)) {
+                        distinctConnected.add(target);
+                    } else if (profileIds.contains(target) && !profileIds.contains(owner) && !isInvalidTarget(owner)) {
+                        distinctConnected.add(owner);
+                    }
+                }
+                if (rel.isFollowing()) {
+                    String owner = rel.getOwnerUserId() != null ? rel.getOwnerUserId().trim().toLowerCase(Locale.ROOT) : "";
+                    String target = rel.getTargetProfileId() != null ? rel.getTargetProfileId().trim().toLowerCase(Locale.ROOT) : "";
+                    if (profileIds.contains(target) && !profileIds.contains(owner)) {
+                        followerCount++;
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+        dto.setConnectionsCount(distinctConnected.size());
         dto.setFollowersCount(followerCount);
 
         List<String> skills = new ArrayList<>(entity.getTalents());
@@ -903,5 +934,12 @@ public class ProfileService {
         return publicUserId == null || publicUserId.isBlank()
                 ? Optional.empty()
                 : userAccountRepository.findByPublicUserId(publicUserId);
+    }
+
+    private boolean isInvalidTarget(String target) {
+        if (target == null || target.isBlank()) return true;
+        String lower = target.toLowerCase(Locale.ROOT);
+        return lower.endsWith(".jpg") || lower.endsWith(".png") || lower.endsWith(".jpeg")
+                || lower.endsWith(".webp") || lower.contains("uploads/");
     }
 }

@@ -17,6 +17,15 @@ public class ConversationEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "user1_id")
+    private String user1Id;
+
+    @Column(name = "user2_id")
+    private String user2Id;
+
+    private String user1Name;
+    private String user2Name;
+
     private String name;
     private String initials;
     private String color = "blue";
@@ -44,6 +53,18 @@ public class ConversationEntity {
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
+
+    public String getUser1Id() { return user1Id; }
+    public void setUser1Id(String user1Id) { this.user1Id = user1Id; }
+
+    public String getUser2Id() { return user2Id; }
+    public void setUser2Id(String user2Id) { this.user2Id = user2Id; }
+
+    public String getUser1Name() { return user1Name; }
+    public void setUser1Name(String user1Name) { this.user1Name = user1Name; }
+
+    public String getUser2Name() { return user2Name; }
+    public void setUser2Name(String user2Name) { this.user2Name = user2Name; }
 
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
@@ -106,14 +127,23 @@ public class ConversationEntity {
     }
 
     public void addMessage(String content, String direction, Map<String, Object> attachment) {
+        addMessage(null, null, null, content, direction, attachment);
+    }
+
+    public void addMessage(String senderId, String senderName, String receiverId,
+                           String content, String direction, Object attachment) {
         List<Map<String, Object>> thread = getThread();
         Map<String, Object> msg = new HashMap<>();
         msg.put("id", "msg-" + System.currentTimeMillis() + "-" + thread.size());
         msg.put("content", content);
-        msg.put("direction", direction);
+        msg.put("direction", direction != null ? direction : "outgoing");
+        if (senderId != null) msg.put("senderId", senderId);
+        if (senderName != null) msg.put("senderName", senderName);
+        if (receiverId != null) msg.put("receiverId", receiverId);
         if (attachment != null) {
             msg.put("attachment", attachment);
         }
+        msg.put("sentAt", LocalDateTime.now().toString());
         msg.put("createdAt", LocalDateTime.now().format(DateTimeFormatter.ofPattern("hh:mm a")));
         thread.add(msg);
         setThread(thread);
@@ -123,10 +153,28 @@ public class ConversationEntity {
     }
 
     public Map<String, Object> toDto() {
+        return toDto(null);
+    }
+
+    public Map<String, Object> toDto(String currentUserId) {
         Map<String, Object> dto = new HashMap<>();
         dto.put("id", id);
-        dto.put("name", name != null ? name : "");
-        dto.put("initials", initials != null ? initials : "");
+
+        String displayName = name != null ? name : "";
+        String displayInitials = initials != null ? initials : "";
+
+        if (currentUserId != null) {
+            if (currentUserId.equalsIgnoreCase(user1Id) && user2Name != null && !user2Name.isBlank()) {
+                displayName = user2Name;
+                displayInitials = computeInitials(user2Name);
+            } else if (currentUserId.equalsIgnoreCase(user2Id) && user1Name != null && !user1Name.isBlank()) {
+                displayName = user1Name;
+                displayInitials = computeInitials(user1Name);
+            }
+        }
+
+        dto.put("name", displayName);
+        dto.put("initials", displayInitials);
         dto.put("color", color != null ? color : "blue");
         dto.put("preview", preview != null ? preview : "");
         dto.put("date", date != null ? date : "");
@@ -137,7 +185,33 @@ public class ConversationEntity {
         dto.put("subject", subject != null ? subject : "");
         dto.put("description", description != null ? description : "");
         dto.put("mailbox", mailbox != null ? mailbox : "Focused");
-        dto.put("thread", getThread());
+        dto.put("user1Id", user1Id);
+        dto.put("user2Id", user2Id);
+
+        List<Map<String, Object>> thread = getThread();
+        if (currentUserId != null) {
+            List<Map<String, Object>> adaptedThread = new ArrayList<>();
+            for (Map<String, Object> msg : thread) {
+                Map<String, Object> adaptedMsg = new HashMap<>(msg);
+                Object msgSenderId = msg.get("senderId");
+                if (msgSenderId != null) {
+                    boolean isOutgoing = currentUserId.equalsIgnoreCase(String.valueOf(msgSenderId));
+                    adaptedMsg.put("direction", isOutgoing ? "outgoing" : "incoming");
+                }
+                adaptedThread.add(adaptedMsg);
+            }
+            dto.put("thread", adaptedThread);
+        } else {
+            dto.put("thread", thread);
+        }
+
         return dto;
+    }
+
+    private String computeInitials(String title) {
+        if (title == null || title.isBlank()) return "TH";
+        String[] parts = title.trim().split("\\s+");
+        if (parts.length == 1) return parts[0].substring(0, Math.min(2, parts[0].length())).toUpperCase();
+        return ("" + parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
     }
 }

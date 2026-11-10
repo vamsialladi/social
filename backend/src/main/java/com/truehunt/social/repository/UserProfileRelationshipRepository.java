@@ -9,10 +9,17 @@ import java.util.Optional;
 
 @Repository
 public interface UserProfileRelationshipRepository extends JpaRepository<UserProfileRelationshipEntity, Long> {
-    Optional<UserProfileRelationshipEntity> findByOwnerUserIdAndTargetProfileId(
+    Optional<UserProfileRelationshipEntity> findFirstByOwnerUserIdAndTargetProfileId(
             String ownerUserId,
             String targetProfileId
     );
+
+    default Optional<UserProfileRelationshipEntity> findByOwnerUserIdAndTargetProfileId(
+            String ownerUserId,
+            String targetProfileId
+    ) {
+        return findFirstByOwnerUserIdAndTargetProfileId(ownerUserId, targetProfileId);
+    }
 
     List<UserProfileRelationshipEntity> findAllByOwnerUserIdAndConnectedTrue(String ownerUserId);
 

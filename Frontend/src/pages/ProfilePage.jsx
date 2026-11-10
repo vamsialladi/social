@@ -64,6 +64,7 @@ export default function ProfilePage() {
         ...data,
         avatar: data.avatar || data.profileImageUrl || '',
       } : data);
+      setConnected(Boolean(data?.isConnected || data?.connected));
 
       // Load side recommendations
       const suggs = await api.profile.getSuggestions(data?.id);
@@ -224,10 +225,18 @@ export default function ProfilePage() {
 
   // Connect Handler for Visitors
   const handleConnect = async () => {
+    if (!profile) return;
+    const targetId = profile.userId || profile.id;
     try {
-      await api.talents.connect(profile.id, 'I would like to connect on TrueHunt.');
+      await api.talents.connect(targetId, 'I would like to connect on TrueHunt.');
       setConnected(true);
-      showNotification(`Invitation sent to ${profile.name}!`, 'success');
+      showNotification(`Connected with ${profile.name}!`, 'success');
+      window.dispatchEvent(new CustomEvent('truehunt-connection-changed', {
+        detail: {
+          connected: true,
+          profile: { ...profile, id: targetId, userId: targetId }
+        }
+      }));
     } catch (err) {
       showNotification('Failed to send connection invitation', 'error');
     }

@@ -1,5 +1,6 @@
 C:\Users\vamsi\OneDrive\Desktop\frontend\backend\src\main\java\com\truehunt\4\backend\src\main\java\com\truehunt\social\config\DataInitializer.java
 C:\Users\vamsi\OneDrive\Desktop\frontend\backend\src\main\java\com\truehunt\4\backend\src\main\java\com\truehunt\social\config\WebConfig.java
+C:\Users\vamsi\OneDrive\Desktop\frontend\backend\src\main\java\com\truehunt\4\backend\src\main\java\com\truehunt\social\config\WebSocketConfig.java
 C:\Users\vamsi\OneDrive\Desktop\frontend\backend\src\main\java\com\truehunt\4\backend\src\main\java\com\truehunt\social\controller\AuthController.java
 C:\Users\vamsi\OneDrive\Desktop\frontend\backend\src\main\java\com\truehunt\4\backend\src\main\java\com\truehunt\social\controller\ConnectionController.java
 C:\Users\vamsi\OneDrive\Desktop\frontend\backend\src\main\java\com\truehunt\4\backend\src\main\java\com\truehunt\social\controller\ConversationController.java
@@ -7,6 +8,7 @@ C:\Users\vamsi\OneDrive\Desktop\frontend\backend\src\main\java\com\truehunt\4\ba
 C:\Users\vamsi\OneDrive\Desktop\frontend\backend\src\main\java\com\truehunt\4\backend\src\main\java\com\truehunt\social\controller\InvestorController.java
 C:\Users\vamsi\OneDrive\Desktop\frontend\backend\src\main\java\com\truehunt\4\backend\src\main\java\com\truehunt\social\controller\JobController.java
 C:\Users\vamsi\OneDrive\Desktop\frontend\backend\src\main\java\com\truehunt\4\backend\src\main\java\com\truehunt\social\controller\MediaController.java
+C:\Users\vamsi\OneDrive\Desktop\frontend\backend\src\main\java\com\truehunt\4\backend\src\main\java\com\truehunt\social\controller\MessageController.java
 C:\Users\vamsi\OneDrive\Desktop\frontend\backend\src\main\java\com\truehunt\4\backend\src\main\java\com\truehunt\social\controller\NotificationController.java
 C:\Users\vamsi\OneDrive\Desktop\frontend\backend\src\main\java\com\truehunt\4\backend\src\main\java\com\truehunt\social\controller\PostController.java
 C:\Users\vamsi\OneDrive\Desktop\frontend\backend\src\main\java\com\truehunt\4\backend\src\main\java\com\truehunt\social\controller\ProfileController.java
@@ -20,6 +22,7 @@ C:\Users\vamsi\OneDrive\Desktop\frontend\backend\src\main\java\com\truehunt\4\ba
 C:\Users\vamsi\OneDrive\Desktop\frontend\backend\src\main\java\com\truehunt\4\backend\src\main\java\com\truehunt\social\controller\UploadController.java
 C:\Users\vamsi\OneDrive\Desktop\frontend\backend\src\main\java\com\truehunt\4\backend\src\main\java\com\truehunt\social\dto\ApiResponse.java
 C:\Users\vamsi\OneDrive\Desktop\frontend\backend\src\main\java\com\truehunt\4\backend\src\main\java\com\truehunt\social\dto\AuthResponse.java
+C:\Users\vamsi\OneDrive\Desktop\frontend\backend\src\main\java\com\truehunt\4\backend\src\main\java\com\truehunt\social\dto\ChatMessageDto.java
 C:\Users\vamsi\OneDrive\Desktop\frontend\backend\src\main\java\com\truehunt\4\backend\src\main\java\com\truehunt\social\dto\CommentRequest.java
 C:\Users\vamsi\OneDrive\Desktop\frontend\backend\src\main\java\com\truehunt\4\backend\src\main\java\com\truehunt\social\dto\ConnectionRequestDto.java
 C:\Users\vamsi\OneDrive\Desktop\frontend\backend\src\main\java\com\truehunt\4\backend\src\main\java\com\truehunt\social\dto\CreateConversationRequest.java
@@ -56,6 +59,7 @@ C:\Users\vamsi\OneDrive\Desktop\frontend\backend\src\main\java\com\truehunt\4\ba
 C:\Users\vamsi\OneDrive\Desktop\frontend\backend\src\main\java\com\truehunt\4\backend\src\main\java\com\truehunt\social\exception\ResourceNotFoundException.java
 C:\Users\vamsi\OneDrive\Desktop\frontend\backend\src\main\java\com\truehunt\4\backend\src\main\java\com\truehunt\social\exception\UnauthorizedException.java
 C:\Users\vamsi\OneDrive\Desktop\frontend\backend\src\main\java\com\truehunt\4\backend\src\main\java\com\truehunt\social\model\ConversationEntity.java
+C:\Users\vamsi\OneDrive\Desktop\frontend\backend\src\main\java\com\truehunt\4\backend\src\main\java\com\truehunt\social\model\MessageEntity.java
 C:\Users\vamsi\OneDrive\Desktop\frontend\backend\src\main\java\com\truehunt\4\backend\src\main\java\com\truehunt\social\model\NetworkProfileEntity.java
 C:\Users\vamsi\OneDrive\Desktop\frontend\backend\src\main\java\com\truehunt\4\backend\src\main\java\com\truehunt\social\model\NotificationEntity.java
 C:\Users\vamsi\OneDrive\Desktop\frontend\backend\src\main\java\com\truehunt\4\backend\src\main\java\com\truehunt\social\model\PostEntity.java
@@ -64,6 +68,7 @@ C:\Users\vamsi\OneDrive\Desktop\frontend\backend\src\main\java\com\truehunt\4\ba
 C:\Users\vamsi\OneDrive\Desktop\frontend\backend\src\main\java\com\truehunt\4\backend\src\main\java\com\truehunt\social\model\UserAccountEntity.java
 C:\Users\vamsi\OneDrive\Desktop\frontend\backend\src\main\java\com\truehunt\4\backend\src\main\java\com\truehunt\social\model\UserProfileRelationshipEntity.java
 C:\Users\vamsi\OneDrive\Desktop\frontend\backend\src\main\java\com\truehunt\4\backend\src\main\java\com\truehunt\social\repository\ConversationRepository.java
+C:\Users\vamsi\OneDrive\Desktop\frontend\backend\src\main\java\com\truehunt\4\backend\src\main\java\com\truehunt\social\repository\MessageRepository.java
 C:\Users\vamsi\OneDrive\Desktop\frontend\backend\src\main\java\com\truehunt\4\backend\src\main\java\com\truehunt\social\repository\NetworkProfileRepository.java
 C:\Users\vamsi\OneDrive\Desktop\frontend\backend\src\main\java\com\truehunt\4\backend\src\main\java\com\truehunt\social\repository\NotificationRepository.java
 C:\Users\vamsi\OneDrive\Desktop\frontend\backend\src\main\java\com\truehunt\4\backend\src\main\java\com\truehunt\social\repository\PostRepository.java
@@ -83,6 +88,7 @@ C:\Users\vamsi\OneDrive\Desktop\frontend\backend\src\main\java\com\truehunt\4\ba
 C:\Users\vamsi\OneDrive\Desktop\frontend\backend\src\main\java\com\truehunt\4\backend\src\main\java\com\truehunt\social\service\InvestorService.java
 C:\Users\vamsi\OneDrive\Desktop\frontend\backend\src\main\java\com\truehunt\4\backend\src\main\java\com\truehunt\social\service\JobService.java
 C:\Users\vamsi\OneDrive\Desktop\frontend\backend\src\main\java\com\truehunt\4\backend\src\main\java\com\truehunt\social\service\MediaService.java
+C:\Users\vamsi\OneDrive\Desktop\frontend\backend\src\main\java\com\truehunt\4\backend\src\main\java\com\truehunt\social\service\MessageService.java
 C:\Users\vamsi\OneDrive\Desktop\frontend\backend\src\main\java\com\truehunt\4\backend\src\main\java\com\truehunt\social\service\NotificationService.java
 C:\Users\vamsi\OneDrive\Desktop\frontend\backend\src\main\java\com\truehunt\4\backend\src\main\java\com\truehunt\social\service\PostService.java
 C:\Users\vamsi\OneDrive\Desktop\frontend\backend\src\main\java\com\truehunt\4\backend\src\main\java\com\truehunt\social\service\ProfileService.java

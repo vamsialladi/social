@@ -9,7 +9,11 @@ import java.util.Optional;
 
 @Repository
 public interface ProfileViewRepository extends JpaRepository<ProfileViewEntity, Long> {
-    Optional<ProfileViewEntity> findByOwnerUserIdAndViewerUserId(String ownerUserId, String viewerUserId);
+    Optional<ProfileViewEntity> findFirstByOwnerUserIdAndViewerUserId(String ownerUserId, String viewerUserId);
+
+    default Optional<ProfileViewEntity> findByOwnerUserIdAndViewerUserId(String ownerUserId, String viewerUserId) {
+        return findFirstByOwnerUserIdAndViewerUserId(ownerUserId, viewerUserId);
+    }
 
     List<ProfileViewEntity> findAllByOwnerUserIdOrderByViewedAtDesc(String ownerUserId);
     List<ProfileViewEntity> findAllByOwnerUserIdOrViewerUserId(String ownerUserId, String viewerUserId);

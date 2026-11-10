@@ -43,8 +43,8 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .headers(headers -> headers.frameOptions(frame -> frame.disable()))
                 .authorizeHttpRequests(auth -> auth
-                        // Static / uploads / console
-                        .requestMatchers("/h2-console/**", "/uploads/**", "/favicon.ico").permitAll()
+                        // Static / uploads / console / websocket
+                        .requestMatchers("/h2-console/**", "/uploads/**", "/favicon.ico", "/ws/**").permitAll()
                         // API endpoints permitAll by default, security filter authenticates when header/token provided
                         .requestMatchers("/api/**").permitAll()
                         .anyRequest().permitAll()

@@ -16,15 +16,32 @@ import java.util.stream.Collectors;
 public class ConversationService {
 
     private final ConversationRepository conversationRepository;
+    private final MessageService messageService;
 
-    public ConversationService(ConversationRepository conversationRepository) {
+    public ConversationService(ConversationRepository conversationRepository, MessageService messageService) {
         this.conversationRepository = conversationRepository;
+        this.messageService = messageService;
     }
 
     public List<Map<String, Object>> getConversations(String mailbox) {
+        return getConversations(mailbox, null);
+    }
+
+    public List<Map<String, Object>> getConversations(String mailbox, String userEmail) {
         List<ConversationEntity> list = (mailbox != null && !mailbox.isBlank())
                 ? conversationRepository.findAllByMailboxIgnoreCaseOrderByUpdatedAtDesc(mailbox)
                 : conversationRepository.findAllByOrderByUpdatedAtDesc();
+
+        if (userEmail != null && !userEmail.isBlank()) {
+            final String cleanEmail = userEmail.trim().toLowerCase();
+            return list.stream()
+                    .filter(c -> c.getUser1Id() == null ||
+                            c.getUser1Id().equalsIgnoreCase(cleanEmail) ||
+                            c.getUser2Id() == null ||
+                            (c.getUser2Id() != null && c.getUser2Id().equalsIgnoreCase(cleanEmail)))
+                    .map(c -> c.toDto(cleanEmail))
+                    .collect(Collectors.toList());
+        }
 
         return list.stream()
                 .map(ConversationEntity::toDto)
@@ -32,29 +49,65 @@ public class ConversationService {
     }
 
     public Map<String, Object> getConversation(String id) {
+        return getConversation(id, null);
+    }
+
+    public Map<String, Object> getConversation(String id, String userEmail) {
         ConversationEntity entity = findConversationEntity(id);
-        return entity.toDto();
+        return entity.toDto(userEmail);
     }
 
     @Transactional
     public Map<String, Object> sendMessage(String id, SendMessageRequest req) {
+        return sendMessage(id, req, null);
+    }
+
+    @Transactional
+    public Map<String, Object> sendMessage(String id, SendMessageRequest req, String userEmail) {
         if (req == null || req.getContent() == null || req.getContent().trim().isEmpty()) {
             throw new BadRequestException("Message content cannot be empty.");
         }
         ConversationEntity entity = findConversationEntity(id);
 
-        entity.addMessage(req.getContent(), req.getDirection() != null ? req.getDirection() : "outgoing", req.getAttachment());
-        conversationRepository.save(entity);
+        com.truehunt.social.dto.ChatMessageDto chatDto = new com.truehunt.social.dto.ChatMessageDto();
+        chatDto.setConversationId(entity.getId());
+        chatDto.setContent(req.getContent().trim());
+        chatDto.setAttachment(req.getAttachment());
+        chatDto.setSenderId(userEmail);
+        chatDto.setDirection(req.getDirection() != null ? req.getDirection() : "outgoing");
 
-        Map<String, Object> dto = entity.toDto();
+        final String finalEmail = userEmail;
+        java.security.Principal principal = finalEmail != null ? () -> finalEmail : null;
+        com.truehunt.social.dto.ChatMessageDto sentDto = messageService.processAndSendMessage(chatDto, principal);
+
+        Map<String, Object> dto = entity.toDto(userEmail);
         dto.put("content", req.getContent());
-        List<Map<String, Object>> thread = entity.getThread();
-        dto.put("message", thread.isEmpty() ? null : thread.get(thread.size() - 1));
+        dto.put("message", sentDto);
         return dto;
     }
 
     @Transactional
     public Map<String, Object> createConversation(CreateConversationRequest req) {
+        return createConversation(req, null);
+    }
+
+    @Transactional
+    public Map<String, Object> createConversation(CreateConversationRequest req, String userEmail) {
+        com.truehunt.social.dto.ChatMessageDto chatDto = new com.truehunt.social.dto.ChatMessageDto();
+        chatDto.setContent(req.getMessageText() != null ? req.getMessageText().trim() : "Hi");
+        chatDto.setReceiverId(req.getRecipient());
+        chatDto.setReceiverName(req.getRecipient());
+        chatDto.setSenderId(userEmail);
+
+        final String finalEmail = userEmail;
+        java.security.Principal principal = finalEmail != null ? () -> finalEmail : null;
+        com.truehunt.social.dto.ChatMessageDto sentDto = messageService.processAndSendMessage(chatDto, principal);
+
+        if (sentDto.getConversationId() != null) {
+            ConversationEntity entity = conversationRepository.findById(sentDto.getConversationId()).orElse(null);
+            if (entity != null) return entity.toDto(userEmail);
+        }
+
         ConversationEntity c = new ConversationEntity();
         c.setName(req.getRecipient());
         c.setInitials(getInitials(req.getRecipient()));
@@ -64,6 +117,8 @@ public class ConversationService {
         c.setCategory("Direct");
         c.setMailbox("Focused");
         c.setUnread(false);
+        c.setUser1Id(userEmail);
+        c.setUser2Id(req.getRecipient());
 
         Map<String, Object> msg = new HashMap<>();
         msg.put("id", "msg-" + UUID.randomUUID().toString().substring(0, 8));
@@ -72,7 +127,7 @@ public class ConversationService {
         c.setThread(List.of(msg));
 
         ConversationEntity saved = conversationRepository.save(c);
-        return saved.toDto();
+        return saved.toDto(userEmail);
     }
 
     @Transactional

@@ -571,13 +571,14 @@ function ProfilePage({
       || currentUser?.id
       || '',
   ).trim()
-  const connectionCount = isOwnerView
-    ? connectedProfiles?.length ?? profileDetails.connectionsCount
+  const rawConnectionCount = isOwnerView
+    ? (connectedProfiles?.length ?? profileDetails.connectionsCount)
     : profileDetails.connectionsCount
-  const numericConnectionCount = Number(connectionCount)
-  const formattedConnectionCount = Number.isFinite(numericConnectionCount)
-    ? numericConnectionCount >= 500 ? '500+' : numericConnectionCount
-    : null
+  const parsedConnectionCount = Number(rawConnectionCount)
+  const connectionCount = Number.isFinite(parsedConnectionCount) && parsedConnectionCount !== 128
+    ? parsedConnectionCount
+    : (connectedProfiles?.length ?? 0)
+  const formattedConnectionCount = connectionCount >= 500 ? '500+' : connectionCount
   const hasProfessionalPhoneAccess = isOwnerView || currentPhoneRequest?.status === 'approved'
   const experienceBeingEdited = (profileDetails.experiences || [])
     .find((experience) => experience.id === editingExperienceId)
@@ -713,12 +714,12 @@ function ProfilePage({
   )
   const profileCompletion = getProfileCompletion(profileDetails, Boolean(displayedProfileImage))
   const isProfileActionsOpen = openProfileActionsFor === targetProfileId
-  const isProfileConnected = connectionState.profileId === targetProfileId
+  const isProfileConnected = !isOwnerView && (connectionState.profileId === targetProfileId
     ? connectionState.connected
-    : Boolean(profileDetails.isConnected)
-  const isProfileFollowed = followState.profileId === targetProfileId
+    : Boolean(profileDetails.isConnected))
+  const isProfileFollowed = !isOwnerView && (followState.profileId === targetProfileId
     ? followState.followed
-    : Boolean(profileDetails.isFollowing)
+    : Boolean(profileDetails.isFollowing))
   const relationshipAction = relationshipActionState.profileId === targetProfileId
     ? relationshipActionState.action
     : ''
@@ -962,63 +963,69 @@ function ProfilePage({
   }
 
   async function toggleProfileConnection() {
-    if (!targetProfileId || relationshipAction) return
+    const effectiveProfileId = String(
+      targetProfileId || profileDetails.userId || profileDetails.id || profileDetails.referId || profileDetails.name || ''
+    ).trim()
+    if (!effectiveProfileId || relationshipAction) return
 
-    setRelationshipActionState({ profileId: targetProfileId, action: 'connect' })
-    setRelationshipErrorState({ profileId: targetProfileId, message: '' })
+    setRelationshipActionState({ profileId: effectiveProfileId, action: 'connect' })
+    setRelationshipErrorState({ profileId: effectiveProfileId, message: '' })
     try {
-      await api.toggleConnection(targetProfileId)
-      const connected = !isProfileConnected
+      const result = await api.toggleConnection(effectiveProfileId)
+      const connected = typeof result?.connected === 'boolean' ? result.connected : !isProfileConnected
       const profile = {
         ...profileDetails,
-        id: targetProfileId,
-        userId: targetProfileId,
+        id: effectiveProfileId,
+        userId: effectiveProfileId,
       }
-      setConnectionState({ profileId: targetProfileId, connected })
+      setConnectionState({ profileId: effectiveProfileId, connected })
       window.dispatchEvent(new CustomEvent('truehunt-connection-changed', {
         detail: { connected, profile },
       }))
     } catch (error) {
       console.error('Could not update profile connection:', error)
       setRelationshipErrorState({
-        profileId: targetProfileId,
+        profileId: effectiveProfileId,
         message: isProfileConnected
           ? 'Could not remove this connection. Please try again.'
           : 'Could not send the connection request. Please try again.',
       })
     } finally {
-      setRelationshipActionState({ profileId: targetProfileId, action: '' })
+      setRelationshipActionState({ profileId: effectiveProfileId, action: '' })
     }
   }
 
   async function followProfile() {
-    if (!targetProfileId || relationshipAction) return
+    const effectiveProfileId = String(
+      targetProfileId || profileDetails.userId || profileDetails.id || profileDetails.referId || profileDetails.name || ''
+    ).trim()
+    if (!effectiveProfileId || relationshipAction) return
 
-    setRelationshipActionState({ profileId: targetProfileId, action: 'follow' })
-    setRelationshipErrorState({ profileId: targetProfileId, message: '' })
+    setRelationshipActionState({ profileId: effectiveProfileId, action: 'follow' })
+    setRelationshipErrorState({ profileId: effectiveProfileId, message: '' })
     try {
-      const result = await api.toggleFollow(targetProfileId)
+      const result = await api.toggleFollow(effectiveProfileId)
       const followed = typeof result?.following === 'boolean'
         ? result.following
         : !isProfileFollowed
-      setFollowState({ profileId: targetProfileId, followed })
+      setFollowState({ profileId: effectiveProfileId, followed })
       setOpenProfileActionsFor('')
       window.dispatchEvent(new CustomEvent('truehunt-follow-changed', {
         detail: {
           following: followed,
-          profile: { ...profileDetails, id: targetProfileId, userId: targetProfileId },
+          profile: { ...profileDetails, id: effectiveProfileId, userId: effectiveProfileId },
         },
       }))
     } catch (error) {
       console.error('Could not update profile follow state:', error)
       setRelationshipErrorState({
-        profileId: targetProfileId,
+        profileId: effectiveProfileId,
         message: isProfileFollowed
           ? 'Could not unfollow this profile. Please try again.'
           : 'Could not follow this profile. Please try again.',
       })
     } finally {
-      setRelationshipActionState({ profileId: targetProfileId, action: '' })
+      setRelationshipActionState({ profileId: effectiveProfileId, action: '' })
     }
   }
 

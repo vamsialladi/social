@@ -23,29 +23,35 @@ public class ConversationController {
 
     @GetMapping
     public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getConversations(
-            @RequestParam(required = false) String mailbox
+            @RequestParam(required = false) String mailbox,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail
     ) {
-        return ResponseEntity.ok(ApiResponse.success(conversationService.getConversations(mailbox)));
+        return ResponseEntity.ok(ApiResponse.success(conversationService.getConversations(mailbox, userEmail)));
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> getConversation(@PathVariable String id) {
-        return ResponseEntity.ok(ApiResponse.success(conversationService.getConversation(id)));
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getConversation(
+            @PathVariable String id,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(conversationService.getConversation(id, userEmail)));
     }
 
     @PostMapping("/{id}/messages")
     public ResponseEntity<ApiResponse<Map<String, Object>>> sendMessage(
             @PathVariable String id,
-            @Valid @RequestBody SendMessageRequest req
+            @Valid @RequestBody SendMessageRequest req,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail
     ) {
-        return ResponseEntity.ok(ApiResponse.success(conversationService.sendMessage(id, req)));
+        return ResponseEntity.ok(ApiResponse.success(conversationService.sendMessage(id, req, userEmail)));
     }
 
     @PostMapping
     public ResponseEntity<ApiResponse<Map<String, Object>>> createConversation(
-            @Valid @RequestBody CreateConversationRequest req
+            @Valid @RequestBody CreateConversationRequest req,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail
     ) {
-        return ResponseEntity.ok(ApiResponse.success(conversationService.createConversation(req)));
+        return ResponseEntity.ok(ApiResponse.success(conversationService.createConversation(req, userEmail)));
     }
 
     @PatchMapping("/{id}/read")

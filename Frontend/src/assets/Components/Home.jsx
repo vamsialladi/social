@@ -531,10 +531,15 @@ function Home({
     )) || profileDirectory.find((profile) => (
       authorName && String(profile.name || '').trim().toLowerCase() === authorName.toLowerCase()
     ))
-    const profileId = authorProfile?.userId
+    const resolvedId = String(
+      authorProfile?.userId
       || authorProfile?.id
       || authorProfile?.referId
-      || (authorId.toLowerCase() === 'me' ? '' : authorId)
+      || (authorId && authorId.toLowerCase() !== 'me' ? authorId : '')
+      || authorProfile?.email
+      || authorName
+      || 'member'
+    ).trim()
     const authorAvatar = authorProfile?.profileImageUrl
       || authorProfile?.avatar
       || post.authorAvatar
@@ -542,8 +547,8 @@ function Home({
 
     onViewConnection?.({
       ...authorProfile,
-      id: authorProfile?.id || profileId,
-      userId: profileId,
+      id: resolvedId,
+      userId: resolvedId,
       name: authorProfile?.name || authorName || 'TrueHunt member',
       profileImageUrl: authorAvatar,
       avatar: authorAvatar,

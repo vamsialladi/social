@@ -22,6 +22,7 @@ public class DataInitializer {
             PostRepository postRepository,
             NotificationRepository notificationRepository,
             UserAccountRepository userAccountRepository,
+            UserProfileRelationshipRepository relationshipRepository,
             PasswordEncoder passwordEncoder,
             JdbcTemplate jdbcTemplate
     ) {
@@ -270,6 +271,16 @@ public class DataInitializer {
                 notificationRepository.save(new NotificationEntity(
                         "me", "Endorsement Received", "Maya Krishnan endorsed your talent for Direction and Screenwriting.", "endorsement"
                 ));
+            }
+
+            // 6. Clean up malformed relationship records from historical invalid connect clicks
+            for (UserProfileRelationshipEntity rel : relationshipRepository.findAll()) {
+                String target = rel.getTargetProfileId();
+                String owner = rel.getOwnerUserId();
+                if ((target != null && (target.contains(".jpg") || target.contains(".png") || target.contains("uploads/") || target.isBlank()))
+                        || (owner != null && (owner.contains(".jpg") || owner.contains(".png") || owner.contains("uploads/") || owner.isBlank()))) {
+                    relationshipRepository.delete(rel);
+                }
             }
         };
     }

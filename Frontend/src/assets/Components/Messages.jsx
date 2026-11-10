@@ -10,8 +10,12 @@ import {
   SquarePen,
   Star,
   X,
+  Wifi,
+  WifiOff,
 } from 'lucide-react'
 import './Messages.css'
+import api from '../../api'
+import { websocketService } from '../../services/websocket'
 
 const initialMessages = [
   {
@@ -219,9 +223,127 @@ function Messages({ conversationToOpen, openConversationRef, onProfileSelect }) 
   const [isDesktopChatOpen, setIsDesktopChatOpen] = useState(
     () => Boolean(initialProfileConversation && window.innerWidth > 740),
   )
+  const [isWsConnected, setIsWsConnected] = useState(false)
   const replyInputRef = useRef(null)
   const attachmentInputRef = useRef(null)
   const emojiPickerRef = useRef(null)
+
+  const loadBackendConversations = useCallback(async (currentMailbox = 'Focused') => {
+    try {
+      const data = await api.getConversations(currentMailbox)
+      if (Array.isArray(data) && data.length > 0) {
+        setMessages((prev) => {
+          const profileConversations = prev.filter((m) => String(m.id).startsWith('profile-'))
+          const backendIds = new Set(data.map((d) => String(d.id)))
+          const merged = [
+            ...data,
+            ...profileConversations.filter(
+              (p) => !backendIds.has(String(p.id)) && !data.some((d) => d.name.toLowerCase() === p.name.toLowerCase())
+            ),
+          ]
+          return merged
+        })
+      }
+    } catch (err) {
+      console.warn('Could not load conversations from backend:', err)
+    }
+  }, [])
+
+  const handleIncomingWebSocketMessage = useCallback((newMsg) => {
+    if (!newMsg || !newMsg.content) return
+
+    let currentUser = null
+    try {
+      const u = localStorage.getItem('truehunt_user')
+      if (u) currentUser = JSON.parse(u)
+    } catch {}
+
+    const convId = newMsg.conversationId
+    const content = newMsg.content
+    const msgId = newMsg.id || `msg-${Date.now()}`
+    const isOutgoing = newMsg.senderId && currentUser?.email && (
+      newMsg.senderId.toLowerCase() === currentUser.email.toLowerCase() ||
+      newMsg.senderId === currentUser.userId ||
+      newMsg.senderId === currentUser.id
+    )
+
+    const threadItem = {
+      id: msgId,
+      content,
+      direction: isOutgoing ? 'outgoing' : 'incoming',
+      sentAt: newMsg.sentAt || new Date().toISOString(),
+      createdAt: newMsg.createdAt || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      attachment: newMsg.attachment,
+      senderId: newMsg.senderId,
+      senderName: newMsg.senderName,
+    }
+
+    setMessages((prevMessages) => {
+      const convExists = prevMessages.some((m) => String(m.id) === String(convId))
+      if (convExists) {
+        return prevMessages.map((m) => {
+          if (String(m.id) === String(convId)) {
+            const thread = m.thread || []
+            if (thread.some((t) => String(t.id) === String(msgId))) {
+              return m
+            }
+            return {
+              ...m,
+              thread: [...thread, threadItem],
+              preview: content,
+              date: 'Just now',
+              unread: !isOutgoing && selectedId !== m.id,
+            }
+          }
+          return m
+        })
+      } else {
+        const newConv = {
+          id: convId,
+          name: newMsg.senderName || 'Cinema Professional',
+          initials: (newMsg.senderName || 'CP').slice(0, 2).toUpperCase(),
+          color: 'purple',
+          preview: content,
+          date: 'Just now',
+          category: 'Direct',
+          mailbox: 'Focused',
+          unread: !isOutgoing,
+          thread: [threadItem],
+        }
+        return [newConv, ...prevMessages]
+      }
+    })
+  }, [selectedId])
+
+  useEffect(() => {
+    let storedUser = null
+    try {
+      const u = localStorage.getItem('truehunt_user')
+      if (u) storedUser = JSON.parse(u)
+    } catch {}
+
+    const token = localStorage.getItem('truehunt_token') || ''
+    const email = storedUser?.email || 'pro@truehunt.in'
+
+    websocketService.connect(token, email)
+    const unsubStatus = websocketService.onStatusChange(setIsWsConnected)
+    const unsubMsg = websocketService.onMessage(handleIncomingWebSocketMessage)
+
+    loadBackendConversations(mailbox)
+
+    return () => {
+      unsubStatus()
+      unsubMsg()
+    }
+  }, [mailbox, loadBackendConversations, handleIncomingWebSocketMessage])
+
+  useEffect(() => {
+    if (!selectedId) return undefined
+    const unsubTopic = websocketService.subscribe(`/topic/conversations/${selectedId}`, handleIncomingWebSocketMessage)
+    return () => {
+      unsubTopic?.()
+    }
+  }, [selectedId, handleIncomingWebSocketMessage])
 
   const openConversation = useCallback((conversation) => {
     const profileConversation = createProfileConversation(conversation)
@@ -332,26 +454,46 @@ function Messages({ conversationToOpen, openConversationRef, onProfileSelect }) 
     )))
   }
 
-  function sendReply(event) {
+  async function sendReply(event) {
     event.preventDefault()
     const content = replyText.trim()
 
     if (!selectedMessage || (!content && !replyAttachment)) return
 
-    const messageId = Date.now()
+    let currentUser = null
+    try {
+      const u = localStorage.getItem('truehunt_user')
+      if (u) currentUser = JSON.parse(u)
+    } catch {}
+
+    const myIdentity = currentUser?.email || currentUser?.userId || 'me'
+    const messageId = `msg-${Date.now()}`
     const attachment = replyAttachment
+
+    const outgoingItem = {
+      id: messageId,
+      content,
+      attachment,
+      direction: 'outgoing',
+      sentAt: new Date().toISOString(),
+      createdAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      senderId: myIdentity,
+      senderName: currentUser?.name || 'You',
+    }
+
+    // 1. Optimistic update
     setMessages((currentMessages) => currentMessages.map((message) => (
       message.id === selectedMessage.id
         ? {
           ...message,
           thread: [
             ...(message.thread ?? []),
-            ...(!message.thread?.length && !message.sponsored
+            ...(!message.thread?.length && !message.sponsored && message.description
               ? [{ id: `${message.id}-initial`, content: message.description, direction: 'incoming' }]
               : []),
-            { id: messageId, content, attachment, direction: 'outgoing', sentAt: new Date().toISOString() },
+            outgoingItem,
           ],
-          preview: content || `Attachment: ${attachment.name}`,
+          preview: content || (attachment ? `Attachment: ${attachment.name}` : ''),
           date: 'Now',
           unread: false,
         }
@@ -360,6 +502,42 @@ function Messages({ conversationToOpen, openConversationRef, onProfileSelect }) 
     setReplyText('')
     setReplyAttachment(null)
     setIsEmojiPickerOpen(false)
+
+    // 2. Real-time WebSocket transmission
+    const targetReceiverId = selectedMessage.profile?.userId ||
+      selectedMessage.profile?.id ||
+      selectedMessage.user2Id ||
+      selectedMessage.user1Id ||
+      selectedMessage.name
+
+    const wsPayload = {
+      conversationId: typeof selectedMessage.id === 'number' ? selectedMessage.id : null,
+      senderId: myIdentity,
+      senderName: currentUser?.name || 'You',
+      receiverId: targetReceiverId,
+      receiverName: selectedMessage.name,
+      content,
+      attachment,
+      direction: 'outgoing',
+      type: 'CHAT',
+    }
+
+    websocketService.sendMessage('/app/chat.send', wsPayload)
+
+    // 3. Backend persistence via API
+    try {
+      if (typeof selectedMessage.id === 'number') {
+        await api.sendMessage(selectedMessage.id, content, attachment)
+      } else {
+        const created = await api.createConversation(targetReceiverId, content)
+        if (created?.id) {
+          setSelectedId(created.id)
+          setMessages((prev) => prev.map((m) => m.id === selectedMessage.id ? { ...m, id: created.id } : m))
+        }
+      }
+    } catch (err) {
+      console.warn('REST message persist fallback note:', err)
+    }
   }
 
   function insertEmoji(emoji) {
@@ -376,31 +554,56 @@ function Messages({ conversationToOpen, openConversationRef, onProfileSelect }) 
     })
   }
 
-  function sendMessage(event) {
+  async function sendMessage(event) {
     event.preventDefault()
     const name = recipient.trim()
     const content = messageText.trim()
 
     if (!name || !content) return
 
-    const messageId = Date.now()
-    const newMessage = {
-      id: messageId,
-      name,
-      initials: name.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase(),
-      color: 'purple',
-      preview: content,
-      date: 'Now',
-      category: 'Connections',
-      unread: false,
-      sponsored: false,
-      subject: 'New message',
-      description: content,
-      thread: [{ id: messageId, content, direction: 'outgoing', sentAt: new Date().toISOString() }],
+    let currentUser = null
+    try {
+      const u = localStorage.getItem('truehunt_user')
+      if (u) currentUser = JSON.parse(u)
+    } catch {}
+
+    const myIdentity = currentUser?.email || currentUser?.userId || 'me'
+    const messageId = `msg-${Date.now()}`
+
+    try {
+      const created = await api.createConversation(name, content)
+      const convId = created?.id || Date.now()
+
+      const newMessage = {
+        ...created,
+        id: convId,
+        name,
+        initials: name.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase(),
+        color: 'purple',
+        preview: content,
+        date: 'Now',
+        category: 'Direct',
+        mailbox: 'Focused',
+        unread: false,
+        thread: [{ id: messageId, content, direction: 'outgoing', sentAt: new Date().toISOString() }],
+      }
+
+      setMessages((currentMessages) => [newMessage, ...currentMessages.filter((m) => m.id !== convId)])
+      setSelectedId(convId)
+
+      websocketService.sendMessage('/app/chat.send', {
+        conversationId: typeof convId === 'number' ? convId : null,
+        senderId: myIdentity,
+        senderName: currentUser?.name || 'You',
+        receiverId: name,
+        receiverName: name,
+        content,
+        type: 'CHAT',
+      })
+    } catch (err) {
+      console.error('Failed to create conversation:', err)
     }
 
-    setMessages((currentMessages) => [newMessage, ...currentMessages])
-    setSelectedId(newMessage.id)
     setActiveCategory('')
     setRecipient('')
     setMessageText('')
@@ -413,7 +616,33 @@ function Messages({ conversationToOpen, openConversationRef, onProfileSelect }) 
         <div className="messages-main-column">
           <section className="messages-shell">
         <header className="messages-header">
-          <h1>Messaging</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <h1>Messaging</h1>
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                fontSize: '11px',
+                fontWeight: 600,
+                color: isWsConnected ? '#10B981' : '#9CA3AF',
+                padding: '2px 8px',
+                borderRadius: '999px',
+                backgroundColor: isWsConnected ? 'rgba(16, 185, 129, 0.1)' : 'rgba(156, 163, 175, 0.1)',
+              }}
+              title={isWsConnected ? 'Real-time WebSocket Live' : 'Connecting to WebSocket...'}
+            >
+              <span
+                style={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: '50%',
+                  backgroundColor: isWsConnected ? '#10B981' : '#9CA3AF',
+                }}
+              />
+              {isWsConnected ? 'Live' : 'Connecting'}
+            </span>
+          </div>
           <label className="messages-search">
             <Search size={20} strokeWidth={2.8} aria-hidden="true" />
             <input

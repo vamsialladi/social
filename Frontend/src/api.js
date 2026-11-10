@@ -4,6 +4,8 @@ async function fetchJson(endpoint, options = {}) {
   const url = `${API_BASE}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`
   const headers = { ...options.headers }
   try {
+    const token = localStorage.getItem('truehunt_token')
+    if (token) headers['Authorization'] = `Bearer ${token}`
     const storedUser = localStorage.getItem('truehunt_user')
     const email = storedUser ? JSON.parse(storedUser)?.email : ''
     if (email) headers['X-User-Email'] = email

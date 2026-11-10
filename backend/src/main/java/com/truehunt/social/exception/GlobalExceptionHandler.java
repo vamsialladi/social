@@ -56,7 +56,8 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler({
             org.hibernate.NonUniqueResultException.class,
-            jakarta.persistence.NonUniqueResultException.class
+            jakarta.persistence.NonUniqueResultException.class,
+            org.springframework.dao.IncorrectResultSizeDataAccessException.class
     })
     public ResponseEntity<ApiResponse<Object>> handleNonUniqueResult(Exception ex) {
         log.warn("Non-unique result encountered: {}", ex.getMessage());

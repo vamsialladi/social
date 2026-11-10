@@ -1461,7 +1461,13 @@ export default function SocialApp() {
     setActiveNavigationState('profile')
     navigate('/social/profile', { state: { connectTalent: selectedCandidate } })
 
-    if (candidateId) {
+    const isImageTarget = (val) => {
+      if (!val || typeof val !== 'string') return false
+      const lower = val.toLowerCase()
+      return lower.endsWith('.jpg') || lower.endsWith('.png') || lower.endsWith('.jpeg') || lower.endsWith('.webp') || lower.includes('uploads/')
+    }
+
+    if (candidateId && !isImageTarget(candidateId)) {
       api.getProfileById(candidateId).then((profile) => {
         if (!profile) return
         setViewingCandidateProfile((currentProfile) => (
@@ -1486,7 +1492,12 @@ export default function SocialApp() {
         || viewingCandidateProfile?.id
         || '',
     ).trim()
-    if (activeNavigation !== 'profile' || !candidateId || !isAuthenticated) return
+    const isImageTarget = (val) => {
+      if (!val || typeof val !== 'string') return false
+      const lower = val.toLowerCase()
+      return lower.endsWith('.jpg') || lower.endsWith('.png') || lower.endsWith('.jpeg') || lower.endsWith('.webp') || lower.includes('uploads/')
+    }
+    if (activeNavigation !== 'profile' || !candidateId || !isAuthenticated || isImageTarget(candidateId)) return
 
     const ownProfileIds = [
       profileDetails.userId,
@@ -1649,12 +1660,12 @@ export default function SocialApp() {
 
         const isViewingSelf = Boolean(
           viewingCandidateProfile && (
-            myIdentifiers.includes(viewingCandidateId) ||
+            (viewingCandidateId && myIdentifiers.includes(viewingCandidateId)) ||
             (profileDetails.name && viewingCandidateProfile.name && profileDetails.name.trim().toLowerCase() === viewingCandidateProfile.name.trim().toLowerCase())
           )
         )
 
-        const isProfileOwner = (!viewingCandidateProfile || isViewingSelf) && isAuthenticated
+        const isProfileOwner = !viewingCandidateProfile || isViewingSelf
         const activeProfileDetails = isViewingSelf ? profileDetails : (viewingCandidateProfile || profileDetails)
         const activeProfilePreview = isViewingSelf
           ? (profileDetails.profileImageUrl || profileDetails.avatar || profilePreview)
