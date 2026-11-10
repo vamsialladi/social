@@ -22,8 +22,8 @@ public class ConversationService {
     private final UserAccountRepository userAccountRepository;
 
     public ConversationService(ConversationRepository conversationRepository,
-                               MessageService messageService,
-                               UserAccountRepository userAccountRepository) {
+            MessageService messageService,
+            UserAccountRepository userAccountRepository) {
         this.conversationRepository = conversationRepository;
         this.messageService = messageService;
         this.userAccountRepository = userAccountRepository;
@@ -46,9 +46,12 @@ public class ConversationService {
             userAccountRepository.findByEmail(cleanEmail)
                     .or(() -> userAccountRepository.findByPublicUserId(userEmail))
                     .ifPresent(u -> {
-                        if (u.getEmail() != null) callerIdentifiers.add(u.getEmail().trim().toLowerCase(Locale.ROOT));
-                        if (u.getPublicUserId() != null) callerIdentifiers.add(u.getPublicUserId().trim().toLowerCase(Locale.ROOT));
-                        if (u.getId() != null) callerIdentifiers.add(String.valueOf(u.getId()));
+                        if (u.getEmail() != null)
+                            callerIdentifiers.add(u.getEmail().trim().toLowerCase(Locale.ROOT));
+                        if (u.getPublicUserId() != null)
+                            callerIdentifiers.add(u.getPublicUserId().trim().toLowerCase(Locale.ROOT));
+                        if (u.getId() != null)
+                            callerIdentifiers.add(String.valueOf(u.getId()));
                     });
 
             return list.stream()
@@ -58,7 +61,8 @@ public class ConversationService {
                         String cName = c.getName() != null ? c.getName().trim().toLowerCase(Locale.ROOT) : "";
 
                         // If unassigned legacy conversation, let it show
-                        if (u1.isEmpty() && u2.isEmpty()) return true;
+                        if (u1.isEmpty() && u2.isEmpty())
+                            return true;
 
                         boolean matchU1 = callerIdentifiers.contains(u1);
                         boolean matchU2 = callerIdentifiers.contains(u2);
@@ -89,9 +93,12 @@ public class ConversationService {
             userAccountRepository.findByEmail(cleanEmail)
                     .or(() -> userAccountRepository.findByPublicUserId(userEmail))
                     .ifPresent(u -> {
-                        if (u.getEmail() != null) callerIdentifiers.add(u.getEmail().trim().toLowerCase(Locale.ROOT));
-                        if (u.getPublicUserId() != null) callerIdentifiers.add(u.getPublicUserId().trim().toLowerCase(Locale.ROOT));
-                        if (u.getId() != null) callerIdentifiers.add(String.valueOf(u.getId()));
+                        if (u.getEmail() != null)
+                            callerIdentifiers.add(u.getEmail().trim().toLowerCase(Locale.ROOT));
+                        if (u.getPublicUserId() != null)
+                            callerIdentifiers.add(u.getPublicUserId().trim().toLowerCase(Locale.ROOT));
+                        if (u.getId() != null)
+                            callerIdentifiers.add(String.valueOf(u.getId()));
                     });
             return entity.toDto(cleanEmail, callerIdentifiers);
         }
@@ -146,7 +153,8 @@ public class ConversationService {
 
         if (sentDto.getConversationId() != null) {
             ConversationEntity entity = conversationRepository.findById(sentDto.getConversationId()).orElse(null);
-            if (entity != null) return entity.toDto(userEmail);
+            if (entity != null)
+                return entity.toDto(userEmail);
         }
 
         ConversationEntity c = new ConversationEntity();
@@ -212,7 +220,8 @@ public class ConversationService {
         Long numericId = parseLongId(id);
         if (numericId != null) {
             Optional<ConversationEntity> opt = conversationRepository.findById(numericId);
-            if (opt.isPresent()) return opt.get();
+            if (opt.isPresent())
+                return opt.get();
         }
         return conversationRepository.findFirstByNameIgnoreCase(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Conversation", "id", id));
@@ -227,9 +236,11 @@ public class ConversationService {
     }
 
     private String getInitials(String name) {
-        if (name == null || name.isBlank()) return "TH";
+        if (name == null || name.isBlank())
+            return "TH";
         String[] parts = name.trim().split("\\s+");
-        if (parts.length == 1) return parts[0].substring(0, Math.min(2, parts[0].length())).toUpperCase();
+        if (parts.length == 1)
+            return parts[0].substring(0, Math.min(2, parts[0].length())).toUpperCase();
         return ("" + parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase();
     }
 }
