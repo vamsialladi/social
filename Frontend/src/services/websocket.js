@@ -26,18 +26,19 @@ class WebSocketService {
     }
 
     this.currentToken = token || localStorage.getItem('truehunt_token') || ''
-    this.currentEmail = userEmail || (() => {
-      try {
-        const u = localStorage.getItem('truehunt_user')
-        return u ? JSON.parse(u)?.email : ''
-      } catch {
-        return ''
-      }
-    })() || 'pro@truehunt.in'
+    let parsedUser = null
+    try {
+      const u = localStorage.getItem('truehunt_user')
+      if (u) parsedUser = JSON.parse(u)
+    } catch {}
+
+    this.currentEmail = userEmail || parsedUser?.email || 'pro@truehunt.in'
+    this.currentUserId = parsedUser?.userId || parsedUser?.publicUserId || parsedUser?.id || ''
 
     const headers = {
       ...(this.currentToken ? { Authorization: `Bearer ${this.currentToken}` } : {}),
       ...(this.currentEmail ? { 'X-User-Email': this.currentEmail } : {}),
+      ...(this.currentUserId ? { 'X-User-Id': String(this.currentUserId) } : {}),
       user: this.currentEmail,
     }
 
@@ -54,12 +55,24 @@ class WebSocketService {
         this.connected = true
         this.notifyStatus(true)
 
-        // Default subscribe to user's private queue
-        this.subscribe('/user/queue/messages', (msg) => {
+        // 1. Subscribe to user-specific private queue (/user/queue/messages)
+        this.doSubscribe('/user/queue/messages', (msg) => {
           this.notifyMessage(msg)
         })
 
-        // Resubscribe any registered destinations
+        // 2. Direct pub-sub topics for user's email & ID for guaranteed realtime dispatch
+        if (this.currentEmail) {
+          this.doSubscribe(`/topic/user.${this.currentEmail.toLowerCase()}.messages`, (msg) => {
+            this.notifyMessage(msg)
+          })
+        }
+        if (this.currentUserId) {
+          this.doSubscribe(`/topic/user.${this.currentUserId}.messages`, (msg) => {
+            this.notifyMessage(msg)
+          })
+        }
+
+        // 3. Resubscribe any registered destinations
         for (const [dest, callback] of this.subscriptions.entries()) {
           this.doSubscribe(dest, callback)
         }

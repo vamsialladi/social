@@ -19,6 +19,11 @@ public interface UserAccountRepository extends JpaRepository<UserAccountEntity, 
         return findFirstByPublicUserId(publicUserId);
     }
 
+    Optional<UserAccountEntity> findFirstByNameIgnoreCase(String name);
+    default Optional<UserAccountEntity> findByName(String name) {
+        return findFirstByNameIgnoreCase(name);
+    }
+
     Optional<UserAccountEntity> findFirstByPhoneNumber(String phoneNumber);
     default Optional<UserAccountEntity> findByPhoneNumber(String phoneNumber) {
         return findFirstByPhoneNumber(phoneNumber);

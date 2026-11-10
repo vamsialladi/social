@@ -33,12 +33,23 @@ public class ConversationService {
                 : conversationRepository.findAllByOrderByUpdatedAtDesc();
 
         if (userEmail != null && !userEmail.isBlank()) {
-            final String cleanEmail = userEmail.trim().toLowerCase();
+            final String cleanEmail = userEmail.trim().toLowerCase(Locale.ROOT);
+            Optional<UserAccountEntity> account = userAccountRepository.findByEmail(cleanEmail)
+                    .or(() -> userAccountRepository.findByPublicUserId(userEmail));
+            final String publicUserId = account.map(UserAccountEntity::getPublicUserId).orElse("");
+            final String accountName = account.map(UserAccountEntity::getName).orElse("");
+
             return list.stream()
                     .filter(c -> c.getUser1Id() == null ||
                             c.getUser1Id().equalsIgnoreCase(cleanEmail) ||
+                            (!publicUserId.isEmpty() && c.getUser1Id().equalsIgnoreCase(publicUserId)) ||
+                            (!accountName.isEmpty() && c.getUser1Id().equalsIgnoreCase(accountName)) ||
                             c.getUser2Id() == null ||
-                            (c.getUser2Id() != null && c.getUser2Id().equalsIgnoreCase(cleanEmail)))
+                            (c.getUser2Id() != null && (
+                                    c.getUser2Id().equalsIgnoreCase(cleanEmail) ||
+                                    (!publicUserId.isEmpty() && c.getUser2Id().equalsIgnoreCase(publicUserId)) ||
+                                    (!accountName.isEmpty() && c.getUser2Id().equalsIgnoreCase(accountName))
+                            )))
                     .map(c -> c.toDto(cleanEmail))
                     .collect(Collectors.toList());
         }

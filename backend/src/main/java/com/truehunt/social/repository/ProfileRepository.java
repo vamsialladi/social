@@ -19,6 +19,11 @@ public interface ProfileRepository extends JpaRepository<ProfileEntity, Long> {
         return findFirstByEmail(email);
     }
 
+    Optional<ProfileEntity> findFirstByNameIgnoreCase(String name);
+    default Optional<ProfileEntity> findByName(String name) {
+        return findFirstByNameIgnoreCase(name);
+    }
+
     List<ProfileEntity> findAllByEmail(String email);
     List<ProfileEntity> findAllByUserId(String userId);
 }

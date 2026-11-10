@@ -53,13 +53,25 @@ public class MessageService {
         }
 
         // 1. Resolve and authenticate sender
-        String senderIdentity = resolveIdentity(principal, req.getSenderId());
+        String senderRawId = resolveIdentity(principal, req.getSenderId());
+        Optional<UserAccountEntity> senderOpt = resolveUserAccount(senderRawId);
+        String senderEmail = senderOpt.map(UserAccountEntity::getEmail).orElse(senderRawId);
+        String senderPublicUserId = senderOpt.map(UserAccountEntity::getPublicUserId).orElse(senderRawId);
         String senderName = req.getSenderName() != null && !req.getSenderName().isBlank()
                 ? req.getSenderName()
-                : resolveUserName(senderIdentity);
+                : senderOpt.map(UserAccountEntity::getName).orElse(resolveUserName(senderRawId));
 
         // 2. Resolve receiver
-        String receiverIdentity = req.getReceiverId() != null ? req.getReceiverId().trim() : null;
+        String receiverRawId = req.getReceiverId() != null ? req.getReceiverId().trim() : null;
+        Optional<UserAccountEntity> receiverOpt = resolveUserAccount(receiverRawId);
+        if (receiverOpt.isEmpty() && req.getReceiverName() != null) {
+            receiverOpt = resolveUserAccount(req.getReceiverName());
+        }
+        String receiverEmail = receiverOpt.map(UserAccountEntity::getEmail).orElse(receiverRawId);
+        String receiverPublicUserId = receiverOpt.map(UserAccountEntity::getPublicUserId).orElse(receiverRawId);
+        String receiverName = req.getReceiverName() != null && !req.getReceiverName().isBlank()
+                ? req.getReceiverName()
+                : receiverOpt.map(UserAccountEntity::getName).orElse(resolveUserName(receiverRawId));
 
         // 3. Find or create conversation
         ConversationEntity conversation = null;
@@ -67,40 +79,27 @@ public class MessageService {
             conversation = conversationRepository.findById(req.getConversationId()).orElse(null);
         }
 
-        if (conversation == null && receiverIdentity != null) {
-            conversation = findOrCreateConversation(senderIdentity, senderName, receiverIdentity, req.getReceiverName());
-        }
-
         if (conversation == null) {
-            // Fallback: use first available or create general direct conversation
-            conversation = new ConversationEntity();
-            conversation.setName(receiverIdentity != null ? resolveUserName(receiverIdentity) : "Direct Message");
-            conversation.setCategory("Direct");
-            conversation.setUser1Id(senderIdentity);
-            conversation.setUser1Name(senderName);
-            if (receiverIdentity != null) {
-                conversation.setUser2Id(receiverIdentity);
-                conversation.setUser2Name(resolveUserName(receiverIdentity));
-            }
-            conversation = conversationRepository.save(conversation);
+            conversation = findOrCreateConversation(senderEmail, senderPublicUserId, senderName,
+                    receiverEmail, receiverPublicUserId, receiverName);
         }
 
         Long conversationId = conversation.getId();
 
         // 4. Update receiver if not yet known
-        if (receiverIdentity == null) {
-            receiverIdentity = senderIdentity.equalsIgnoreCase(conversation.getUser1Id())
+        if (receiverEmail == null || receiverEmail.isBlank()) {
+            receiverEmail = senderEmail.equalsIgnoreCase(conversation.getUser1Id())
                     ? conversation.getUser2Id()
                     : conversation.getUser1Id();
+            receiverName = resolveUserName(receiverEmail);
         }
-        String receiverName = resolveUserName(receiverIdentity);
 
         // 5. Persist message in database
         MessageEntity messageEntity = new MessageEntity(
                 conversationId,
-                senderIdentity,
+                senderEmail,
                 senderName,
-                receiverIdentity != null ? receiverIdentity : "unknown",
+                receiverEmail != null ? receiverEmail : "unknown",
                 receiverName,
                 req.getContent().trim(),
                 req.getAttachment()
@@ -108,7 +107,7 @@ public class MessageService {
         messageEntity = messageRepository.save(messageEntity);
 
         // 6. Update conversation entity
-        conversation.addMessage(senderIdentity, senderName, receiverIdentity, req.getContent().trim(), "outgoing", req.getAttachment());
+        conversation.addMessage(senderEmail, senderName, receiverEmail, req.getContent().trim(), "outgoing", req.getAttachment());
         conversation.setPreview(req.getContent().trim());
         conversation.setDate("Just now");
         conversation.setUnread(true);
@@ -119,9 +118,9 @@ public class MessageService {
         ChatMessageDto outDto = new ChatMessageDto(
                 "msg-" + messageEntity.getId(),
                 conversationId,
-                senderIdentity,
+                senderEmail,
                 senderName,
-                receiverIdentity,
+                receiverEmail,
                 receiverName,
                 messageEntity.getContent(),
                 "outgoing",
@@ -132,36 +131,61 @@ public class MessageService {
         outDto.setCreatedAt(LocalDateTime.now().format(DateTimeFormatter.ofPattern("hh:mm a")));
         outDto.setType(req.getType() != null ? req.getType() : "CHAT");
 
-        // 8. Deliver via WebSocket in real-time
-        deliverRealtime(outDto, senderIdentity, receiverIdentity, conversationId);
+        // 8. Deliver via WebSocket in real-time to all receiver and sender channels
+        deliverRealtime(outDto, senderEmail, senderPublicUserId, senderName,
+                receiverEmail, receiverPublicUserId, receiverName, conversationId);
 
         return outDto;
     }
 
-    private void deliverRealtime(ChatMessageDto outDto, String senderId, String receiverId, Long conversationId) {
+    private void deliverRealtime(ChatMessageDto outDto,
+                                 String senderEmail, String senderPublicId, String senderName,
+                                 String receiverEmail, String receiverPublicId, String receiverName,
+                                 Long conversationId) {
         try {
-            // A. Broadcast to conversation room topic
+            // A. Broadcast to conversation room topics
             messagingTemplate.convertAndSend("/topic/conversations/" + conversationId, outDto);
             messagingTemplate.convertAndSend("/topic/messages/" + conversationId, outDto);
 
-            // B. Send to receiver's private queue
-            if (receiverId != null && !receiverId.isBlank()) {
-                messagingTemplate.convertAndSendToUser(receiverId, "/queue/messages", outDto);
+            // B. Send to receiver's private queue destinations
+            Set<String> receiverTargets = new LinkedHashSet<>();
+            if (receiverEmail != null && !receiverEmail.isBlank()) receiverTargets.add(receiverEmail);
+            if (receiverPublicId != null && !receiverPublicId.isBlank()) receiverTargets.add(receiverPublicId);
+            if (receiverName != null && !receiverName.isBlank()) receiverTargets.add(receiverName);
 
-                // Also try alternate identifier (if email, also try publicUserId; if publicUserId, also try email)
-                String altReceiverId = resolveAlternateIdentifier(receiverId);
-                if (altReceiverId != null && !altReceiverId.equalsIgnoreCase(receiverId)) {
-                    messagingTemplate.convertAndSendToUser(altReceiverId, "/queue/messages", outDto);
-                }
+            for (String target : receiverTargets) {
+                try {
+                    messagingTemplate.convertAndSendToUser(target, "/queue/messages", outDto);
+                } catch (Exception ignored) {}
             }
 
-            // C. Send to sender's private queue for multi-device sync
-            if (senderId != null && !senderId.isBlank()) {
-                messagingTemplate.convertAndSendToUser(senderId, "/queue/messages", outDto);
+            // C. Dedicated pub-sub direct user topics (bypasses UserDestinationResolver for guaranteed receipt)
+            if (receiverEmail != null && !receiverEmail.isBlank()) {
+                messagingTemplate.convertAndSend("/topic/user." + receiverEmail.toLowerCase(Locale.ROOT) + ".messages", outDto);
+            }
+            if (receiverPublicId != null && !receiverPublicId.isBlank()) {
+                messagingTemplate.convertAndSend("/topic/user." + receiverPublicId + ".messages", outDto);
             }
 
-            log.info("[WebSocket] Dispatched real-time message from {} to {} in conversation {}",
-                    senderId, receiverId, conversationId);
+            // D. Sender confirmation & multi-device sync
+            Set<String> senderTargets = new LinkedHashSet<>();
+            if (senderEmail != null && !senderEmail.isBlank()) senderTargets.add(senderEmail);
+            if (senderPublicId != null && !senderPublicId.isBlank()) senderTargets.add(senderPublicId);
+
+            for (String target : senderTargets) {
+                try {
+                    messagingTemplate.convertAndSendToUser(target, "/queue/messages", outDto);
+                } catch (Exception ignored) {}
+            }
+            if (senderEmail != null && !senderEmail.isBlank()) {
+                messagingTemplate.convertAndSend("/topic/user." + senderEmail.toLowerCase(Locale.ROOT) + ".messages", outDto);
+            }
+            if (senderPublicId != null && !senderPublicId.isBlank()) {
+                messagingTemplate.convertAndSend("/topic/user." + senderPublicId + ".messages", outDto);
+            }
+
+            log.info("[WebSocket] Real-time message #{} delivered to conversation {} (sender: {}, receiver: {})",
+                    outDto.getId(), conversationId, senderEmail, receiverEmail);
         } catch (Exception ex) {
             log.warn("[WebSocket] Could not deliver real-time message over STOMP: {}", ex.getMessage());
         }
@@ -178,38 +202,94 @@ public class MessageService {
                 (List<Map<String, Object>>) conv.toDto(currentUserId).get("thread") : List.of() : List.of();
     }
 
-    private ConversationEntity findOrCreateConversation(String userA, String userAName, String userB, String userBName) {
-        // Try user1 = A, user2 = B
-        Optional<ConversationEntity> existing = conversationRepository.findByUser1IdAndUser2Id(userA, userB);
-        if (existing.isPresent()) return existing.get();
+    private ConversationEntity findOrCreateConversation(String senderEmail, String senderPublicId, String senderName,
+                                                        String receiverEmail, String receiverPublicId, String receiverName) {
+        List<String> userAKeys = Arrays.asList(senderEmail, senderPublicId);
+        List<String> userBKeys = Arrays.asList(receiverEmail, receiverPublicId, receiverName);
 
-        // Try user1 = B, user2 = A
-        existing = conversationRepository.findByUser1IdAndUser2Id(userB, userA);
-        if (existing.isPresent()) return existing.get();
+        // 1. Try finding conversation between userA and userB across any pair of identifiers
+        for (String keyA : userAKeys) {
+            if (keyA == null || keyA.isBlank()) continue;
+            for (String keyB : userBKeys) {
+                if (keyB == null || keyB.isBlank()) continue;
+                Optional<ConversationEntity> existing = conversationRepository.findByUser1IdAndUser2Id(keyA, keyB);
+                if (existing.isPresent()) return existing.get();
 
-        // Try by receiver name
-        if (userBName != null && !userBName.isBlank()) {
-            Optional<ConversationEntity> byName = conversationRepository.findFirstByNameIgnoreCase(userBName.trim());
+                existing = conversationRepository.findByUser1IdAndUser2Id(keyB, keyA);
+                if (existing.isPresent()) return existing.get();
+            }
+        }
+
+        // 2. Try matching by receiver name in all existing conversations
+        if (receiverName != null && !receiverName.isBlank()) {
+            Optional<ConversationEntity> byName = conversationRepository.findFirstByNameIgnoreCase(receiverName.trim());
             if (byName.isPresent()) {
                 ConversationEntity conv = byName.get();
-                if (conv.getUser1Id() == null) conv.setUser1Id(userA);
-                if (conv.getUser2Id() == null) conv.setUser2Id(userB);
+                if (conv.getUser1Id() == null) conv.setUser1Id(senderEmail);
+                if (conv.getUser2Id() == null) conv.setUser2Id(receiverEmail);
                 return conversationRepository.save(conv);
             }
         }
 
-        // Create new
+        // 3. Create canonical new conversation
         ConversationEntity conv = new ConversationEntity();
-        conv.setUser1Id(userA);
-        conv.setUser1Name(userAName);
-        conv.setUser2Id(userB);
-        conv.setUser2Name(userBName != null ? userBName : resolveUserName(userB));
-        conv.setName(userBName != null ? userBName : resolveUserName(userB));
+        conv.setUser1Id(senderEmail != null ? senderEmail : senderPublicId);
+        conv.setUser1Name(senderName);
+        conv.setUser2Id(receiverEmail != null ? receiverEmail : receiverPublicId);
+        conv.setUser2Name(receiverName != null ? receiverName : "Cinema Professional");
+        conv.setName(receiverName != null ? receiverName : "Cinema Professional");
         conv.setCategory("Direct");
         conv.setMailbox("Focused");
         conv.setPreview("Start of conversation");
         conv.setDate("Just now");
         return conversationRepository.save(conv);
+    }
+
+    public Optional<UserAccountEntity> resolveUserAccount(String identifier) {
+        if (identifier == null || identifier.isBlank()) return Optional.empty();
+        String clean = identifier.trim();
+
+        // 1. By email
+        Optional<UserAccountEntity> byEmail = userAccountRepository.findByEmail(clean.toLowerCase(Locale.ROOT));
+        if (byEmail.isPresent()) return byEmail;
+
+        // 2. By public user ID
+        Optional<UserAccountEntity> byPublicId = userAccountRepository.findByPublicUserId(clean);
+        if (byPublicId.isPresent()) return byPublicId;
+
+        // 3. By profile user ID
+        Optional<ProfileEntity> profile = profileRepository.findByUserId(clean);
+        if (profile.isPresent() && profile.get().getEmail() != null) {
+            Optional<UserAccountEntity> byProfEmail = userAccountRepository.findByEmail(profile.get().getEmail().toLowerCase(Locale.ROOT));
+            if (byProfEmail.isPresent()) return byProfEmail;
+        }
+
+        // 4. By exact or case-insensitive name match in UserAccounts
+        Optional<UserAccountEntity> byName = userAccountRepository.findByName(clean);
+        if (byName.isPresent()) return byName;
+
+        // 5. By partial name match in UserAccounts
+        Optional<UserAccountEntity> byAnyName = userAccountRepository.findAll().stream()
+                .filter(u -> u.getName() != null && (u.getName().equalsIgnoreCase(clean)
+                        || clean.toLowerCase().contains(u.getName().toLowerCase())
+                        || u.getName().toLowerCase().contains(clean.toLowerCase())))
+                .findFirst();
+        if (byAnyName.isPresent()) return byAnyName;
+
+        // 6. By Profile name match
+        Optional<ProfileEntity> profByName = profileRepository.findByName(clean);
+        if (profByName.isPresent() && profByName.get().getEmail() != null) {
+            Optional<UserAccountEntity> byProfName = userAccountRepository.findByEmail(profByName.get().getEmail().toLowerCase(Locale.ROOT));
+            if (byProfName.isPresent()) return byProfName;
+        }
+
+        // 7. If clean is "me", fallback to primary profile account
+        if ("me".equalsIgnoreCase(clean)) {
+            return userAccountRepository.findByEmail("pro@truehunt.in")
+                    .or(() -> userAccountRepository.findAll().stream().findFirst());
+        }
+
+        return Optional.empty();
     }
 
     private String resolveIdentity(Principal principal, String fallback) {
@@ -224,7 +304,7 @@ public class MessageService {
 
     private String resolveUserName(String identifier) {
         if (identifier == null || identifier.isBlank()) return "Cinema Professional";
-        Optional<UserAccountEntity> account = userAccountRepository.findByEmail(identifier.toLowerCase(Locale.ROOT));
+        Optional<UserAccountEntity> account = resolveUserAccount(identifier);
         if (account.isPresent()) return account.get().getName();
 
         Optional<ProfileEntity> profile = profileRepository.findByUserId(identifier);
@@ -232,18 +312,4 @@ public class MessageService {
 
         return identifier;
     }
-
-    private String resolveAlternateIdentifier(String identifier) {
-        if (identifier == null) return null;
-        if (identifier.contains("@")) {
-            return userAccountRepository.findByEmail(identifier.toLowerCase(Locale.ROOT))
-                    .map(UserAccountEntity::getPublicUserId)
-                    .orElse(null);
-        } else {
-            return userAccountRepository.findByPublicUserId(identifier)
-                    .map(UserAccountEntity::getEmail)
-                    .orElse(null);
-        }
-    }
 }
-

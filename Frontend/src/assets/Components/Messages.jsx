@@ -261,11 +261,15 @@ function Messages({ conversationToOpen, openConversationRef, onProfileSelect }) 
     const convId = newMsg.conversationId
     const content = newMsg.content
     const msgId = newMsg.id || `msg-${Date.now()}`
-    const isOutgoing = newMsg.senderId && currentUser?.email && (
-      newMsg.senderId.toLowerCase() === currentUser.email.toLowerCase() ||
-      newMsg.senderId === currentUser.userId ||
-      newMsg.senderId === currentUser.id
+    const isOutgoing = newMsg.senderId && (
+      (currentUser?.email && newMsg.senderId.toLowerCase() === currentUser.email.toLowerCase()) ||
+      (currentUser?.userId && newMsg.senderId === currentUser.userId) ||
+      (currentUser?.id && String(newMsg.senderId) === String(currentUser.id)) ||
+      (currentUser?.name && newMsg.senderName && newMsg.senderName.trim().toLowerCase() === currentUser.name.trim().toLowerCase())
     )
+
+    const otherName = isOutgoing ? (newMsg.receiverName || '') : (newMsg.senderName || '')
+    const otherId = isOutgoing ? (newMsg.receiverId || '') : (newMsg.senderId || '')
 
     const threadItem = {
       id: msgId,
@@ -276,32 +280,43 @@ function Messages({ conversationToOpen, openConversationRef, onProfileSelect }) 
       attachment: newMsg.attachment,
       senderId: newMsg.senderId,
       senderName: newMsg.senderName,
+      receiverId: newMsg.receiverId,
+      receiverName: newMsg.receiverName,
     }
 
     setMessages((prevMessages) => {
-      const convExists = prevMessages.some((m) => String(m.id) === String(convId))
-      if (convExists) {
-        return prevMessages.map((m) => {
-          if (String(m.id) === String(convId)) {
+      // Find matching conversation across ID, name, or participant user ID
+      const matchedIndex = prevMessages.findIndex((m) => {
+        if (convId && (String(m.id) === String(convId) || m.id === convId)) return true
+        if (otherName && m.name && m.name.trim().toLowerCase() === otherName.trim().toLowerCase()) return true
+        if (otherId && (m.user1Id === otherId || m.user2Id === otherId)) return true
+        if (m.profile && (m.profile.userId === otherId || m.profile.id === otherId || m.profile.email === otherId)) return true
+        return false
+      })
+
+      if (matchedIndex !== -1) {
+        return prevMessages.map((m, idx) => {
+          if (idx === matchedIndex) {
             const thread = m.thread || []
             if (thread.some((t) => String(t.id) === String(msgId))) {
               return m
             }
             return {
               ...m,
+              id: convId || m.id,
               thread: [...thread, threadItem],
               preview: content,
               date: 'Just now',
-              unread: !isOutgoing && selectedId !== m.id,
+              unread: !isOutgoing && String(selectedId) !== String(m.id) && String(selectedId) !== String(convId),
             }
           }
           return m
         })
       } else {
         const newConv = {
-          id: convId,
-          name: newMsg.senderName || 'Cinema Professional',
-          initials: (newMsg.senderName || 'CP').slice(0, 2).toUpperCase(),
+          id: convId || `conv-${Date.now()}`,
+          name: otherName || 'Cinema Professional',
+          initials: (otherName || 'CP').slice(0, 2).toUpperCase(),
           color: 'purple',
           preview: content,
           date: 'Just now',
@@ -504,7 +519,8 @@ function Messages({ conversationToOpen, openConversationRef, onProfileSelect }) 
     setIsEmojiPickerOpen(false)
 
     // 2. Real-time WebSocket transmission
-    const targetReceiverId = selectedMessage.profile?.userId ||
+    const targetReceiverId = selectedMessage.profile?.email ||
+      selectedMessage.profile?.userId ||
       selectedMessage.profile?.id ||
       selectedMessage.user2Id ||
       selectedMessage.user1Id ||
@@ -522,21 +538,23 @@ function Messages({ conversationToOpen, openConversationRef, onProfileSelect }) 
       type: 'CHAT',
     }
 
-    websocketService.sendMessage('/app/chat.send', wsPayload)
+    const sentOverWs = websocketService.sendMessage('/app/chat.send', wsPayload)
 
-    // 3. Backend persistence via API
-    try {
-      if (typeof selectedMessage.id === 'number') {
-        await api.sendMessage(selectedMessage.id, content, attachment)
-      } else {
-        const created = await api.createConversation(targetReceiverId, content)
-        if (created?.id) {
-          setSelectedId(created.id)
-          setMessages((prev) => prev.map((m) => m.id === selectedMessage.id ? { ...m, id: created.id } : m))
+    // 3. Fallback to REST persistence only if WebSocket is disconnected
+    if (!sentOverWs) {
+      try {
+        if (typeof selectedMessage.id === 'number') {
+          await api.sendMessage(selectedMessage.id, content, attachment)
+        } else {
+          const created = await api.createConversation(targetReceiverId, content)
+          if (created?.id) {
+            setSelectedId(created.id)
+            setMessages((prev) => prev.map((m) => m.id === selectedMessage.id ? { ...m, id: created.id } : m))
+          }
         }
+      } catch (err) {
+        console.warn('REST message persist fallback note:', err)
       }
-    } catch (err) {
-      console.warn('REST message persist fallback note:', err)
     }
   }
 
