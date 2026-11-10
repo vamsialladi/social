@@ -200,6 +200,20 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ talentId, message, timestamp: new Date().toISOString() })
       });
+    },
+
+    toggleConnection: async (profileId) => {
+      return await fetchWithFallback('/connections/toggle', {
+        method: 'POST',
+        body: JSON.stringify({ profileId })
+      });
+    },
+
+    toggleFollow: async (profileId) => {
+      return await fetchWithFallback('/connections/follow', {
+        method: 'POST',
+        body: JSON.stringify({ profileId })
+      });
     }
   },
 

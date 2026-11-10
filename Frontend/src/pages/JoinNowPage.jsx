@@ -220,11 +220,13 @@ export default function JoinNowPage() {
 
           // Also update backend database profile endpoint
           try {
+            const token = localStorage.getItem('truehunt_token');
             await fetch('/api/profiles/me', {
               method: 'PATCH',
               headers: {
                 'Content-Type': 'application/json',
                 'X-User-Email': email,
+                ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
               },
               body: JSON.stringify(socialProfileData)
             });

@@ -88,6 +88,7 @@ export const api = {
   // Network & Connections
   getNetworkSuggestions: () => fetchJson('/connections/suggestions'),
   getConnectedProfiles: () => fetchJson('/connections'),
+  connectTalent: (talentId, message = '') => fetchJson('/connections', { method: 'POST', body: { talentId, message } }),
   toggleConnection: (profileId) => fetchJson('/connections/toggle', { method: 'POST', body: { profileId } }),
   toggleFollow: (profileId) => fetchJson('/connections/follow', { method: 'POST', body: { profileId } }),
 
