@@ -74,101 +74,127 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [] }
     onMessage?.(profile)
   }
 
-  useEffect(() => {
-    const normalizedCurrentUserIdentifiers = new Set(JSON.parse(currentUserIdentityKey))
+  async function loadNetworkData() {
+    const normalizedCurrentUserIdentifiers = new Set(JSON.parse(currentUserIdentityKey || '[]'))
+    try {
+      const [registeredProfiles, talentProfiles, serverConnected, suggestionsData, invitationsData] = await Promise.all([
+        api.getProfileDirectory().catch(() => []),
+        directoryApi.talents.getAll().catch(() => []),
+        api.getConnectedProfiles().catch(() => []),
+        api.getNetworkSuggestions().catch(() => []),
+        api.getInvitations().catch(() => []),
+      ])
 
-    async function loadNetworkData() {
-      try {
-        const [registeredProfiles, talentProfiles] = await Promise.all([
-          api.getProfileDirectory(),
-          directoryApi.talents.getAll(),
-        ])
-        let networkProfiles = []
-        let incomingInvitations = []
-        try {
-          const [suggestionsData, invitationsData] = await Promise.all([
-            api.getNetworkSuggestions(),
-            api.getInvitations(),
-          ])
-          networkProfiles = Array.isArray(suggestionsData) ? suggestionsData : []
-          incomingInvitations = Array.isArray(invitationsData) ? invitationsData : []
-        } catch (err) {
-          console.warn('Network connection status load error:', err)
+      const networkProfiles = Array.isArray(suggestionsData) ? suggestionsData : []
+      const incomingInvitations = Array.isArray(invitationsData) ? invitationsData : []
+      const connectedList = Array.isArray(serverConnected) ? serverConnected : []
+
+      setInvitations(incomingInvitations)
+      const directory = []
+      const profilesToMerge = [
+        ...(Array.isArray(talentProfiles) ? talentProfiles : []),
+        ...(Array.isArray(registeredProfiles) ? registeredProfiles : []),
+      ]
+      profilesToMerge.filter((profile) => profile && profile.name).forEach((profile) => {
+        const identityKeys = new Set(getProfileIdentityKeys(profile))
+        const normalizedName = getNormalizedProfileName(profile)
+        const existingIndex = directory.findIndex((existingProfile) => (
+          getProfileIdentityKeys(existingProfile).some((key) => identityKeys.has(key))
+          || getNormalizedProfileName(existingProfile) === normalizedName
+        ))
+
+        if (existingIndex === -1) {
+          directory.push(profile)
+        } else {
+          directory[existingIndex] = { ...directory[existingIndex], ...profile }
         }
-        setInvitations(incomingInvitations)
-        const directory = []
-        const profilesToMerge = [
-          ...(Array.isArray(talentProfiles) ? talentProfiles : []),
-          ...(Array.isArray(registeredProfiles) ? registeredProfiles : []),
-        ]
-        profilesToMerge.filter((profile) => profile && profile.name).forEach((profile) => {
-          const identityKeys = new Set(getProfileIdentityKeys(profile))
-          const normalizedName = getNormalizedProfileName(profile)
-          const existingIndex = directory.findIndex((existingProfile) => (
-            getProfileIdentityKeys(existingProfile).some((key) => identityKeys.has(key))
-            || getNormalizedProfileName(existingProfile) === normalizedName
-          ))
+      })
 
-          if (existingIndex === -1) {
-            directory.push(profile)
-          } else {
-            directory[existingIndex] = { ...directory[existingIndex], ...profile }
+      const networkProfilesById = new Map(
+        networkProfiles.map((profile) => [getProfileKey(profile), profile]),
+      )
+
+      const serverConnectedKeys = new Set(
+        connectedList.map((p) => getProfileKey(p)),
+      )
+
+      // Stored overrides can be cleared once fresh server data is loaded
+      relationshipOverrides.current.clear()
+
+      const allProfiles = directory
+        .filter((profile) => profile && (profile.id || profile.userId) && profile.name)
+        .filter((profile) => {
+          const profileIdentifiers = [
+            profile.id,
+            profile.userId,
+            profile.referId,
+            profile.email,
+          ].filter(Boolean).map((identifier) => String(identifier).trim().toLowerCase())
+          return !profileIdentifiers.some((identifier) => normalizedCurrentUserIdentifiers.has(identifier))
+        })
+        .map((profile, index) => {
+          const id = String(profile.id || profile.userId)
+          const name = profile.name.trim()
+          const nameParts = name.split(/\s+/)
+          const profileKey = getProfileKey(id)
+          const connection = networkProfilesById.get(profileKey)
+          const isConn = serverConnectedKeys.has(profileKey) || Boolean(connection?.isConnected)
+          const isPend = !isConn && Boolean(connection?.isPending || connection?.isOutgoingPending)
+
+          return {
+            ...profile,
+            id,
+            name,
+            initials: nameParts.slice(0, 2).map((part) => part[0]).join('').toUpperCase(),
+            status: connection?.status || 'active',
+            role: profile.headline || profile.role || profile.primaryCraft || profile.category || 'Cinema Professional',
+            location: profile.location || profile.address || '',
+            mutualConnections: connection?.mutualConnections || 'TrueHunt member',
+            avatarClass: index % 2 === 0 ? 'network-avatar-coral' : 'network-avatar-blue',
+            profileImageUrl: profile.profileImageUrl || profile.avatar || '',
+            coverImageUrl: profile.coverImageUrl || profile.coverImage || '',
+            isConnected: isConn,
+            isFollowing: Boolean(connection?.isFollowing),
+            isPending: isPend,
           }
         })
-        const networkProfilesById = new Map(
-          (Array.isArray(networkProfiles) ? networkProfiles : [])
-            .map((profile) => [getProfileKey(profile), profile]),
-        )
-        const allProfiles = (Array.isArray(directory) ? directory : [])
-          .filter((profile) => profile && (profile.id || profile.userId) && profile.name)
-          .filter((profile) => {
-            const profileIdentifiers = [
-              profile.id,
-              profile.userId,
-              profile.referId,
-              profile.email,
-            ].filter(Boolean).map((identifier) => String(identifier).trim().toLowerCase())
-            return !profileIdentifiers.some((identifier) => normalizedCurrentUserIdentifiers.has(identifier))
-          })
-          .map((profile, index) => {
-            const id = String(profile.id || profile.userId)
-            const name = profile.name.trim()
-            const nameParts = name.split(/\s+/)
-            const profileKey = getProfileKey(id)
-            const connection = networkProfilesById.get(profileKey)
-            const overrides = relationshipOverrides.current.get(profileKey)
-            return {
-              ...profile,
-              id,
-              name,
-              initials: nameParts.slice(0, 2).map((part) => part[0]).join('').toUpperCase(),
-              status: connection?.status || 'active',
-              role: profile.headline || profile.role || profile.primaryCraft || profile.category || 'Cinema Professional',
-              location: profile.location || profile.address || '',
-              mutualConnections: connection?.mutualConnections || 'TrueHunt member',
-              avatarClass: index % 2 === 0 ? 'network-avatar-coral' : 'network-avatar-blue',
-              profileImageUrl: profile.profileImageUrl || profile.avatar || '',
-              coverImageUrl: profile.coverImageUrl || profile.coverImage || '',
-              isConnected: overrides?.connected ?? Boolean(connection?.isConnected),
-              isFollowing: overrides?.following ?? Boolean(connection?.isFollowing),
-              isPending: overrides?.pending ?? Boolean(connection?.isPending || connection?.isOutgoingPending),
-            }
-          })
-        setProfiles(allProfiles)
-        setConnectedProfiles(allProfiles.filter((profile) => profile.isConnected).map((profile) => getProfileKey(profile.id)))
-        setFollowedProfiles(allProfiles.filter((profile) => profile.isFollowing).map((profile) => getProfileKey(profile.id)))
-        setPendingProfiles(allProfiles.filter((profile) => profile.isPending).map((profile) => getProfileKey(profile.id)))
-      } catch (err) {
-        console.warn('Network profiles load error:', err)
-      } finally {
-        setLoadingProfiles(false)
-      }
+
+      setProfiles(allProfiles)
+      setConnectedProfiles(allProfiles.filter((profile) => profile.isConnected).map((profile) => getProfileKey(profile.id)))
+      setFollowedProfiles(allProfiles.filter((profile) => profile.isFollowing).map((profile) => getProfileKey(profile.id)))
+      setPendingProfiles(allProfiles.filter((profile) => profile.isPending).map((profile) => getProfileKey(profile.id)))
+    } catch (err) {
+      console.warn('Network profiles load error:', err)
+    } finally {
+      setLoadingProfiles(false)
     }
+  }
+
+  useEffect(() => {
     loadNetworkData()
+
+    const interval = setInterval(() => {
+      loadNetworkData()
+    }, 4000)
+
+    const handleFocus = () => loadNetworkData()
+    const handleVisibility = () => {
+      if (!document.hidden) loadNetworkData()
+    }
+
+    window.addEventListener('focus', handleFocus)
+    document.addEventListener('visibilitychange', handleVisibility)
+
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('focus', handleFocus)
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
   }, [currentUserIdentityKey])
 
   useEffect(() => {
     function handleConnectionChanged(event) {
+      loadNetworkData()
       const { connected, pending, profile } = event.detail || {}
       const profileId = String(
         profile?.userId || profile?.id || profile?.user_id || profile?._id || '',
@@ -326,6 +352,7 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [] }
       window.dispatchEvent(new CustomEvent('truehunt-connection-changed', {
         detail: { connected: false, pending: false, profile },
       }))
+      loadNetworkData()
     } catch (err) {
       console.error('Cancel connection request error:', err)
       setConnectionError('Could not remove connection request. Please try again.')
@@ -535,15 +562,18 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [] }
                     key={label}
                     type="button"
                     aria-pressed={isSelected}
-                    onClick={() => setActiveSection(
-                      label === 'Connections'
-                        ? 'connections'
-                        : label === 'Following & followers'
-                          ? 'following'
-                          : label === 'Requests'
-                            ? 'requests'
-                            : 'grow',
-                    )}
+                    onClick={() => {
+                      setActiveSection(
+                        label === 'Connections'
+                          ? 'connections'
+                          : label === 'Following & followers'
+                            ? 'following'
+                            : label === 'Requests'
+                              ? 'requests'
+                              : 'grow',
+                      )
+                      loadNetworkData()
+                    }}
                   >
                     <Icon size={19} strokeWidth={2.2} aria-hidden="true" />
                     <span>{label}</span>
@@ -592,7 +622,10 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [] }
               <button
                 className="network-connections-back"
                 type="button"
-                onClick={() => setActiveSection('grow')}
+                onClick={() => {
+                  setActiveSection('grow')
+                  loadNetworkData()
+                }}
               >
                 <ArrowLeft size={16} aria-hidden="true" />
                 Back to Network

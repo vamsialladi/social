@@ -14,6 +14,7 @@ import ProfilePage, { emptyProfileDetails } from './ProfilePage'
 import ConnectionsPage from './ConnectionsPage'
 import Settings from './Settings'
 import { useAuth } from '../../context/AuthContext'
+import { websocketService } from '../../services/websocket'
 
 function getProfileIdentityKeys(profile) {
   return [
@@ -1589,6 +1590,32 @@ export default function SocialApp() {
       isCurrentAccount = false
     }
   }, [profileStorageKey])
+
+  useEffect(() => {
+    const token = localStorage.getItem('truehunt_token') || ''
+    const userEmail = user?.email || profileDetails.email || ''
+    websocketService.connect(token, userEmail)
+
+    const unsubWs = websocketService.subscribe('/topic/connections', (event) => {
+      window.dispatchEvent(new CustomEvent('truehunt-connection-changed', {
+        detail: event,
+      }))
+    })
+
+    function handleConnectionChanged() {
+      api.getProfile().then((fresh) => {
+        if (fresh && fresh.name) {
+          setProfileDetails((curr) => ({ ...curr, ...fresh }))
+        }
+      }).catch(() => {})
+    }
+
+    window.addEventListener('truehunt-connection-changed', handleConnectionChanged)
+    return () => {
+      if (typeof unsubWs === 'function') unsubWs()
+      window.removeEventListener('truehunt-connection-changed', handleConnectionChanged)
+    }
+  }, [user?.email, profileDetails.email])
 
   return (
     <main className={`cinemans-page is-preview${activeNavigation === 'home' ? ' is-home' : ''}${activeNavigation === 'messaging' ? ' is-messaging' : ''}${theme === 'dark' ? ' is-dark' : ''}`}>

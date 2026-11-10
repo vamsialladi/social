@@ -14,6 +14,7 @@ import com.truehunt.social.repository.ProfileRepository;
 import com.truehunt.social.repository.UserAccountRepository;
 import com.truehunt.social.repository.UserProfileRelationshipRepository;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -31,30 +32,152 @@ public class ConnectionService {
     private final UserAccountRepository userAccountRepository;
     private final UserProfileRelationshipRepository relationshipRepository;
     private final ObjectProvider<TalentService> talentServiceProvider;
+    private final ObjectProvider<SimpMessagingTemplate> messagingTemplateProvider;
 
     public ConnectionService(NetworkProfileRepository networkProfileRepository,
             NotificationRepository notificationRepository,
             ProfileRepository profileRepository,
             UserAccountRepository userAccountRepository,
             UserProfileRelationshipRepository relationshipRepository,
-            ObjectProvider<TalentService> talentServiceProvider) {
+            ObjectProvider<TalentService> talentServiceProvider,
+            ObjectProvider<SimpMessagingTemplate> messagingTemplateProvider) {
         this.networkProfileRepository = networkProfileRepository;
         this.notificationRepository = notificationRepository;
         this.profileRepository = profileRepository;
         this.userAccountRepository = userAccountRepository;
         this.relationshipRepository = relationshipRepository;
         this.talentServiceProvider = talentServiceProvider;
+        this.messagingTemplateProvider = messagingTemplateProvider;
+    }
+
+    private void broadcastConnectionEvent(String action, String senderId, String receiverId, boolean isConnected, boolean isPending) {
+        try {
+            SimpMessagingTemplate template = messagingTemplateProvider != null ? messagingTemplateProvider.getIfAvailable() : null;
+            if (template != null) {
+                Map<String, Object> payload = new HashMap<>();
+                payload.put("type", "CONNECTION_UPDATED");
+                payload.put("action", action);
+                payload.put("senderId", senderId);
+                payload.put("receiverId", receiverId);
+                payload.put("connected", isConnected);
+                payload.put("isConnected", isConnected);
+                payload.put("pending", isPending);
+                payload.put("isPending", isPending);
+                payload.put("timestamp", java.time.LocalDateTime.now().toString());
+
+                template.convertAndSend("/topic/connections", payload);
+                if (senderId != null && !senderId.isBlank()) {
+                    template.convertAndSend("/topic/user." + senderId.trim().toLowerCase(Locale.ROOT) + ".connections", payload);
+                }
+                if (receiverId != null && !receiverId.isBlank()) {
+                    template.convertAndSend("/topic/user." + receiverId.trim().toLowerCase(Locale.ROOT) + ".connections", payload);
+                }
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    public Set<String> resolveAllUserIdentifiers(String identifier) {
+        Set<String> ids = new LinkedHashSet<>();
+        if (identifier == null || identifier.isBlank()) {
+            return ids;
+        }
+        String clean = identifier.trim();
+        ids.add(clean);
+        ids.add(clean.toLowerCase(Locale.ROOT));
+        ids.add(clean.toUpperCase(Locale.ROOT));
+        try {
+            userAccountRepository.findByEmail(clean).ifPresent(acc -> {
+                if (acc.getPublicUserId() != null) {
+                    ids.add(acc.getPublicUserId());
+                    ids.add(acc.getPublicUserId().toLowerCase(Locale.ROOT));
+                }
+                ids.add(String.valueOf(acc.getId()));
+                if (acc.getEmail() != null) ids.add(acc.getEmail().toLowerCase(Locale.ROOT));
+            });
+            userAccountRepository.findByPublicUserId(clean).ifPresent(acc -> {
+                if (acc.getEmail() != null) ids.add(acc.getEmail().toLowerCase(Locale.ROOT));
+                ids.add(String.valueOf(acc.getId()));
+            });
+            profileRepository.findByEmail(clean).ifPresent(p -> {
+                if (p.getUserId() != null) {
+                    ids.add(p.getUserId());
+                    ids.add(p.getUserId().toLowerCase(Locale.ROOT));
+                }
+                if (p.getEmail() != null) ids.add(p.getEmail().toLowerCase(Locale.ROOT));
+                if (p.getId() != null) ids.add(String.valueOf(p.getId()));
+            });
+            profileRepository.findByUserId(clean).ifPresent(p -> {
+                if (p.getEmail() != null) ids.add(p.getEmail().toLowerCase(Locale.ROOT));
+                if (p.getUserId() != null) ids.add(p.getUserId().toLowerCase(Locale.ROOT));
+                if (p.getId() != null) ids.add(String.valueOf(p.getId()));
+            });
+        } catch (Exception ignored) {
+        }
+        return ids;
+    }
+
+    private UserProfileRelationshipEntity findRelationshipBetween(Set<String> user1Ids, Set<String> user2Ids, List<UserProfileRelationshipEntity> allRels) {
+        Set<String> lower1 = user1Ids.stream().map(s -> s.toLowerCase(Locale.ROOT)).collect(Collectors.toSet());
+        Set<String> lower2 = user2Ids.stream().map(s -> s.toLowerCase(Locale.ROOT)).collect(Collectors.toSet());
+        for (UserProfileRelationshipEntity rel : allRels) {
+            if (rel == null) continue;
+            String owner = rel.getOwnerUserId() != null ? rel.getOwnerUserId().trim().toLowerCase(Locale.ROOT) : "";
+            String target = rel.getTargetProfileId() != null ? rel.getTargetProfileId().trim().toLowerCase(Locale.ROOT) : "";
+            if ((lower1.contains(owner) && lower2.contains(target)) || (lower2.contains(owner) && lower1.contains(target))) {
+                return rel;
+            }
+        }
+        return null;
+    }
+
+    private void updateAllRelationshipsBetween(Set<String> user1Ids, Set<String> user2Ids, Boolean connected, String status, String senderUserId, List<UserProfileRelationshipEntity> allRels) {
+        Set<String> lower1 = user1Ids.stream().map(s -> s.toLowerCase(Locale.ROOT)).collect(Collectors.toSet());
+        Set<String> lower2 = user2Ids.stream().map(s -> s.toLowerCase(Locale.ROOT)).collect(Collectors.toSet());
+        boolean foundAny = false;
+        java.time.LocalDateTime now = java.time.LocalDateTime.now();
+        for (UserProfileRelationshipEntity rel : allRels) {
+            if (rel == null) continue;
+            String owner = rel.getOwnerUserId() != null ? rel.getOwnerUserId().trim().toLowerCase(Locale.ROOT) : "";
+            String target = rel.getTargetProfileId() != null ? rel.getTargetProfileId().trim().toLowerCase(Locale.ROOT) : "";
+            if ((lower1.contains(owner) && lower2.contains(target)) || (lower2.contains(owner) && lower1.contains(target))) {
+                if (connected != null) rel.setConnected(connected);
+                rel.setStatus(status);
+                rel.setSenderUserId(senderUserId);
+                rel.setUpdatedAt(now);
+                relationshipRepository.save(rel);
+                foundAny = true;
+            }
+        }
+        if (!foundAny && !user1Ids.isEmpty() && !user2Ids.isEmpty()) {
+            String p1 = user1Ids.iterator().next();
+            String p2 = user2Ids.iterator().next();
+            UserProfileRelationshipEntity r1 = new UserProfileRelationshipEntity();
+            r1.setOwnerUserId(p1);
+            r1.setTargetProfileId(p2);
+            r1.setConnected(connected != null ? connected : false);
+            r1.setStatus(status);
+            r1.setSenderUserId(senderUserId);
+            r1.setCreatedAt(now);
+            r1.setUpdatedAt(now);
+            relationshipRepository.save(r1);
+
+            UserProfileRelationshipEntity r2 = new UserProfileRelationshipEntity();
+            r2.setOwnerUserId(p2);
+            r2.setTargetProfileId(p1);
+            r2.setConnected(connected != null ? connected : false);
+            r2.setStatus(status);
+            r2.setSenderUserId(senderUserId);
+            r2.setCreatedAt(now);
+            r2.setUpdatedAt(now);
+            relationshipRepository.save(r2);
+        }
     }
 
     public List<Map<String, Object>> getSuggestions(String userEmail) {
         Set<String> ownerIds = getOwnerUserIdentifiers(userEmail);
         Set<String> lowerOwnerIds = ownerIds.stream().map(s -> s.toLowerCase(Locale.ROOT)).collect(Collectors.toSet());
-
-        Map<String, UserProfileRelationshipEntity> relationships = new HashMap<>();
-        for (String id : ownerIds) {
-            relationshipRepository.findAllByOwnerUserId(id)
-                    .forEach(r -> relationships.put(r.getTargetProfileId(), r));
-        }
+        List<UserProfileRelationshipEntity> allRels = relationshipRepository.findAll();
 
         Map<String, Map<String, Object>> profiles = new LinkedHashMap<>();
         for (NetworkProfileEntity profile : networkProfileRepository.findAll()) {
@@ -63,10 +186,11 @@ public class ConnectionService {
             }
             Map<String, Object> dto = profile.toDto();
             String profileId = profile.getId();
-            UserProfileRelationshipEntity relationship = relationships.get(profileId);
-            boolean isConnected = relationship != null && relationship.isConnected();
+            Set<String> targetIds = resolveAllUserIdentifiers(profileId);
+            UserProfileRelationshipEntity relationship = findRelationshipBetween(ownerIds, targetIds, allRels);
+            boolean isConnected = relationship != null && (relationship.isConnected() || "ACCEPTED".equalsIgnoreCase(relationship.getStatus()));
             boolean isFollowing = relationship != null && relationship.isFollowing();
-            boolean isPending = relationship != null && "PENDING".equalsIgnoreCase(relationship.getStatus());
+            boolean isPending = relationship != null && !isConnected && "PENDING".equalsIgnoreCase(relationship.getStatus());
             String sender = relationship != null && relationship.getSenderUserId() != null
                     ? relationship.getSenderUserId().toLowerCase(Locale.ROOT)
                     : "";
@@ -85,24 +209,39 @@ public class ConnectionService {
             profiles.put(profileId, dto);
         }
 
-        for (UserProfileRelationshipEntity relationship : relationships.values()) {
+        for (UserProfileRelationshipEntity relationship : allRels) {
             String targetId = relationship.getTargetProfileId();
-            if (targetId != null && !lowerOwnerIds.contains(targetId.toLowerCase(Locale.ROOT))
-                    && !isInvalidTarget(targetId)) {
+            String owner = relationship.getOwnerUserId();
+            String candidateId = null;
+            if (targetId != null && !lowerOwnerIds.contains(targetId.toLowerCase(Locale.ROOT)) && !isInvalidTarget(targetId)) {
+                candidateId = targetId;
+            } else if (owner != null && !lowerOwnerIds.contains(owner.toLowerCase(Locale.ROOT)) && !isInvalidTarget(owner)) {
+                candidateId = owner;
+            }
+            if (candidateId != null) {
+                final String finalCandidateId = candidateId;
                 profiles.computeIfAbsent(
-                        targetId,
+                        finalCandidateId,
                         profileId -> {
-                            Map<String, Object> dto = getProfileDto(profileId, relationship.isConnected(), relationship.isFollowing());
-                            boolean isPend = "PENDING".equalsIgnoreCase(relationship.getStatus());
-                            String sender = relationship.getSenderUserId() != null
-                                    ? relationship.getSenderUserId().toLowerCase(Locale.ROOT)
+                            Set<String> targetIds = resolveAllUserIdentifiers(finalCandidateId);
+                            UserProfileRelationshipEntity rel = findRelationshipBetween(ownerIds, targetIds, allRels);
+                            boolean isConn = rel != null && (rel.isConnected() || "ACCEPTED".equalsIgnoreCase(rel.getStatus()));
+                            boolean isFollow = rel != null && rel.isFollowing();
+                            Map<String, Object> dto = getProfileDto(finalCandidateId, isConn, isFollow);
+                            boolean isPend = rel != null && !isConn && "PENDING".equalsIgnoreCase(rel.getStatus());
+                            String sender = rel != null && rel.getSenderUserId() != null
+                                    ? rel.getSenderUserId().toLowerCase(Locale.ROOT)
                                     : "";
                             boolean isOutPending = isPend && lowerOwnerIds.contains(sender);
                             boolean isInPending = isPend && !isOutPending;
+                            dto.put("isConnected", isConn);
+                            dto.put("connected", isConn);
+                            dto.put("isFollowing", isFollow);
+                            dto.put("following", isFollow);
                             dto.put("isPending", isPend);
                             dto.put("isOutgoingPending", isOutPending);
                             dto.put("isIncomingPending", isInPending);
-                            dto.put("connectionStatus", relationship.isConnected() ? "CONNECTED"
+                            dto.put("connectionStatus", isConn ? "CONNECTED"
                                     : (isPend ? (isOutPending ? "PENDING_OUTGOING" : "PENDING_INCOMING") : "NONE"));
                             return dto;
                         });
@@ -119,7 +258,7 @@ public class ConnectionService {
         Map<String, Map<String, Object>> invitationMap = new LinkedHashMap<>();
 
         for (UserProfileRelationshipEntity rel : allRels) {
-            if (rel == null || !"PENDING".equalsIgnoreCase(rel.getStatus())) {
+            if (rel == null || rel.isConnected() || !"PENDING".equalsIgnoreCase(rel.getStatus())) {
                 continue;
             }
             String owner = rel.getOwnerUserId() != null ? rel.getOwnerUserId().trim().toLowerCase(Locale.ROOT) : "";
@@ -143,7 +282,8 @@ public class ConnectionService {
                 continue;
             }
 
-            if (!invitationMap.containsKey(senderProfileId)) {
+            String key = senderProfileId.toLowerCase(Locale.ROOT);
+            if (!invitationMap.containsKey(key)) {
                 Map<String, Object> senderDto = getProfileDto(senderProfileId, false, false);
                 Map<String, Object> inv = new LinkedHashMap<>();
                 inv.put("id", rel.getId());
@@ -159,7 +299,7 @@ public class ConnectionService {
                 inv.put("mutualConnections", "Cinema Industry member");
                 inv.put("createdAt", rel.getCreatedAt() != null ? rel.getCreatedAt().toString() : "");
                 inv.put("profile", senderDto);
-                invitationMap.put(senderProfileId, inv);
+                invitationMap.put(key, inv);
             }
         }
 
@@ -174,18 +314,18 @@ public class ConnectionService {
         Map<String, Map<String, Object>> connectedMap = new LinkedHashMap<>();
 
         for (UserProfileRelationshipEntity rel : allRels) {
-            if (!rel.isConnected())
+            if (!rel.isConnected() && !"ACCEPTED".equalsIgnoreCase(rel.getStatus()))
                 continue;
             String owner = rel.getOwnerUserId() != null ? rel.getOwnerUserId().trim() : "";
             String target = rel.getTargetProfileId() != null ? rel.getTargetProfileId().trim() : "";
 
             if (lowerOwnerIds.contains(owner.toLowerCase(Locale.ROOT))) {
                 if (!lowerOwnerIds.contains(target.toLowerCase(Locale.ROOT)) && !isInvalidTarget(target)) {
-                    connectedMap.putIfAbsent(target, getProfileDto(target, true, rel.isFollowing()));
+                    connectedMap.putIfAbsent(target.toLowerCase(Locale.ROOT), getProfileDto(target, true, rel.isFollowing()));
                 }
             } else if (lowerOwnerIds.contains(target.toLowerCase(Locale.ROOT))) {
                 if (!lowerOwnerIds.contains(owner.toLowerCase(Locale.ROOT)) && !isInvalidTarget(owner)) {
-                    connectedMap.putIfAbsent(owner, getProfileDto(owner, true, rel.isFollowing()));
+                    connectedMap.putIfAbsent(owner.toLowerCase(Locale.ROOT), getProfileDto(owner, true, rel.isFollowing()));
                 }
             }
         }
@@ -197,16 +337,17 @@ public class ConnectionService {
         String targetProfileId = requireProfileId(profileId);
         Set<String> ownerIds = getOwnerUserIdentifiers(userEmail);
         Set<String> lowerOwnerIds = ownerIds.stream().map(s -> s.toLowerCase(Locale.ROOT)).collect(Collectors.toSet());
+        Set<String> targetIds = resolveAllUserIdentifiers(targetProfileId);
 
         if (lowerOwnerIds.contains(targetProfileId.toLowerCase(Locale.ROOT))) {
             throw new BadRequestException("You cannot connect with your own profile");
         }
 
         String primaryOwnerId = getPrimaryOwnerUserId(userEmail);
-        UserProfileRelationshipEntity relationship = getOrCreateRelationship(primaryOwnerId, targetProfileId);
-        UserProfileRelationshipEntity reciprocal = getOrCreateRelationship(targetProfileId, primaryOwnerId);
+        List<UserProfileRelationshipEntity> allRels = relationshipRepository.findAll();
+        UserProfileRelationshipEntity existingRel = findRelationshipBetween(ownerIds, targetIds, allRels);
 
-        if (relationship.isConnected()) {
+        if (existingRel != null && (existingRel.isConnected() || "ACCEPTED".equalsIgnoreCase(existingRel.getStatus()))) {
             Map<String, Object> res = new HashMap<>();
             res.put("id", targetProfileId);
             res.put("profileId", targetProfileId);
@@ -219,27 +360,13 @@ public class ConnectionService {
         }
 
         // If target already sent us an invitation, sending connect is accepting it!
-        if ("PENDING".equalsIgnoreCase(relationship.getStatus())
-                && relationship.getSenderUserId() != null
-                && !lowerOwnerIds.contains(relationship.getSenderUserId().toLowerCase(Locale.ROOT))) {
+        if (existingRel != null && "PENDING".equalsIgnoreCase(existingRel.getStatus())
+                && existingRel.getSenderUserId() != null
+                && !lowerOwnerIds.contains(existingRel.getSenderUserId().toLowerCase(Locale.ROOT))) {
             return acceptConnection(targetProfileId, userEmail);
         }
 
-        java.time.LocalDateTime now = java.time.LocalDateTime.now();
-
-        relationship.setConnected(false);
-        relationship.setStatus("PENDING");
-        relationship.setSenderUserId(primaryOwnerId);
-        relationship.setCreatedAt(now);
-        relationship.setUpdatedAt(now);
-        relationshipRepository.save(relationship);
-
-        reciprocal.setConnected(false);
-        reciprocal.setStatus("PENDING");
-        reciprocal.setSenderUserId(primaryOwnerId);
-        reciprocal.setCreatedAt(now);
-        reciprocal.setUpdatedAt(now);
-        relationshipRepository.save(reciprocal);
+        updateAllRelationshipsBetween(ownerIds, targetIds, false, "PENDING", primaryOwnerId, allRels);
 
         String targetName = getProfileName(targetProfileId);
         String ownerName = getProfileName(primaryOwnerId);
@@ -255,6 +382,8 @@ public class ConnectionService {
                 "Invitation Sent",
                 "You sent a connection invitation to " + targetName + ".",
                 "connection_request"));
+
+        broadcastConnectionEvent("REQUEST_SENT", primaryOwnerId, targetProfileId, false, true);
 
         Map<String, Object> res = new HashMap<>();
         res.put("id", targetProfileId);
@@ -273,26 +402,15 @@ public class ConnectionService {
         String requesterProfileId = requireProfileId(profileId);
         Set<String> ownerIds = getOwnerUserIdentifiers(userEmail);
         Set<String> lowerOwnerIds = ownerIds.stream().map(s -> s.toLowerCase(Locale.ROOT)).collect(Collectors.toSet());
+        Set<String> requesterIds = resolveAllUserIdentifiers(requesterProfileId);
 
         if (lowerOwnerIds.contains(requesterProfileId.toLowerCase(Locale.ROOT))) {
             throw new BadRequestException("You cannot connect with your own profile");
         }
 
         String primaryOwnerId = getPrimaryOwnerUserId(userEmail);
-        UserProfileRelationshipEntity relationship = getOrCreateRelationship(primaryOwnerId, requesterProfileId);
-        UserProfileRelationshipEntity reciprocal = getOrCreateRelationship(requesterProfileId, primaryOwnerId);
-
-        java.time.LocalDateTime now = java.time.LocalDateTime.now();
-
-        relationship.setConnected(true);
-        relationship.setStatus("ACCEPTED");
-        relationship.setUpdatedAt(now);
-        relationshipRepository.save(relationship);
-
-        reciprocal.setConnected(true);
-        reciprocal.setStatus("ACCEPTED");
-        reciprocal.setUpdatedAt(now);
-        relationshipRepository.save(reciprocal);
+        List<UserProfileRelationshipEntity> allRels = relationshipRepository.findAll();
+        updateAllRelationshipsBetween(ownerIds, requesterIds, true, "ACCEPTED", requesterProfileId, allRels);
 
         String requesterName = getProfileName(requesterProfileId);
         String ownerName = getProfileName(primaryOwnerId);
@@ -309,6 +427,8 @@ public class ConnectionService {
                 "You are now connected with " + requesterName + " on TrueHunt.",
                 "connection"));
 
+        broadcastConnectionEvent("REQUEST_ACCEPTED", requesterProfileId, primaryOwnerId, true, false);
+
         Map<String, Object> res = new HashMap<>();
         res.put("id", requesterProfileId);
         res.put("profileId", requesterProfileId);
@@ -324,20 +444,13 @@ public class ConnectionService {
     public Map<String, Object> rejectConnection(String profileId, String userEmail) {
         String requesterProfileId = requireProfileId(profileId);
         String primaryOwnerId = getPrimaryOwnerUserId(userEmail);
+        Set<String> ownerIds = getOwnerUserIdentifiers(userEmail);
+        Set<String> requesterIds = resolveAllUserIdentifiers(requesterProfileId);
 
-        UserProfileRelationshipEntity relationship = getOrCreateRelationship(primaryOwnerId, requesterProfileId);
-        UserProfileRelationshipEntity reciprocal = getOrCreateRelationship(requesterProfileId, primaryOwnerId);
+        List<UserProfileRelationshipEntity> allRels = relationshipRepository.findAll();
+        updateAllRelationshipsBetween(ownerIds, requesterIds, false, "REJECTED", null, allRels);
 
-        java.time.LocalDateTime now = java.time.LocalDateTime.now();
-        relationship.setConnected(false);
-        relationship.setStatus("REJECTED");
-        relationship.setUpdatedAt(now);
-        relationshipRepository.save(relationship);
-
-        reciprocal.setConnected(false);
-        reciprocal.setStatus("REJECTED");
-        reciprocal.setUpdatedAt(now);
-        relationshipRepository.save(reciprocal);
+        broadcastConnectionEvent("REQUEST_REJECTED", requesterProfileId, primaryOwnerId, false, false);
 
         Map<String, Object> res = new HashMap<>();
         res.put("id", requesterProfileId);
@@ -354,22 +467,13 @@ public class ConnectionService {
     public Map<String, Object> cancelConnectionRequest(String profileId, String userEmail) {
         String targetProfileId = requireProfileId(profileId);
         String primaryOwnerId = getPrimaryOwnerUserId(userEmail);
+        Set<String> ownerIds = getOwnerUserIdentifiers(userEmail);
+        Set<String> targetIds = resolveAllUserIdentifiers(targetProfileId);
 
-        UserProfileRelationshipEntity relationship = getOrCreateRelationship(primaryOwnerId, targetProfileId);
-        UserProfileRelationshipEntity reciprocal = getOrCreateRelationship(targetProfileId, primaryOwnerId);
+        List<UserProfileRelationshipEntity> allRels = relationshipRepository.findAll();
+        updateAllRelationshipsBetween(ownerIds, targetIds, false, null, null, allRels);
 
-        java.time.LocalDateTime now = java.time.LocalDateTime.now();
-        relationship.setConnected(false);
-        relationship.setStatus(null);
-        relationship.setSenderUserId(null);
-        relationship.setUpdatedAt(now);
-        relationshipRepository.save(relationship);
-
-        reciprocal.setConnected(false);
-        reciprocal.setStatus(null);
-        reciprocal.setSenderUserId(null);
-        reciprocal.setUpdatedAt(now);
-        relationshipRepository.save(reciprocal);
+        broadcastConnectionEvent("REQUEST_CANCELLED", primaryOwnerId, targetProfileId, false, false);
 
         Map<String, Object> res = new HashMap<>();
         res.put("id", targetProfileId);
@@ -388,29 +492,20 @@ public class ConnectionService {
         String targetProfileId = requireProfileId(profileId);
         Set<String> ownerIds = getOwnerUserIdentifiers(userEmail);
         Set<String> lowerOwnerIds = ownerIds.stream().map(s -> s.toLowerCase(Locale.ROOT)).collect(Collectors.toSet());
+        Set<String> targetIds = resolveAllUserIdentifiers(targetProfileId);
 
         if (lowerOwnerIds.contains(targetProfileId.toLowerCase(Locale.ROOT))) {
             throw new BadRequestException("You cannot connect with your own profile");
         }
 
         String primaryOwnerId = getPrimaryOwnerUserId(userEmail);
-        UserProfileRelationshipEntity relationship = getOrCreateRelationship(primaryOwnerId, targetProfileId);
+        List<UserProfileRelationshipEntity> allRels = relationshipRepository.findAll();
+        UserProfileRelationshipEntity relationship = findRelationshipBetween(ownerIds, targetIds, allRels);
 
         // 1. If currently connected -> disconnect
-        if (relationship.isConnected()) {
-            java.time.LocalDateTime now = java.time.LocalDateTime.now();
-            relationship.setConnected(false);
-            relationship.setStatus(null);
-            relationship.setSenderUserId(null);
-            relationship.setUpdatedAt(now);
-            relationshipRepository.save(relationship);
-
-            UserProfileRelationshipEntity reciprocal = getOrCreateRelationship(targetProfileId, primaryOwnerId);
-            reciprocal.setConnected(false);
-            reciprocal.setStatus(null);
-            reciprocal.setSenderUserId(null);
-            reciprocal.setUpdatedAt(now);
-            relationshipRepository.save(reciprocal);
+        if (relationship != null && (relationship.isConnected() || "ACCEPTED".equalsIgnoreCase(relationship.getStatus()))) {
+            updateAllRelationshipsBetween(ownerIds, targetIds, false, null, null, allRels);
+            broadcastConnectionEvent("DISCONNECTED", primaryOwnerId, targetProfileId, false, false);
 
             String targetName = getProfileName(targetProfileId);
             Map<String, Object> res = new HashMap<>();
@@ -425,7 +520,7 @@ public class ConnectionService {
         }
 
         // 2. If currently pending:
-        if ("PENDING".equalsIgnoreCase(relationship.getStatus())) {
+        if (relationship != null && "PENDING".equalsIgnoreCase(relationship.getStatus())) {
             String sender = relationship.getSenderUserId() != null
                     ? relationship.getSenderUserId().toLowerCase(Locale.ROOT)
                     : "";
@@ -694,17 +789,9 @@ public class ConnectionService {
         }
 
         String primaryOwnerId = getPrimaryOwnerUserId(userEmail);
-        UserProfileRelationshipEntity rel1 = getOrCreateRelationship(primaryOwnerId, targetProfileId);
-        rel1.setConnected(true);
-        rel1.setStatus("ACCEPTED");
-        rel1.setUpdatedAt(java.time.LocalDateTime.now());
-        relationshipRepository.save(rel1);
-
-        UserProfileRelationshipEntity rel2 = getOrCreateRelationship(targetProfileId, primaryOwnerId);
-        rel2.setConnected(true);
-        rel2.setStatus("ACCEPTED");
-        rel2.setUpdatedAt(java.time.LocalDateTime.now());
-        relationshipRepository.save(rel2);
+        Set<String> targetIds = resolveAllUserIdentifiers(targetProfileId);
+        List<UserProfileRelationshipEntity> allRels = relationshipRepository.findAll();
+        updateAllRelationshipsBetween(ownerIds, targetIds, true, "ACCEPTED", targetProfileId, allRels);
 
         String targetName = getProfileName(targetProfileId);
         String ownerName = getProfileName(primaryOwnerId);
@@ -719,6 +806,8 @@ public class ConnectionService {
                 "New Connection Established",
                 ownerName + " connected with you on TrueHunt.",
                 "connection"));
+
+        broadcastConnectionEvent("REQUEST_ACCEPTED", targetProfileId, primaryOwnerId, true, false);
 
         Map<String, Object> res = new HashMap<>();
         res.put("talentId", targetProfileId);
