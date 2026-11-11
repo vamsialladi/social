@@ -1,0 +1,6 @@
+*.lock.db
+backend/target/
+backend/data/
+data/
+scratch/
+
