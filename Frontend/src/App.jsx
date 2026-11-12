@@ -13,6 +13,8 @@ import LcmAppPage from './pages/LcmAppPage';
 import GetSupportPage from './pages/GetSupportPage';
 import SignInPage from './pages/SignInPage';
 import JoinNowPage from './pages/JoinNowPage';
+import ForgotPasswordPage from './pages/ForgotPasswordPage';
+import ResetPasswordPage from './pages/ResetPasswordPage';
 import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
 import TermsPage from './pages/TermsPage';
 import ProtectProducerLandingPage from './pages/ProtectProducerLandingPage';
@@ -90,6 +92,8 @@ export default function App() {
               <Route path="about" element={<AboutUsPage />} />
               <Route path="sign-in" element={<SignInPage />} />
               <Route path="join-now" element={<JoinNowPage />} />
+              <Route path="forgot-password" element={<ForgotPasswordPage />} />
+              <Route path="reset-password" element={<ResetPasswordPage />} />
               <Route path="privacy-policy" element={<PrivacyPolicyPage />} />
               <Route path="terms-and-conditions" element={<TermsPage />} />
               <Route path="*" element={<NotFoundPage />} />

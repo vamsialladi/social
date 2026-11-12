@@ -4,15 +4,28 @@ import com.truehunt.social.dto.*;
 import com.truehunt.social.exception.BadRequestException;
 import com.truehunt.social.exception.ConflictException;
 import com.truehunt.social.exception.UnauthorizedException;
+import com.truehunt.social.model.PasswordResetTokenEntity;
 import com.truehunt.social.model.ProfileEntity;
 import com.truehunt.social.model.UserAccountEntity;
+import com.truehunt.social.repository.PasswordResetTokenRepository;
 import com.truehunt.social.repository.ProfileRepository;
 import com.truehunt.social.repository.UserAccountRepository;
 import com.truehunt.social.security.JwtTokenProvider;
+import com.truehunt.social.security.LoginRateLimiter;
+import com.truehunt.social.validation.PasswordPolicy;
+import com.truehunt.social.validation.PhoneNumberPolicy;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.*;
@@ -20,20 +33,42 @@ import java.util.*;
 @Service
 public class AuthService {
 
+    private static final Logger log = LoggerFactory.getLogger(AuthService.class);
+    private static final String DUPLICATE_EMAIL_MESSAGE =
+            "This email is already registered. Please use another email address.";
+    private static final String DUPLICATE_PHONE_MESSAGE =
+            "This phone number is already registered. Please use another phone number.";
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
     private final ProfileRepository profileRepository;
     private final UserAccountRepository userAccountRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider tokenProvider;
+    private final PasswordResetTokenRepository passwordResetTokenRepository;
+    private final LoginRateLimiter loginRateLimiter;
+    private final long resetTokenTtlMinutes;
 
     public AuthService(ProfileRepository profileRepository,
                        UserAccountRepository userAccountRepository,
                        PasswordEncoder passwordEncoder,
                        JwtTokenProvider tokenProvider) {
+        this(profileRepository, userAccountRepository, passwordEncoder, tokenProvider, null, null, 15);
+    }
+
+    @Autowired
+    public AuthService(ProfileRepository profileRepository,
+                       UserAccountRepository userAccountRepository,
+                       PasswordEncoder passwordEncoder,
+                       JwtTokenProvider tokenProvider,
+                       PasswordResetTokenRepository passwordResetTokenRepository,
+                       LoginRateLimiter loginRateLimiter,
+                       @Value("${app.auth.reset-token-ttl-minutes:15}") long resetTokenTtlMinutes) {
         this.profileRepository = profileRepository;
         this.userAccountRepository = userAccountRepository;
         this.passwordEncoder = passwordEncoder;
         this.tokenProvider = tokenProvider;
+        this.passwordResetTokenRepository = passwordResetTokenRepository;
+        this.loginRateLimiter = loginRateLimiter;
+        this.resetTokenTtlMinutes = resetTokenTtlMinutes;
     }
 
     public OtpResponse sendOtp(OtpRequest req) {
@@ -50,18 +85,35 @@ public class AuthService {
 
     @Transactional
     public AuthResponse login(LoginRequest credentials) {
+        return login(credentials, null);
+    }
+
+    @Transactional
+    public AuthResponse login(LoginRequest credentials, String clientIp) {
         String email = normalizeEmail(credentials.getEmail());
         if (email == null) {
             throw new BadRequestException("Email is required.");
         }
 
-        UserAccountEntity user = userAccountRepository.findByEmail(email)
-                .orElseThrow(() -> new UnauthorizedException("INVALID_CREDENTIALS", "Invalid email or password."));
+        if (loginRateLimiter != null) {
+            loginRateLimiter.checkAllowed(email, clientIp);
+        }
 
-        if (credentials.getPassword() == null || !passwordEncoder.matches(credentials.getPassword(), user.getPasswordHash())) {
+        Optional<UserAccountEntity> userOpt = userAccountRepository.findByEmail(email);
+        if (userOpt.isEmpty()
+                || credentials.getPassword() == null
+                || !passwordEncoder.matches(credentials.getPassword(), userOpt.get().getPasswordHash())) {
+            if (loginRateLimiter != null) {
+                loginRateLimiter.recordFailure(email, clientIp);
+            }
             throw new UnauthorizedException("INVALID_CREDENTIALS", "Invalid email or password.");
         }
 
+        if (loginRateLimiter != null) {
+            loginRateLimiter.clearFailures(email, clientIp);
+        }
+
+        UserAccountEntity user = userOpt.get();
         ensurePublicUserId(user);
 
         String token = tokenProvider.generateToken(user.getEmail(), user.getRole());
@@ -72,8 +124,8 @@ public class AuthService {
     @Transactional
     public AuthResponse register(RegisterRequest req) {
         String email = normalizeEmail(req.getEmail());
-        if (email == null) {
-            throw new BadRequestException("Valid email is required.");
+        if (email == null || email.isBlank()) {
+            throw new BadRequestException("VALIDATION_ERROR", "Email is required.", Map.of("email", "Email is required."));
         }
 
         String name = req.getName();
@@ -81,35 +133,34 @@ public class AuthService {
             throw new BadRequestException("Name is required.");
         }
 
-        if (req.getPassword() == null || req.getPassword().isBlank()) {
-            throw new BadRequestException("Password is required.");
+        PasswordPolicy.requireValid(req.getPassword(), "password");
+        PasswordPolicy.requireConfirmed(req.getPassword(), req.getConfirmPassword(), false);
+        String normalizedPhone = PhoneNumberPolicy.validateAndNormalize(req.getPhone());
+
+        if (userAccountRepository.existsByEmail(email) || userAccountRepository.existsByEmailIgnoreCase(email)) {
+            throw duplicateEmailConflict();
+        }
+        userAccountRepository.findByEmail(email).ifPresent(existing -> {
+            if ("ADMIN".equalsIgnoreCase(existing.getRole())) {
+                throw new ConflictException("This email is reserved for an administrator account.");
+            }
+            throw duplicateEmailConflict();
+        });
+
+        if (normalizedPhone != null && userAccountRepository.existsByPhoneNumber(normalizedPhone)) {
+            throw duplicatePhoneConflict();
         }
 
         String reqRole = req.getRole();
         String role = ("PRODUCER".equalsIgnoreCase(reqRole) || "STUDIO".equalsIgnoreCase(reqRole)) ? "STUDIO" : "TALENT";
 
-        Optional<UserAccountEntity> existingOpt = userAccountRepository.findByEmail(email);
-        UserAccountEntity user;
-        String publicUserId;
-
-        if (existingOpt.isPresent()) {
-            user = existingOpt.get();
-            if ("ADMIN".equalsIgnoreCase(user.getRole())) {
-                throw new ConflictException("This email is reserved for an administrator account.");
-            }
-            publicUserId = user.getPublicUserId() != null
-                    ? user.getPublicUserId()
-                    : generateUniquePublicUserId(name, role);
-        } else {
-            user = new UserAccountEntity();
-            publicUserId = generateUniquePublicUserId(name, role);
-            user.setCreatedAt(LocalDateTime.now());
-        }
-
+        UserAccountEntity user = new UserAccountEntity();
+        String publicUserId = generateUniquePublicUserId(name, role);
+        user.setCreatedAt(LocalDateTime.now());
         user.setEmail(email);
         user.setPasswordHash(passwordEncoder.encode(req.getPassword()));
         user.setName(name);
-        user.setPhone(req.getPhone());
+        user.setPhone(normalizedPhone);
         user.setRole(role);
         user.setPublicUserId(publicUserId);
         user.setPrimaryCraft(req.getPrimaryCraft());
@@ -118,7 +169,18 @@ public class AuthService {
         user.setCompanyName(req.getCompanyName());
         user.setHeadquarters(req.getHeadquarters());
         user.setAcceptedTerms(req.getAcceptedTerms());
-        userAccountRepository.save(user);
+        try {
+            userAccountRepository.save(user);
+            userAccountRepository.flush();
+        } catch (DataIntegrityViolationException ex) {
+            if (isEmailUniqueViolation(ex)) {
+                throw duplicateEmailConflict();
+            }
+            if (isPhoneUniqueViolation(ex, normalizedPhone)) {
+                throw duplicatePhoneConflict();
+            }
+            throw ex;
+        }
 
         // Ensure Profile Entity exists
         ProfileEntity profile = profileRepository.findByUserId(publicUserId)
@@ -206,6 +268,151 @@ public class AuthService {
         if (token != null) {
             tokenProvider.invalidateToken(token);
         }
+    }
+
+    @Transactional
+    public Map<String, String> requestPasswordReset(ForgotPasswordRequest req) {
+        String email = req != null ? normalizeEmail(req.getEmail()) : null;
+        if (email == null || email.isBlank()) {
+            throw new BadRequestException("Email is required.");
+        }
+
+        if (passwordResetTokenRepository != null) {
+            userAccountRepository.findByEmail(email).ifPresent(user -> {
+                invalidateActiveResetTokens(user.getEmail());
+
+                byte[] randomBytes = new byte[32];
+                SECURE_RANDOM.nextBytes(randomBytes);
+                String rawToken = Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);
+
+                PasswordResetTokenEntity entity = new PasswordResetTokenEntity();
+                entity.setEmail(user.getEmail());
+                entity.setTokenHash(sha256Hex(rawToken));
+                entity.setExpiresAt(LocalDateTime.now().plusMinutes(resetTokenTtlMinutes));
+                entity.setUsed(false);
+                entity.setCreatedAt(LocalDateTime.now());
+                passwordResetTokenRepository.save(entity);
+
+                deliverPasswordResetToken(user.getEmail(), rawToken);
+            });
+        }
+
+        return Map.of("message", "If an account exists for that email, password reset instructions have been sent.");
+    }
+
+    @Transactional
+    public Map<String, String> resetPassword(ResetPasswordRequest req) {
+        if (req == null || req.getToken() == null || req.getToken().isBlank()) {
+            throw new BadRequestException("INVALID_RESET_TOKEN", "Invalid or expired password reset token.");
+        }
+
+        PasswordPolicy.requireValid(req.getNewPassword(), "newPassword");
+        PasswordPolicy.requireConfirmed(req.getNewPassword(), req.getConfirmPassword(), true);
+
+        if (passwordResetTokenRepository == null) {
+            throw new BadRequestException("INVALID_RESET_TOKEN", "Invalid or expired password reset token.");
+        }
+
+        String tokenHash = sha256Hex(req.getToken().trim());
+        PasswordResetTokenEntity resetToken = passwordResetTokenRepository.findByTokenHash(tokenHash)
+                .orElseThrow(() -> new BadRequestException("INVALID_RESET_TOKEN", "Invalid or expired password reset token."));
+
+        if (resetToken.isUsed() || resetToken.getExpiresAt().isBefore(LocalDateTime.now())) {
+            throw new BadRequestException("INVALID_RESET_TOKEN", "Invalid or expired password reset token.");
+        }
+
+        UserAccountEntity user = userAccountRepository.findByEmail(normalizeEmail(resetToken.getEmail()))
+                .orElseThrow(() -> new BadRequestException("INVALID_RESET_TOKEN", "Invalid or expired password reset token."));
+
+        user.setPasswordHash(passwordEncoder.encode(req.getNewPassword()));
+        userAccountRepository.save(user);
+
+        resetToken.setUsed(true);
+        passwordResetTokenRepository.save(resetToken);
+        invalidateActiveResetTokens(user.getEmail());
+        if (loginRateLimiter != null) {
+            loginRateLimiter.clearFailuresForEmail(user.getEmail());
+        }
+
+        return Map.of("message", "Password has been reset successfully.");
+    }
+
+    public void deliverPasswordResetToken(String email, String rawToken) {
+        // Deliberately avoid logging raw tokens or sensitive credential details.
+        log.info("Password reset token generated and queued for delivery");
+    }
+
+    private void invalidateActiveResetTokens(String email) {
+        List<PasswordResetTokenEntity> active = passwordResetTokenRepository.findByEmailIgnoreCaseAndUsedFalse(email);
+        if (!active.isEmpty()) {
+            for (PasswordResetTokenEntity existing : active) {
+                existing.setUsed(true);
+            }
+            passwordResetTokenRepository.saveAll(active);
+        }
+    }
+
+    private String sha256Hex(String value) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(value.getBytes(StandardCharsets.UTF_8));
+            StringBuilder hex = new StringBuilder(hash.length * 2);
+            for (byte b : hash) {
+                hex.append(String.format(Locale.ROOT, "%02x", b));
+            }
+            return hex.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 algorithm is unavailable", e);
+        }
+    }
+
+    private ConflictException duplicateEmailConflict() {
+        return new ConflictException(
+                "DUPLICATE_EMAIL",
+                DUPLICATE_EMAIL_MESSAGE,
+                Map.of("email", DUPLICATE_EMAIL_MESSAGE)
+        );
+    }
+
+    private boolean isEmailUniqueViolation(Throwable ex) {
+        Throwable current = ex;
+        while (current != null) {
+            String msg = current.getMessage();
+            if (msg != null) {
+                String lower = msg.toLowerCase(Locale.ROOT);
+                if (lower.contains("uk_user_accounts_email") || lower.contains("(email")) {
+                    return true;
+                }
+            }
+            current = current.getCause();
+        }
+        return false;
+    }
+
+    private ConflictException duplicatePhoneConflict() {
+        return new ConflictException(
+                "DUPLICATE_PHONE_NUMBER",
+                DUPLICATE_PHONE_MESSAGE,
+                Map.of("phoneNumber", DUPLICATE_PHONE_MESSAGE)
+        );
+    }
+
+    private boolean isPhoneUniqueViolation(Throwable ex, String normalizedPhone) {
+        if (normalizedPhone == null) {
+            return false;
+        }
+        Throwable current = ex;
+        while (current != null) {
+            String msg = current.getMessage();
+            if (msg != null) {
+                String lower = msg.toLowerCase(Locale.ROOT);
+                if (lower.contains("uk_user_accounts_phone_number") || lower.contains("phone_number")) {
+                    return true;
+                }
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 
     private String normalizeEmail(String email) {

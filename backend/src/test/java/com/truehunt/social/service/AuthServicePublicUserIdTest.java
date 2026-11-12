@@ -87,7 +87,8 @@ class AuthServicePublicUserIdTest {
         RegisterRequest request = new RegisterRequest();
         request.setName("Alex Morgan");
         request.setEmail("alex@example.com");
-        request.setPassword("password");
+        request.setPassword("Password@123");
+        request.setConfirmPassword("Password@123");
         request.setRole(role);
         return request;
     }

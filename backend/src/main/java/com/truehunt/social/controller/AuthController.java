@@ -2,6 +2,7 @@ package com.truehunt.social.controller;
 
 import com.truehunt.social.dto.*;
 import com.truehunt.social.service.AuthService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -31,8 +32,11 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public ResponseEntity<ApiResponse<AuthResponse>> login(@Valid @RequestBody LoginRequest credentials) {
-        AuthResponse resp = authService.login(credentials);
+    public ResponseEntity<ApiResponse<AuthResponse>> login(
+            @Valid @RequestBody LoginRequest credentials,
+            HttpServletRequest request
+    ) {
+        AuthResponse resp = authService.login(credentials, resolveClientIp(request));
         return ResponseEntity.ok(ApiResponse.success(resp));
     }
 
@@ -40,6 +44,16 @@ public class AuthController {
     public ResponseEntity<ApiResponse<AuthResponse>> register(@Valid @RequestBody RegisterRequest req) {
         AuthResponse resp = authService.register(req);
         return ResponseEntity.ok(ApiResponse.success(resp));
+    }
+
+    @PostMapping("/forgot-password")
+    public ResponseEntity<ApiResponse<Map<String, String>>> forgotPassword(@Valid @RequestBody ForgotPasswordRequest req) {
+        return ResponseEntity.ok(ApiResponse.success(authService.requestPasswordReset(req)));
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<ApiResponse<Map<String, String>>> resetPassword(@Valid @RequestBody ResetPasswordRequest req) {
+        return ResponseEntity.ok(ApiResponse.success(authService.resetPassword(req)));
     }
 
     @GetMapping("/me")
@@ -66,5 +80,16 @@ public class AuthController {
         String token = (authHeader != null && authHeader.startsWith("Bearer ")) ? authHeader.substring(7) : null;
         authService.logout(token);
         return ResponseEntity.ok(ApiResponse.success(Map.of("message", "Logged out successfully")));
+    }
+
+    private String resolveClientIp(HttpServletRequest request) {
+        if (request == null) {
+            return null;
+        }
+        String forwarded = request.getHeader("X-Forwarded-For");
+        if (forwarded != null && !forwarded.isBlank()) {
+            return forwarded.split(",")[0].trim();
+        }
+        return request.getRemoteAddr();
     }
 }

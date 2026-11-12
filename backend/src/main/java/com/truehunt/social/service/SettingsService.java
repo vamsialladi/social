@@ -8,6 +8,7 @@ import com.truehunt.social.model.UserAccountEntity;
 import com.truehunt.social.repository.NetworkProfileRepository;
 import com.truehunt.social.repository.ProfileRepository;
 import com.truehunt.social.repository.UserAccountRepository;
+import com.truehunt.social.validation.PasswordPolicy;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,21 +19,24 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class SettingsService {
+
+    private static final Map<String, Object> DEFAULT_NOTIFICATION_PREFERENCES = Map.of(
+            "emailNotifications", true,
+            "pushNotifications", true,
+            "opportunityAlerts", true,
+            "messageAlerts", true
+    );
 
     private final UserAccountRepository userAccountRepository;
     private final ProfileRepository profileRepository;
     private final NetworkProfileRepository networkProfileRepository;
     private final PasswordEncoder passwordEncoder;
-    private String currentTheme = "dark";
-    private final Map<String, Object> notificationPreferences = new HashMap<>(Map.of(
-            "emailNotifications", true,
-            "pushNotifications", true,
-            "opportunityAlerts", true,
-            "messageAlerts", true
-    ));
+    private final Map<String, String> userThemes = new ConcurrentHashMap<>();
+    private final Map<String, Map<String, Object>> userNotificationPreferences = new ConcurrentHashMap<>();
 
     public SettingsService(UserAccountRepository userAccountRepository,
                            ProfileRepository profileRepository,
@@ -44,30 +48,62 @@ public class SettingsService {
         this.passwordEncoder = passwordEncoder;
     }
 
+    private String resolveSettingsKey(String caller) {
+        if (caller == null || caller.isBlank()) {
+            return "default";
+        }
+        return resolveUserAccount(caller)
+                .map(UserAccountEntity::getEmail)
+                .filter(email -> email != null && !email.isBlank())
+                .map(email -> email.trim().toLowerCase(Locale.ROOT))
+                .orElseGet(() -> caller.trim().toLowerCase(Locale.ROOT));
+    }
+
+    private Map<String, Object> getOrCreatePreferences(String key) {
+        return userNotificationPreferences.computeIfAbsent(key, ignored -> new ConcurrentHashMap<>(DEFAULT_NOTIFICATION_PREFERENCES));
+    }
+
     public Map<String, Object> getSettings() {
+        return getSettings(null);
+    }
+
+    public Map<String, Object> getSettings(String caller) {
+        String key = resolveSettingsKey(caller);
         Map<String, Object> settings = new HashMap<>();
-        settings.put("theme", currentTheme);
-        settings.put("notifications", notificationPreferences);
+        settings.put("theme", userThemes.getOrDefault(key, "dark"));
+        settings.put("notifications", new HashMap<>(getOrCreatePreferences(key)));
         settings.put("platformVersion", "2.4.0");
         return settings;
     }
 
     public Map<String, Object> updateTheme(String theme) {
-        if (theme != null && !theme.isBlank()) {
-            this.currentTheme = theme;
-        }
+        return updateTheme(theme, null);
+    }
+
+    public Map<String, Object> updateTheme(String theme, String caller) {
+        String key = resolveSettingsKey(caller);
+        String resolvedTheme = (theme != null && !theme.isBlank())
+                ? theme
+                : userThemes.getOrDefault(key, "dark");
+        userThemes.put(key, resolvedTheme);
         Map<String, Object> res = new HashMap<>();
-        res.put("theme", currentTheme);
+        res.put("theme", resolvedTheme);
         res.put("message", "Theme updated successfully");
         return res;
     }
 
     public Map<String, Object> updateNotificationPreferences(Map<String, Object> prefs) {
+        return updateNotificationPreferences(prefs, null);
+    }
+
+    public Map<String, Object> updateNotificationPreferences(Map<String, Object> prefs, String caller) {
+        String key = resolveSettingsKey(caller);
+        Map<String, Object> userPrefs = getOrCreatePreferences(key);
         if (prefs != null) {
-            this.notificationPreferences.putAll(prefs);
+            userPrefs.putAll(prefs);
         }
         Map<String, Object> res = new HashMap<>();
-        res.put("notifications", notificationPreferences);
+        res.put("notifications", new HashMap<>(userPrefs));
         res.put("message", "Preferences saved successfully");
         return res;
     }
@@ -96,6 +132,9 @@ public class SettingsService {
         if (!passwordEncoder.matches(req.getCurrentPassword(), user.getPasswordHash())) {
             throw new BadRequestException("INVALID_PASSWORD", "Current password does not match.");
         }
+
+        PasswordPolicy.requireValid(req.getNewPassword(), "newPassword");
+        PasswordPolicy.requireConfirmed(req.getNewPassword(), req.getConfirmPassword(), false);
 
         user.setPasswordHash(passwordEncoder.encode(req.getNewPassword()));
         userAccountRepository.save(user);

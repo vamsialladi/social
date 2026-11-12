@@ -39,8 +39,15 @@ async function fetchJson(endpoint, options = {}) {
     let errorData = null;
     try {
       errorData = await response.json();
-      if (errorData?.error?.message) {
+      const fieldError = errorData?.errors && typeof errorData.errors === "object"
+        ? (errorData.errors.newPassword || errorData.errors.password || errorData.errors.confirmPassword || Object.values(errorData.errors)[0])
+        : "";
+      if (fieldError) {
+        errorMsg = fieldError;
+      } else if (errorData?.error?.message) {
         errorMsg = errorData.error.message;
+      } else if (errorData?.message) {
+        errorMsg = errorData.message;
       }
     } catch {
       // ignore

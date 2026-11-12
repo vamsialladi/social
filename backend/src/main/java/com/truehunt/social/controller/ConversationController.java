@@ -126,22 +126,32 @@ public class ConversationController {
     }
 
     @PatchMapping("/{id}/read")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> markAsRead(@PathVariable String id) {
-        return ResponseEntity.ok(ApiResponse.success(conversationService.markAsRead(id)));
+    public ResponseEntity<ApiResponse<Map<String, Object>>> markAsRead(
+            @PathVariable String id,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(conversationService.markAsRead(id, resolveCaller(userEmail, userId))));
     }
 
     @PatchMapping("/{id}/star")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> starConversation(@PathVariable String id) {
-        return ResponseEntity.ok(ApiResponse.success(conversationService.starConversation(id)));
+    public ResponseEntity<ApiResponse<Map<String, Object>>> starConversation(
+            @PathVariable String id,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(conversationService.starConversation(id, resolveCaller(userEmail, userId))));
     }
 
     @PatchMapping("/{id}/mailbox")
     public ResponseEntity<ApiResponse<Map<String, Object>>> updateMailbox(
             @PathVariable String id,
-            @RequestBody(required = false) Map<String, String> req
+            @RequestBody(required = false) Map<String, String> req,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId
     ) {
         String mailbox = (req != null && req.containsKey("mailbox")) ? req.get("mailbox") : "Focused";
-        return ResponseEntity.ok(ApiResponse.success(conversationService.updateMailbox(id, mailbox)));
+        return ResponseEntity.ok(ApiResponse.success(conversationService.updateMailbox(id, mailbox, resolveCaller(userEmail, userId))));
     }
 
     @DeleteMapping("/{id}")

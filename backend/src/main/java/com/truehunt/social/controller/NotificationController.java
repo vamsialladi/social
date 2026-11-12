@@ -3,6 +3,7 @@ package com.truehunt.social.controller;
 import com.truehunt.social.dto.ApiResponse;
 import com.truehunt.social.service.NotificationService;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -18,9 +19,26 @@ public class NotificationController {
         this.notificationService = notificationService;
     }
 
+    private String resolveCaller(String userEmail, String userId, Authentication authentication) {
+        if (userEmail != null && !userEmail.isBlank()) {
+            return userEmail.trim();
+        }
+        if (userId != null && !userId.isBlank()) {
+            return userId.trim();
+        }
+        if (authentication != null && authentication.isAuthenticated() && !"anonymousUser".equals(authentication.getPrincipal())) {
+            return authentication.getName();
+        }
+        return null;
+    }
+
     @GetMapping
-    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getNotifications() {
-        return ResponseEntity.ok(ApiResponse.success(notificationService.getNotifications()));
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getNotifications(
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId,
+            Authentication authentication
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(notificationService.getNotifications(resolveCaller(userEmail, userId, authentication))));
     }
 
     @PatchMapping("/{id}/read")
@@ -29,8 +47,12 @@ public class NotificationController {
     }
 
     @PatchMapping("/read-all")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> markAllAsRead() {
-        return ResponseEntity.ok(ApiResponse.success(notificationService.markAllAsRead()));
+    public ResponseEntity<ApiResponse<Map<String, Object>>> markAllAsRead(
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId,
+            Authentication authentication
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(notificationService.markAllAsRead(resolveCaller(userEmail, userId, authentication))));
     }
 
     @DeleteMapping("/{id}")

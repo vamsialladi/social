@@ -6,18 +6,25 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "user_accounts")
+@Table(
+        name = "user_accounts",
+        uniqueConstraints = {
+                @UniqueConstraint(name = "uk_user_accounts_email", columnNames = "email"),
+                @UniqueConstraint(name = "uk_user_accounts_phone_number", columnNames = "phone_number")
+        }
+)
 public class UserAccountEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, unique = true)
+    @Column(name = "email", nullable = false, unique = true)
     private String email;
 
     @Column(nullable = false)
@@ -29,6 +36,7 @@ public class UserAccountEntity {
     @Column(unique = true, length = 14)
     private String publicUserId;
 
+    @Column(name = "phone_number", unique = true)
     private String phoneNumber;
     private String role;
     private String craft;

@@ -43,7 +43,19 @@ async function requestAuth(endpoint, payload) {
   }
 
   if (!response.ok) {
-    throw new Error(result?.error?.message || 'Authentication request failed. Please try again.');
+    const fields = (result?.errors && typeof result.errors === 'object')
+      ? result.errors
+      : (result?.error?.fields && typeof result.error.fields === 'object' ? result.error.fields : null);
+    const fieldError = fields
+      ? (fields.email || fields.phoneNumber || fields.phone || fields.password || fields.newPassword || fields.confirmPassword || Object.values(fields)[0])
+      : '';
+    const error = new Error(fieldError || result?.error?.message || result?.message || 'Authentication request failed. Please try again.');
+    error.status = response.status;
+    error.code = result?.error?.code;
+    if (fields) {
+      error.fields = fields;
+    }
+    throw error;
   }
 
   return { data: result?.data ?? result, success: true };
@@ -57,9 +69,12 @@ async function fetchWithFallback(endpoint, options = {}, fallbackData = null) {
     const token = localStorage.getItem('truehunt_token');
     const storedUser = localStorage.getItem('truehunt_user');
     let userEmail = '';
+    let userId = '';
     if (storedUser) {
       try {
-        userEmail = JSON.parse(storedUser)?.email;
+        const parsedUser = JSON.parse(storedUser);
+        userEmail = parsedUser?.email || '';
+        userId = parsedUser?.userId || parsedUser?.id || '';
       } catch (e) {
         // ignore
       }
@@ -68,6 +83,7 @@ async function fetchWithFallback(endpoint, options = {}, fallbackData = null) {
       'Content-Type': 'application/json',
       ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
       ...(userEmail ? { 'X-User-Email': userEmail } : {}),
+      ...(userId ? { 'X-User-Id': String(userId) } : {}),
       ...(options.headers || {})
     };
 
@@ -290,6 +306,14 @@ export const api = {
 
     register: async (userData) => {
       return requestAuth('/auth/register', userData);
+    },
+
+    forgotPassword: async (email) => {
+      return requestAuth('/auth/forgot-password', { email });
+    },
+
+    resetPassword: async (payload) => {
+      return requestAuth('/auth/reset-password', payload);
     },
 
     getMe: async () => {

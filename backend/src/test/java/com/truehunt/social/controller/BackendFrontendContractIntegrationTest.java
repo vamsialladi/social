@@ -3,12 +3,14 @@ package com.truehunt.social.controller;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.truehunt.social.model.JobEntity;
+import com.truehunt.social.model.NotificationEntity;
 import com.truehunt.social.repository.*;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
@@ -41,15 +43,21 @@ class BackendFrontendContractIntegrationTest {
     @Autowired
     private SupportTicketRepository supportTicketRepository;
 
+    @Autowired
+    private NotificationRepository notificationRepository;
+
     @Test
     void authMeResolvesJwtTokenAndXUserIdAndOtpSupportsPhoneNumber() throws Exception {
+        String phoneDigits = "9" + String.format("%09d", Math.abs(System.nanoTime() % 1_000_000_000L));
+        String formattedPhone = "+91 " + phoneDigits;
+
         // Send OTP using phoneNumber payload as sent by JoinNowPage.jsx
         mockMvc.perform(post("/api/auth/send-otp")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"phoneNumber\":\"+91 9988776655\"}"))
+                        .content("{\"phoneNumber\":\"" + formattedPhone + "\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data.message").value(org.hamcrest.Matchers.containsString("9988776655")));
+                .andExpect(jsonPath("$.data.message").value(org.hamcrest.Matchers.containsString(phoneDigits)));
 
         // Register a new TALENT user with production/experience fields
         String email = "contract.talent." + System.nanoTime() + "@truehunt.in";
@@ -57,7 +65,7 @@ class BackendFrontendContractIntegrationTest {
                 {
                   "fullName": "Kavya Menon",
                   "email": "%s",
-                  "phoneNumber": "+91 9988776655",
+                  "phoneNumber": "%s",
                   "password": "Password@123",
                   "role": "TALENT",
                   "craft": "Screenplay Writer",
@@ -66,7 +74,7 @@ class BackendFrontendContractIntegrationTest {
                   "secondaryCrafts": ["Director"],
                   "secondarySubCrafts": ["Associate Director"]
                 }
-                """.formatted(email);
+                """.formatted(email, formattedPhone);
 
         MvcResult regResult = mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -356,6 +364,149 @@ class BackendFrontendContractIntegrationTest {
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true));
+
+        // Conversation actions preserve caller perspective
+        mockMvc.perform(patch("/api/conversations/" + conversationId + "/star")
+                        .header("X-User-Id", userId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.starred").value(true))
+                .andExpect(jsonPath("$.data.name").value("arjun.kapoor@truehunt.in"));
+
+        mockMvc.perform(patch("/api/conversations/" + conversationId + "/mailbox")
+                        .header("X-User-Id", userId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"mailbox\":\"Other\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.mailbox").value("Other"))
+                .andExpect(jsonPath("$.data.name").value("arjun.kapoor@truehunt.in"));
+
+        mockMvc.perform(patch("/api/conversations/" + conversationId + "/read")
+                        .header("X-User-Id", userId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.unread").value(false))
+                .andExpect(jsonPath("$.data.name").value("arjun.kapoor@truehunt.in"));
+    }
+
+    @Test
+    void profileMeAndFieldsAndMediaKindAndScopedSettingsNotificationsMatchFrontendContract() throws Exception {
+        String emailA = "contract.a." + System.nanoTime() + "@truehunt.in";
+        String emailB = "contract.b." + System.nanoTime() + "@truehunt.in";
+
+        MvcResult regA = mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "fullName": "Kiran Rao",
+                                  "email": "%s",
+                                  "password": "Password@123",
+                                  "role": "TALENT",
+                                  "craft": "Editor"
+                                }
+                                """.formatted(emailA)))
+                .andExpect(status().isOk())
+                .andReturn();
+        String userIdA = objectMapper.readTree(regA.getResponse().getContentAsString())
+                .path("data").path("userId").asText();
+
+        MvcResult regB = mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "fullName": "Neha Sharma",
+                                  "email": "%s",
+                                  "password": "Password@123",
+                                  "role": "TALENT",
+                                  "craft": "Director"
+                                }
+                                """.formatted(emailB)))
+                .andExpect(status().isOk())
+                .andReturn();
+        String userIdB = objectMapper.readTree(regB.getResponse().getContentAsString())
+                .path("data").path("userId").asText();
+
+        // /api/profile/me works with X-User-Id and maps experience/education fields cleanly
+        mockMvc.perform(post("/api/profile/experience")
+                        .header("X-User-Id", userIdA)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "Lead Editor",
+                                  "company": "Prism Films",
+                                  "movieName": "Skyline",
+                                  "duration": "2023 - Present",
+                                  "isCurrent": true
+                                }
+                                """))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/profile/education")
+                        .header("X-User-Id", userIdA)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "institution": "FTII",
+                                  "degree": "PG Diploma",
+                                  "activities": "Editing Club"
+                                }
+                                """))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/profile/me")
+                        .header("X-User-Id", userIdA))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.experiences[0].isCurrent").value(true))
+                .andExpect(jsonPath("$.data.experiences[0].duration").value("2023 - Present"))
+                .andExpect(jsonPath("$.data.experiences[0].movieName").value("Skyline"))
+                .andExpect(jsonPath("$.data.educations[0].activities").value("Editing Club"));
+
+        // Media upload returns kind based on contentType
+        MockMultipartFile imageFile = new MockMultipartFile(
+                "file",
+                "sample.png",
+                "image/png",
+                "png-bytes".getBytes()
+        );
+        mockMvc.perform(multipart("/api/media/upload")
+                        .file(imageFile)
+                        .param("category", "post"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.kind").value("image"))
+                .andExpect(jsonPath("$.data.category").value("post"));
+
+        // Per-user settings do not leak between users
+        mockMvc.perform(patch("/api/settings/theme")
+                        .header("X-User-Id", userIdA)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"theme\":\"light\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.theme").value("light"));
+
+        mockMvc.perform(get("/api/settings")
+                        .header("X-User-Id", userIdA))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.theme").value("light"));
+
+        mockMvc.perform(get("/api/settings")
+                        .header("X-User-Id", userIdB))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.theme").value("dark"));
+
+        // Per-user notifications filter and mark-all-read by caller
+        notificationRepository.save(new NotificationEntity(emailA, "Title A", "For A only", "INFO"));
+        NotificationEntity notifB = notificationRepository.save(new NotificationEntity(emailB, "Title B", "For B only", "INFO"));
+
+        mockMvc.perform(get("/api/notifications")
+                        .header("X-User-Id", userIdA))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[?(@.title=='Title A')]").isNotEmpty())
+                .andExpect(jsonPath("$.data[?(@.title=='Title B')]").isEmpty());
+
+        mockMvc.perform(patch("/api/notifications/read-all")
+                        .header("X-User-Id", userIdA))
+                .andExpect(status().isOk());
+
+        NotificationEntity reloadedB = notificationRepository.findById(notifB.getId()).orElseThrow();
+        assertFalse(reloadedB.isRead());
     }
 }
 

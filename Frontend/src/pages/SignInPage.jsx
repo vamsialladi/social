@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { AlertCircle, Eye, EyeOff } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 import TrueHuntLogo from '../components/common/TrueHuntLogo';
 import AuthPageLayout, { RoleSelectionCards } from '../components/common/AuthPageLayout';
+import PasswordField from '../components/common/PasswordField';
+import { getPasswordValidationMessage, isPasswordValid } from '../components/common/passwordValidation';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 
@@ -10,7 +12,6 @@ export default function SignInPage() {
   const [selectedRole, setSelectedRole] = useState('TALENT');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const { login } = useAuth();
@@ -18,9 +19,18 @@ export default function SignInPage() {
   const location = useLocation();
   const navigate = useNavigate();
 
+  const isFormValid = email.trim().length > 0 && isPasswordValid(password);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErrorMsg('');
+
+    const passwordError = getPasswordValidationMessage(password);
+    if (passwordError) {
+      setErrorMsg(passwordError);
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -109,50 +119,27 @@ export default function SignInPage() {
           </div>
 
           <div className="form-group">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <label className="form-label" htmlFor="sign-in-password">Password</label>
-              <span style={{ fontSize: '12px', color: 'var(--color-maroon)', cursor: 'pointer' }}>
-                Forgot Password?
-              </span>
-            </div>
-            <div style={{ position: 'relative' }}>
-              <input
-                id="sign-in-password"
-                type={showPassword ? 'text' : 'password'}
-                className="form-control"
-                value={password}
-                onChange={(e) => {
-                  setPassword(e.target.value);
-                  setErrorMsg('');
-                }}
-                placeholder="••••••••••••"
-                autoComplete="current-password"
-                required
-                style={{ paddingRight: '42px' }}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword((visible) => !visible)}
-                aria-label={showPassword ? 'Hide password' : 'Show password'}
-                title={showPassword ? 'Hide password' : 'Show password'}
-                style={{
-                  position: 'absolute',
-                  right: '12px',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  padding: 0,
-                  border: 'none',
-                  background: 'none',
-                  color: 'var(--color-text-muted)',
-                  cursor: 'pointer',
-                }}
-              >
-                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-              </button>
-            </div>
+            <PasswordField
+              id="sign-in-password"
+              name="password"
+              label="Password"
+              headerAction={(
+                <Link
+                  to="/forgot-password"
+                  style={{ fontSize: '12px', color: 'var(--color-maroon)', fontWeight: 600 }}
+                >
+                  Forgot Password?
+                </Link>
+              )}
+              value={password}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                setErrorMsg('');
+              }}
+              placeholder="Enter your password"
+              autoComplete="current-password"
+              showValidation
+            />
             {errorMsg && (
               <div
                 role="alert"
@@ -178,7 +165,7 @@ export default function SignInPage() {
           <button
             type="submit"
             id="sign-in-submit-btn"
-            disabled={loading}
+            disabled={loading || !isFormValid}
             className="btn btn-maroon btn-lg"
             style={{ width: '100%', marginTop: '10px', fontSize: '16px', fontWeight: 700 }}
           >

@@ -22,6 +22,22 @@ const mailboxOptions = ['Focused', 'Other', 'Archived', 'Spam']
 const emojis = ['😀', '😂', '😍', '😊', '👍', '🎉', '❤️', '🙏']
 const genericContactNames = new Set(['truehunt member', 'cinema professional', 'member'])
 
+function computeInitials(name = '') {
+  const parts = String(name || '').trim().split(/\s+/).filter(Boolean)
+  if (!parts.length) return 'TH'
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+  return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase()
+}
+
+function readStoredUser() {
+  try {
+    const raw = localStorage.getItem('truehunt_user')
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+
 function getConversationContactName(conversation, user) {
   const myIdentifiers = new Set([
     user?.email,
@@ -212,23 +228,21 @@ function Messages({
   const conversationMenuRef = useRef(null)
   const previousInboxRequest = useRef(resetToInboxRequest)
 
-  const currentUser = useMemo(() => {
-    try {
-      const u = localStorage.getItem('truehunt_user')
-      return u ? JSON.parse(u) : null
-    } catch {
-      return null
-    }
-  }, [])
+  const currentUser = useMemo(() => readStoredUser(), [])
 
   const loadBackendConversations = useCallback(async (currentMailbox = 'Focused') => {
     try {
+      const latestUser = readStoredUser() || currentUser
       const data = await api.getConversations(currentMailbox)
       if (Array.isArray(data)) {
-        const namedConversations = data.map((conversation) => ({
-          ...conversation,
-          name: getConversationContactName(conversation, currentUser) || 'Profile',
-        }))
+        const namedConversations = data.map((conversation) => {
+          const resolvedName = getConversationContactName(conversation, latestUser) || 'Profile'
+          return {
+            ...conversation,
+            name: resolvedName,
+            initials: computeInitials(resolvedName),
+          }
+        })
         setMessages((prev) => {
           const profileConversations = prev.filter((m) => String(m.id).startsWith('profile-'))
           const backendIds = new Set(namedConversations.map((d) => String(d.id)))
@@ -415,9 +429,24 @@ function Messages({
               }
             }
 
+            const hasFreshPartnerName = Boolean(
+              otherName && !genericContactNames.has(otherName.trim().toLowerCase())
+            )
+            const nextName = hasFreshPartnerName ? otherName.trim() : m.name
+            const nextInitials = hasFreshPartnerName ? computeInitials(nextName) : m.initials
+            const updatedPartnerFields = hasFreshPartnerName && !isOutgoing
+              ? {
+                ...(m.user1Id && senderEmail && String(m.user1Id).trim().toLowerCase() === senderEmail ? { user1Name: nextName } : {}),
+                ...(m.user2Id && senderEmail && String(m.user2Id).trim().toLowerCase() === senderEmail ? { user2Name: nextName } : {}),
+              }
+              : {}
+
             return {
               ...m,
               id: convId || m.id,
+              name: nextName,
+              initials: nextInitials,
+              ...updatedPartnerFields,
               thread: [...thread, threadItem],
               preview: content,
               date: 'Just now',

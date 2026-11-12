@@ -1584,11 +1584,24 @@ function ProfilePage({
       ...savedDetails,
       posts: nextDetails.posts,
     }
+    const nextAuthFields = {}
     if (persistedDetails.userId && persistedDetails.userId !== authUser?.userId) {
-      updateUser({
-        userId: persistedDetails.userId,
-        ...(authUser?.id ? { id: persistedDetails.userId } : {}),
-      })
+      nextAuthFields.userId = persistedDetails.userId
+      if (authUser?.id) {
+        nextAuthFields.id = persistedDetails.userId
+      }
+    }
+    if (persistedDetails.name && persistedDetails.name !== authUser?.name) {
+      nextAuthFields.name = persistedDetails.name
+    }
+    if (persistedDetails.headline !== undefined && persistedDetails.headline !== authUser?.headline) {
+      nextAuthFields.headline = persistedDetails.headline
+    }
+    if (persistedDetails.profileImageUrl !== undefined && persistedDetails.profileImageUrl !== authUser?.profileImageUrl) {
+      nextAuthFields.profileImageUrl = persistedDetails.profileImageUrl
+    }
+    if (Object.keys(nextAuthFields).length > 0) {
+      updateUser(nextAuthFields)
     }
     setProfileDetails(persistedDetails)
     return persistedDetails

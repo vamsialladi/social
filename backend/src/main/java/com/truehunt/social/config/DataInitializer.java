@@ -2,6 +2,7 @@ package com.truehunt.social.config;
 
 import com.truehunt.social.model.*;
 import com.truehunt.social.repository.*;
+import com.truehunt.social.validation.PhoneNumberPolicy;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
@@ -30,6 +31,8 @@ public class DataInitializer {
             @Value("${app.admin.password:}") String adminPassword
     ) {
         return args -> {
+            normalizeAndDeduplicateAccountEmails(userAccountRepository, jdbcTemplate);
+            normalizeAndDeduplicateAccountPhones(userAccountRepository, jdbcTemplate);
             provisionAdminAccount(userAccountRepository, passwordEncoder, adminEmail, adminPassword);
             removeAdminProfiles(profileRepository, networkProfileRepository, userAccountRepository);
 
@@ -39,7 +42,7 @@ public class DataInitializer {
                 aarav.setEmail("aarav.varma@truehunt.in");
                 aarav.setPasswordHash(passwordEncoder.encode("TrueHunt2026!"));
                 aarav.setName("Aarav Varma");
-                aarav.setPhone("+91 9876543212");
+                aarav.setPhone("9876543212");
                 aarav.setRole("TALENT");
                 aarav.setPublicUserId("1000002");
                 aarav.setPrimaryCraft("Cinematography");
@@ -54,7 +57,7 @@ public class DataInitializer {
                 mythri.setEmail("mythri.studios@truehunt.in");
                 mythri.setPasswordHash(passwordEncoder.encode("TrueHunt2026!"));
                 mythri.setName("Mythri Movie Makers");
-                mythri.setPhone("+91 9876543213");
+                mythri.setPhone("9876543213");
                 mythri.setRole("STUDIO");
                 mythri.setPublicUserId("2000002");
                 mythri.setCompanyName("Mythri Movie Makers");
@@ -71,7 +74,7 @@ public class DataInitializer {
                 talent.setEmail("pro@truehunt.in");
                 talent.setPasswordHash(passwordEncoder.encode("Password@123"));
                 talent.setName("Cinema Professional");
-                talent.setPhone("+91 9876543210");
+                talent.setPhone("9876543210");
                 talent.setRole("TALENT");
                 talent.setPublicUserId("1000001");
                 talent.setPrimaryCraft("Acting");
@@ -86,7 +89,7 @@ public class DataInitializer {
                 producer.setEmail("producer@truehunt.in");
                 producer.setPasswordHash(passwordEncoder.encode("Password@123"));
                 producer.setName("Lead Producer");
-                producer.setPhone("+91 9876543211");
+                producer.setPhone("9876543211");
                 producer.setRole("PRODUCER");
                 producer.setPublicUserId("2000001");
                 producer.setPrimaryCraft("Producer");
@@ -345,6 +348,109 @@ public class DataInitializer {
         admin.setPasswordHash(passwordEncoder.encode(password));
         admin.setRole("ADMIN");
         userAccountRepository.save(admin);
+    }
+
+    private void normalizeAndDeduplicateAccountEmails(
+            UserAccountRepository userAccountRepository,
+            JdbcTemplate jdbcTemplate
+    ) {
+        String migrationKey = "normalize-and-dedup-emails-v1";
+        jdbcTemplate.execute(
+                "CREATE TABLE IF NOT EXISTS app_data_migrations "
+                        + "(migration_key VARCHAR(128) PRIMARY KEY)"
+        );
+        Integer completed = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM app_data_migrations WHERE migration_key = ?",
+                Integer.class,
+                migrationKey
+        );
+        if (completed != null && completed > 0) {
+            return;
+        }
+
+        List<UserAccountEntity> accounts = new ArrayList<>(userAccountRepository.findAll());
+        accounts.sort(Comparator.comparing(account -> account.getId() != null ? account.getId() : Long.MAX_VALUE));
+        Set<String> seenEmails = new HashSet<>();
+        for (UserAccountEntity account : accounts) {
+            String rawEmail = account.getEmail();
+            if (rawEmail == null || rawEmail.isBlank()) {
+                continue;
+            }
+            String normalized = rawEmail.trim().toLowerCase(Locale.ROOT);
+            if (!seenEmails.add(normalized)) {
+                userAccountRepository.delete(account);
+            } else if (!normalized.equals(rawEmail)) {
+                account.setEmail(normalized);
+                userAccountRepository.save(account);
+            }
+        }
+        userAccountRepository.flush();
+        try {
+            jdbcTemplate.execute(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS uk_user_accounts_email ON user_accounts (email)"
+            );
+        } catch (Exception ignored) {
+            // Constraint or index already enforced by schema DDL
+        }
+        jdbcTemplate.update(
+                "INSERT INTO app_data_migrations (migration_key) VALUES (?)",
+                migrationKey
+        );
+    }
+
+    private void normalizeAndDeduplicateAccountPhones(
+            UserAccountRepository userAccountRepository,
+            JdbcTemplate jdbcTemplate
+    ) {
+        String migrationKey = "normalize-and-dedup-phone-numbers-v1";
+        jdbcTemplate.execute(
+                "CREATE TABLE IF NOT EXISTS app_data_migrations "
+                        + "(migration_key VARCHAR(128) PRIMARY KEY)"
+        );
+        Integer completed = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM app_data_migrations WHERE migration_key = ?",
+                Integer.class,
+                migrationKey
+        );
+        if (completed != null && completed > 0) {
+            return;
+        }
+
+        List<UserAccountEntity> accounts = new ArrayList<>(userAccountRepository.findAll());
+        accounts.sort(Comparator.comparing(account -> account.getId() != null ? account.getId() : Long.MAX_VALUE));
+        Set<String> seenPhones = new HashSet<>();
+        for (UserAccountEntity account : accounts) {
+            String rawPhone = account.getPhoneNumber();
+            if (rawPhone == null) {
+                continue;
+            }
+            if (rawPhone.isBlank()) {
+                account.setPhoneNumber(null);
+                userAccountRepository.save(account);
+                continue;
+            }
+            String normalized = PhoneNumberPolicy.normalizeUnchecked(rawPhone);
+            String canonical = normalized != null ? normalized : rawPhone.trim();
+            if (!seenPhones.add(canonical)) {
+                account.setPhoneNumber(null);
+                userAccountRepository.save(account);
+            } else if (!canonical.equals(rawPhone)) {
+                account.setPhoneNumber(canonical);
+                userAccountRepository.save(account);
+            }
+        }
+        userAccountRepository.flush();
+        try {
+            jdbcTemplate.execute(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS uk_user_accounts_phone_number ON user_accounts (phone_number)"
+            );
+        } catch (Exception ignored) {
+            // Constraint or index already enforced by schema DDL
+        }
+        jdbcTemplate.update(
+                "INSERT INTO app_data_migrations (migration_key) VALUES (?)",
+                migrationKey
+        );
     }
 
     private void removeAdminProfiles(

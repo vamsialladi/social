@@ -55,9 +55,7 @@ public class MessageService {
         Optional<UserAccountEntity> senderOpt = resolveUserAccount(senderRawId);
         String senderEmail = senderOpt.map(UserAccountEntity::getEmail).orElse(senderRawId);
         String senderPublicUserId = senderOpt.map(UserAccountEntity::getPublicUserId).orElse(senderRawId);
-        String senderName = req.getSenderName() != null && !req.getSenderName().isBlank()
-                ? req.getSenderName()
-                : senderOpt.map(UserAccountEntity::getName).orElse(resolveUserName(senderRawId));
+        String senderName = resolveParticipantDisplayName(senderOpt, senderEmail, senderPublicUserId, senderRawId, req.getSenderName());
 
         String receiverRawId = req.getReceiverId() != null ? req.getReceiverId().trim() : null;
         Optional<UserAccountEntity> receiverOpt = resolveUserAccount(receiverRawId);
@@ -66,26 +64,30 @@ public class MessageService {
         }
         String receiverEmail = receiverOpt.map(UserAccountEntity::getEmail).orElse(null);
         String receiverPublicUserId = receiverOpt.map(UserAccountEntity::getPublicUserId).orElse(null);
-        String receiverName = req.getReceiverName() != null && !req.getReceiverName().isBlank()
-                ? req.getReceiverName()
-                : receiverOpt.map(UserAccountEntity::getName).orElse(null);
+        String receiverName = resolveParticipantDisplayName(receiverOpt, receiverEmail, receiverPublicUserId, receiverRawId, null);
 
-        if (receiverEmail == null || receiverPublicUserId == null || receiverName == null) {
+        if (receiverEmail == null || receiverPublicUserId == null || receiverName == null || receiverName.isBlank()) {
             Optional<ProfileEntity> prof = profileRepository.findByUserId(receiverRawId != null ? receiverRawId : "");
-            if (prof.isEmpty() && receiverName != null) {
-                final String targetName = receiverName;
+            if (prof.isEmpty() && req.getReceiverName() != null && !req.getReceiverName().isBlank()) {
+                final String targetName = req.getReceiverName().trim();
                 prof = profileRepository.findByName(targetName).or(() -> profileRepository.findFirstByNameIgnoreCase(targetName));
             }
             if (prof.isPresent()) {
                 if (receiverEmail == null) receiverEmail = prof.get().getEmail();
                 if (receiverPublicUserId == null) receiverPublicUserId = prof.get().getUserId();
-                if (receiverName == null) receiverName = prof.get().getName();
+                if (prof.get().getName() != null && !prof.get().getName().isBlank()) {
+                    receiverName = prof.get().getName().trim();
+                }
             }
         }
 
         if (receiverEmail == null) receiverEmail = receiverRawId;
         if (receiverPublicUserId == null) receiverPublicUserId = receiverRawId;
-        if (receiverName == null) receiverName = resolveUserName(receiverRawId);
+        if (receiverName == null || receiverName.isBlank()) {
+            receiverName = (req.getReceiverName() != null && !req.getReceiverName().isBlank())
+                    ? req.getReceiverName().trim()
+                    : resolveUserName(receiverRawId);
+        }
 
         ConversationEntity conversation = null;
         if (req.getConversationId() != null) {
@@ -104,8 +106,10 @@ public class MessageService {
                     ? conversation.getUser1Id()
                     : conversation.getUser2Id();
             if (partner != null && !partner.isBlank() && !partner.equalsIgnoreCase(senderEmail)) {
-                receiverEmail = partner;
-                receiverName = resolveUserName(receiverEmail);
+                Optional<UserAccountEntity> partnerOpt = resolveUserAccount(partner);
+                receiverEmail = partnerOpt.map(UserAccountEntity::getEmail).orElse(partner);
+                receiverPublicUserId = partnerOpt.map(UserAccountEntity::getPublicUserId).orElse(partner);
+                receiverName = resolveParticipantDisplayName(partnerOpt, receiverEmail, receiverPublicUserId, partner, null);
             }
         }
 
@@ -130,6 +134,15 @@ public class MessageService {
             conversationThread.get(conversationThread.size() - 1).put("messageId", messageEntity.getId());
             conversation.setThread(conversationThread);
         }
+        syncConversationParticipantNames(
+                conversation,
+                senderEmail,
+                senderPublicUserId,
+                senderName,
+                receiverEmail,
+                receiverPublicUserId,
+                receiverName
+        );
         conversation.setPreview(req.getContent().trim());
         conversation.setDate("Just now");
         conversation.setUnread(true);
@@ -221,7 +234,14 @@ public class MessageService {
                 .orElse(currentUserId);
         List<MessageEntity> messages = messageRepository.findAllByConversationIdOrderByCreatedAtAsc(conversationId);
         if (!messages.isEmpty()) {
-            return messages.stream().map(m -> m.toDto(resolvedId)).collect(Collectors.toList());
+            return messages.stream().map(m -> {
+                Map<String, Object> dto = m.toDto(resolvedId);
+                String liveSenderName = resolveLatestUserName(m.getSenderId());
+                if (liveSenderName != null) dto.put("senderName", liveSenderName);
+                String liveReceiverName = resolveLatestUserName(m.getReceiverId());
+                if (liveReceiverName != null) dto.put("receiverName", liveReceiverName);
+                return dto;
+            }).collect(Collectors.toList());
         }
         ConversationEntity conv = conversationRepository.findById(conversationId).orElse(null);
         return conv != null ? conv.toDto(resolvedId).get("thread") instanceof List ?
@@ -364,13 +384,118 @@ public class MessageService {
         return "pro@truehunt.in";
     }
 
+    /**
+     * Resolves the latest non-blank display name from ProfileEntity or UserAccountEntity.
+     */
+    public String resolveLatestUserName(String identifier) {
+        if (identifier == null || identifier.isBlank()) return null;
+        String clean = identifier.trim();
+        String stripped = clean.startsWith("profile-") ? clean.substring("profile-".length()).trim() : clean;
+
+        Optional<ProfileEntity> directProfile = profileRepository.findByEmail(clean.toLowerCase(Locale.ROOT))
+                .or(() -> profileRepository.findByEmail(stripped.toLowerCase(Locale.ROOT)))
+                .or(() -> profileRepository.findByUserId(clean))
+                .or(() -> profileRepository.findByUserId(stripped));
+        if (directProfile.isPresent() && directProfile.get().getName() != null && !directProfile.get().getName().isBlank()) {
+            return directProfile.get().getName().trim();
+        }
+
+        Optional<UserAccountEntity> account = resolveUserAccount(clean);
+        if (account.isPresent()) {
+            UserAccountEntity acc = account.get();
+            Optional<ProfileEntity> linkedProfile = Optional.empty();
+            if (acc.getEmail() != null && !acc.getEmail().isBlank()) {
+                linkedProfile = profileRepository.findByEmail(acc.getEmail().trim().toLowerCase(Locale.ROOT));
+            }
+            if (linkedProfile.isEmpty() && acc.getPublicUserId() != null && !acc.getPublicUserId().isBlank()) {
+                linkedProfile = profileRepository.findByUserId(acc.getPublicUserId().trim());
+            }
+            if (linkedProfile.isPresent() && linkedProfile.get().getName() != null && !linkedProfile.get().getName().isBlank()) {
+                return linkedProfile.get().getName().trim();
+            }
+            if (acc.getName() != null && !acc.getName().isBlank()) {
+                return acc.getName().trim();
+            }
+        }
+        return null;
+    }
+
+    private String resolveParticipantDisplayName(Optional<UserAccountEntity> accountOpt,
+                                                 String email,
+                                                 String publicUserId,
+                                                 String rawId,
+                                                 String requestFallbackName) {
+        for (String candidate : new String[]{email, publicUserId, rawId}) {
+            String live = resolveLatestUserName(candidate);
+            if (live != null && !live.isBlank()) {
+                return live;
+            }
+        }
+        if (accountOpt != null && accountOpt.isPresent()) {
+            String accountName = accountOpt.get().getName();
+            if (accountName != null && !accountName.isBlank()) {
+                return accountName.trim();
+            }
+        }
+        if (requestFallbackName != null && !requestFallbackName.isBlank()) {
+            return requestFallbackName.trim();
+        }
+        return resolveUserName(rawId);
+    }
+
+    private void syncConversationParticipantNames(ConversationEntity conversation,
+                                                  String senderEmail, String senderPublicId, String senderName,
+                                                  String receiverEmail, String receiverPublicId, String receiverName) {
+        if (conversation == null) return;
+
+        String u1 = conversation.getUser1Id();
+        String u2 = conversation.getUser2Id();
+
+        String updatedU1Name = resolveSyncedParticipantName(u1, senderEmail, senderPublicId, senderName,
+                receiverEmail, receiverPublicId, receiverName);
+        if (updatedU1Name != null && !updatedU1Name.isBlank()) {
+            conversation.setUser1Name(updatedU1Name);
+        }
+
+        String updatedU2Name = resolveSyncedParticipantName(u2, senderEmail, senderPublicId, senderName,
+                receiverEmail, receiverPublicId, receiverName);
+        if (updatedU2Name != null && !updatedU2Name.isBlank()) {
+            conversation.setUser2Name(updatedU2Name);
+            conversation.setName(updatedU2Name);
+            conversation.setInitials(computeInitials(updatedU2Name));
+        }
+    }
+
+    private String resolveSyncedParticipantName(String participantId,
+                                                String senderEmail, String senderPublicId, String senderName,
+                                                String receiverEmail, String receiverPublicId, String receiverName) {
+        if (participantId == null || participantId.isBlank()) return null;
+        String live = resolveLatestUserName(participantId);
+        if (live != null && !live.isBlank()) return live;
+
+        String clean = participantId.trim();
+        if ((senderEmail != null && clean.equalsIgnoreCase(senderEmail))
+                || (senderPublicId != null && clean.equalsIgnoreCase(senderPublicId))) {
+            return senderName;
+        }
+        if ((receiverEmail != null && clean.equalsIgnoreCase(receiverEmail))
+                || (receiverPublicId != null && clean.equalsIgnoreCase(receiverPublicId))) {
+            return receiverName;
+        }
+        return null;
+    }
+
+    private String computeInitials(String title) {
+        if (title == null || title.isBlank()) return "TH";
+        String[] parts = title.trim().split("\\s+");
+        if (parts.length == 1) return parts[0].substring(0, Math.min(2, parts[0].length())).toUpperCase();
+        return ("" + parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+    }
+
     private String resolveUserName(String identifier) {
         if (identifier == null || identifier.isBlank()) return "Cinema Professional";
-        Optional<UserAccountEntity> account = resolveUserAccount(identifier);
-        if (account.isPresent()) return account.get().getName();
-
-        Optional<ProfileEntity> profile = profileRepository.findByUserId(identifier);
-        if (profile.isPresent()) return profile.get().getName();
+        String live = resolveLatestUserName(identifier);
+        if (live != null && !live.isBlank()) return live;
 
         return identifier;
     }

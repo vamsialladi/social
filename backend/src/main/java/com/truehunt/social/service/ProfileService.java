@@ -442,27 +442,10 @@ public class ProfileService {
         if (req.getExperiences() != null) {
             List<Map<String, Object>> exps = new ArrayList<>();
             for (ExperienceDto e : req.getExperiences()) {
-                Map<String, Object> m = new HashMap<>();
-                m.put("id", e.getId() != null ? e.getId() : "exp-" + UUID.randomUUID().toString().substring(0, 8));
-                m.put("title", e.getTitle());
-                m.put("company", e.getCompany());
-                m.put("projectName", e.getProjectName());
-                m.put("organizationName", e.getOrganizationName());
-                m.put("organizationLogoUrl", e.getOrganizationLogoUrl() != null ? e.getOrganizationLogoUrl() : e.getCompanyLogoUrl());
-                m.put("companyLogoUrl", e.getCompanyLogoUrl() != null ? e.getCompanyLogoUrl() : e.getOrganizationLogoUrl());
-                m.put("featuredOnProfile", e.getFeaturedOnProfile() != null ? e.getFeaturedOnProfile() : false);
-                m.put("workedAs", e.getWorkedAs());
-                m.put("location", e.getLocation());
-                m.put("startDate", e.getStartDate());
-                m.put("endDate", e.getEndDate());
-                m.put("isCurrent", e.getIsCurrent());
-                m.put("description", e.getDescription());
-                m.put("highlights", e.getHighlights());
-                m.put("employmentType", e.getEmploymentType());
-                if (e.getAttachment() != null) {
-                    m.put("attachment", e.getAttachment());
+                if (e.getId() == null || e.getId().isBlank()) {
+                    e.setId("exp-" + UUID.randomUUID().toString().substring(0, 8));
                 }
-                exps.add(m);
+                exps.add(toExperienceMap(e));
             }
             profile.setExperiences(exps);
         }
@@ -470,16 +453,10 @@ public class ProfileService {
         if (req.getEducations() != null) {
             List<Map<String, Object>> edus = new ArrayList<>();
             for (EducationDto ed : req.getEducations()) {
-                Map<String, Object> m = new HashMap<>();
-                m.put("id", ed.getId() != null ? ed.getId() : "edu-" + UUID.randomUUID().toString().substring(0, 8));
-                m.put("institution", ed.getInstitution());
-                m.put("degree", ed.getDegree());
-                m.put("fieldOfStudy", ed.getFieldOfStudy());
-                m.put("startDate", ed.getStartDate());
-                m.put("endDate", ed.getEndDate());
-                m.put("grade", ed.getGrade());
-                m.put("description", ed.getDescription());
-                edus.add(m);
+                if (ed.getId() == null || ed.getId().isBlank()) {
+                    ed.setId("edu-" + UUID.randomUUID().toString().substring(0, 8));
+                }
+                edus.add(toEducationMap(ed));
             }
             profile.setEducations(edus);
         }
@@ -549,26 +526,7 @@ public class ProfileService {
             exp.setId("exp-" + UUID.randomUUID().toString().substring(0, 8));
         }
 
-        Map<String, Object> expMap = new HashMap<>();
-        expMap.put("id", exp.getId());
-        expMap.put("title", exp.getTitle());
-        expMap.put("company", exp.getCompany());
-        expMap.put("employmentType", exp.getEmploymentType());
-        expMap.put("location", exp.getLocation());
-        expMap.put("startDate", exp.getStartDate());
-        expMap.put("endDate", exp.getEndDate());
-        expMap.put("isCurrent", exp.getIsCurrent());
-        expMap.put("description", exp.getDescription());
-        expMap.put("highlights", exp.getHighlights());
-        expMap.put("projectName", exp.getProjectName());
-        expMap.put("organizationName", exp.getOrganizationName());
-        expMap.put("workedAs", exp.getWorkedAs());
-        expMap.put("organizationLogoUrl", exp.getOrganizationLogoUrl() != null ? exp.getOrganizationLogoUrl() : exp.getCompanyLogoUrl());
-        expMap.put("companyLogoUrl", exp.getCompanyLogoUrl() != null ? exp.getCompanyLogoUrl() : exp.getOrganizationLogoUrl());
-        expMap.put("featuredOnProfile", exp.getFeaturedOnProfile() != null ? exp.getFeaturedOnProfile() : false);
-        if (exp.getAttachment() != null) {
-            expMap.put("attachment", exp.getAttachment());
-        }
+        Map<String, Object> expMap = toExperienceMap(exp);
 
         List<Map<String, Object>> experiences = new ArrayList<>(profile.getExperiences());
         experiences.add(0, expMap);
@@ -594,10 +552,12 @@ public class ProfileService {
                 if (exp.getLocation() != null) updated.put("location", exp.getLocation());
                 if (exp.getStartDate() != null) updated.put("startDate", exp.getStartDate());
                 if (exp.getEndDate() != null) updated.put("endDate", exp.getEndDate());
+                if (exp.getDuration() != null) updated.put("duration", exp.getDuration());
                 if (exp.getIsCurrent() != null) updated.put("isCurrent", exp.getIsCurrent());
                 if (exp.getDescription() != null) updated.put("description", exp.getDescription());
                 if (exp.getHighlights() != null) updated.put("highlights", exp.getHighlights());
                 if (exp.getProjectName() != null) updated.put("projectName", exp.getProjectName());
+                if (exp.getMovieName() != null) updated.put("movieName", exp.getMovieName());
                 if (exp.getOrganizationName() != null) updated.put("organizationName", exp.getOrganizationName());
                 if (exp.getWorkedAs() != null) updated.put("workedAs", exp.getWorkedAs());
                 if (exp.getOrganizationLogoUrl() != null) {
@@ -649,16 +609,7 @@ public class ProfileService {
             edu.setId("edu-" + UUID.randomUUID().toString().substring(0, 8));
         }
 
-        Map<String, Object> eduMap = new HashMap<>();
-        eduMap.put("id", edu.getId());
-        eduMap.put("institution", edu.getInstitution());
-        eduMap.put("degree", edu.getDegree());
-        eduMap.put("fieldOfStudy", edu.getFieldOfStudy());
-        eduMap.put("startDate", edu.getStartDate());
-        eduMap.put("endDate", edu.getEndDate());
-        eduMap.put("grade", edu.getGrade());
-        eduMap.put("activities", edu.getActivities());
-        eduMap.put("description", edu.getDescription());
+        Map<String, Object> eduMap = toEducationMap(edu);
 
         List<Map<String, Object>> educations = new ArrayList<>(profile.getEducations());
         educations.add(0, eduMap);
@@ -684,6 +635,7 @@ public class ProfileService {
                 if (edu.getStartDate() != null) updated.put("startDate", edu.getStartDate());
                 if (edu.getEndDate() != null) updated.put("endDate", edu.getEndDate());
                 if (edu.getGrade() != null) updated.put("grade", edu.getGrade());
+                if (edu.getActivities() != null) updated.put("activities", edu.getActivities());
                 if (edu.getDescription() != null) updated.put("description", edu.getDescription());
                 educations.set(i, updated);
                 found = true;
@@ -1092,11 +1044,15 @@ public class ProfileService {
             exp.setTitle(title);
             exp.setCompany(comp);
             exp.setProjectName((String) expMap.getOrDefault("projectName", title));
+            exp.setMovieName((String) expMap.get("movieName"));
             exp.setOrganizationName((String) expMap.getOrDefault("organizationName", comp));
             exp.setWorkedAs((String) expMap.getOrDefault("workedAs", title));
             exp.setLocation((String) expMap.get("location"));
             exp.setStartDate((String) expMap.get("startDate"));
             exp.setEndDate((String) expMap.get("endDate"));
+            exp.setDuration((String) expMap.get("duration"));
+            Object isCurrent = expMap.get("isCurrent");
+            exp.setIsCurrent(isCurrent == null ? null : (isCurrent instanceof Boolean ? (Boolean) isCurrent : Boolean.parseBoolean(String.valueOf(isCurrent))));
             exp.setDescription((String) expMap.getOrDefault("description", expMap.get("highlights")));
             exp.setHighlights((String) expMap.getOrDefault("highlights", expMap.get("description")));
             exp.setEmploymentType((String) expMap.get("employmentType"));
@@ -1123,6 +1079,7 @@ public class ProfileService {
             edu.setStartDate((String) eduMap.get("startDate"));
             edu.setEndDate((String) eduMap.get("endDate"));
             edu.setGrade((String) eduMap.get("grade"));
+            edu.setActivities((String) eduMap.get("activities"));
             edu.setDescription((String) eduMap.get("description"));
             eduDtos.add(edu);
         }
@@ -1143,7 +1100,54 @@ public class ProfileService {
         }
         dto.setProjects(projDtos);
 
+        List<Map<String, Object>> profilePosts = postRepository.findAllByOrderByCreatedAtDesc().stream()
+                .filter(post -> post.getAuthorId() != null
+                        && profileIds.contains(post.getAuthorId().trim().toLowerCase(Locale.ROOT)))
+                .map(PostEntity::toDto)
+                .collect(Collectors.toList());
+        dto.setPosts(profilePosts);
+
         return dto;
+    }
+
+    private Map<String, Object> toExperienceMap(ExperienceDto e) {
+        Map<String, Object> m = new HashMap<>();
+        m.put("id", e.getId());
+        m.put("title", e.getTitle());
+        m.put("company", e.getCompany());
+        m.put("employmentType", e.getEmploymentType());
+        m.put("location", e.getLocation());
+        m.put("startDate", e.getStartDate());
+        m.put("endDate", e.getEndDate());
+        m.put("duration", e.getDuration());
+        m.put("isCurrent", e.getIsCurrent());
+        m.put("description", e.getDescription());
+        m.put("highlights", e.getHighlights());
+        m.put("projectName", e.getProjectName());
+        m.put("movieName", e.getMovieName());
+        m.put("organizationName", e.getOrganizationName());
+        m.put("workedAs", e.getWorkedAs());
+        m.put("organizationLogoUrl", e.getOrganizationLogoUrl() != null ? e.getOrganizationLogoUrl() : e.getCompanyLogoUrl());
+        m.put("companyLogoUrl", e.getCompanyLogoUrl() != null ? e.getCompanyLogoUrl() : e.getOrganizationLogoUrl());
+        m.put("featuredOnProfile", e.getFeaturedOnProfile() != null ? e.getFeaturedOnProfile() : false);
+        if (e.getAttachment() != null) {
+            m.put("attachment", e.getAttachment());
+        }
+        return m;
+    }
+
+    private Map<String, Object> toEducationMap(EducationDto ed) {
+        Map<String, Object> m = new HashMap<>();
+        m.put("id", ed.getId());
+        m.put("institution", ed.getInstitution());
+        m.put("degree", ed.getDegree());
+        m.put("fieldOfStudy", ed.getFieldOfStudy());
+        m.put("startDate", ed.getStartDate());
+        m.put("endDate", ed.getEndDate());
+        m.put("grade", ed.getGrade());
+        m.put("activities", ed.getActivities());
+        m.put("description", ed.getDescription());
+        return m;
     }
 
     private Optional<UserAccountEntity> findAccountByEmail(String email) {

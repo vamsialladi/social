@@ -6,6 +6,8 @@ import java.util.Map;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class ApiResponse<T> {
     private boolean success = true;
+    private String message;
+    private Map<String, String> errors;
     private T data;
     private Map<String, Object> meta;
     private ApiError error;
@@ -34,6 +36,7 @@ public class ApiResponse<T> {
     public static <T> ApiResponse<T> error(String code, String message) {
         ApiResponse<T> resp = new ApiResponse<>();
         resp.setSuccess(false);
+        resp.setMessage(message);
         resp.setError(new ApiError(code, message));
         return resp;
     }
@@ -41,6 +44,10 @@ public class ApiResponse<T> {
     public static <T> ApiResponse<T> error(String code, String message, Map<String, String> fields) {
         ApiResponse<T> resp = new ApiResponse<>();
         resp.setSuccess(false);
+        resp.setMessage(message);
+        if (fields != null && !fields.isEmpty()) {
+            resp.setErrors(fields);
+        }
         resp.setError(new ApiError(code, message, fields));
         return resp;
     }
@@ -51,6 +58,22 @@ public class ApiResponse<T> {
 
     public void setSuccess(boolean success) {
         this.success = success;
+    }
+
+    public String getMessage() {
+        return message;
+    }
+
+    public void setMessage(String message) {
+        this.message = message;
+    }
+
+    public Map<String, String> getErrors() {
+        return errors;
+    }
+
+    public void setErrors(Map<String, String> errors) {
+        this.errors = errors;
     }
 
     public T getData() {

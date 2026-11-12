@@ -373,6 +373,18 @@ img {
   box-shadow: 0 0 0 3px rgba(10, 25, 47, 0.1);
 }
 
+.form-control.is-invalid,
+.form-control[aria-invalid="true"] {
+  border-color: #dc2626;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.12);
+}
+
+.form-control.is-invalid:focus,
+.form-control[aria-invalid="true"]:focus {
+  border-color: #b91c1c;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.2);
+}
+
 .join-talent-fields-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { CheckCircle2, XCircle, AlertCircle, RefreshCw, Eye, EyeOff, Copy } from 'lucide-react';
+import { CheckCircle2, AlertCircle, RefreshCw, Copy } from 'lucide-react';
 import TrueHuntLogo from '../components/common/TrueHuntLogo';
 import AuthPageLayout, { RoleSelectionCards } from '../components/common/AuthPageLayout';
+import PasswordField from '../components/common/PasswordField';
+import { getPasswordValidationMessage, isPasswordValid } from '../components/common/passwordValidation';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import { EXPERIENCE_OPTIONS, REGISTRATION_CRAFTS, SUB_CRAFTS_BY_PRIMARY_CRAFT } from '../services/mockData';
@@ -10,6 +12,41 @@ import { api } from '../services/api';
 import { getProfileStorageKey } from '../services/profileStorage';
 
 const SORTED_REGISTRATION_CRAFTS = [...REGISTRATION_CRAFTS].sort((first, second) => first.localeCompare(second));
+
+const normalizeIndianPhone = (value = '') => String(value).trim();
+
+const normalizeEmail = (value = '') => String(value).trim().toLowerCase();
+
+const getEmailValidationError = (value = '') => {
+  const trimmed = String(value).trim();
+  if (!trimmed) {
+    return 'Email address is required.';
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+    return 'Please enter a valid email address.';
+  }
+  return '';
+};
+
+const getIndianPhoneError = (value = '') => {
+  const normalized = normalizeIndianPhone(value);
+  if (!normalized) {
+    return 'Phone number is required.';
+  }
+  if (/[a-zA-Z]/.test(normalized)) {
+    return 'Phone number must not contain alphabets.';
+  }
+  if (/[^0-9]/.test(normalized)) {
+    return 'Phone number must contain only digits (no spaces or special characters).';
+  }
+  if (normalized.length !== 10) {
+    return 'Phone number must be exactly 10 digits.';
+  }
+  if (!/^[6-9]/.test(normalized)) {
+    return 'Indian mobile number must start with 6, 7, 8, or 9.';
+  }
+  return '';
+};
 
 const generateCaptchaCode = (previousCode = '') => {
   const characters = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Exclude ambiguous characters like I, O, 0, 1
@@ -27,14 +64,14 @@ export default function JoinNowPage() {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
+  const [emailError, setEmailError] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
+  const [phoneError, setPhoneError] = useState('');
   const [phoneOtp, setPhoneOtp] = useState('');
   const [otpRequested, setOtpRequested] = useState(false);
   const [sendingOtp, setSendingOtp] = useState(false);
   const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [captchaCode, setCaptchaCode] = useState(generateCaptchaCode);
   const [captchaInput, setCaptchaInput] = useState('');
   const [craft, setCraft] = useState(() => {
@@ -110,16 +147,22 @@ export default function JoinNowPage() {
     secondaryCrafts.flatMap((secondaryCraft) => SUB_CRAFTS_BY_PRIMARY_CRAFT[secondaryCraft] || [])
   )].sort((first, second) => first.localeCompare(second));
 
+  const isPhoneValid = !getIndianPhoneError(phoneNumber);
+
   const handleOtpRequest = async () => {
-    if (!/^\d{10}$/.test(phoneNumber)) {
-      showNotification('Enter a valid 10-digit phone number before requesting an OTP.', 'error');
+    const validationMessage = getIndianPhoneError(phoneNumber);
+    if (validationMessage) {
+      setPhoneError(validationMessage);
+      showNotification(validationMessage, 'error');
       return;
     }
 
+    const normalizedPhone = normalizeIndianPhone(phoneNumber);
     setSendingOtp(true);
+    setPhoneError('');
     setErrorMsg('');
     try {
-      await api.auth.sendOtp(phoneNumber);
+      await api.auth.sendOtp(normalizedPhone);
       setOtpRequested(true);
       showNotification('OTP request submitted. Enter the 6-digit code below.', 'success');
     } catch (error) {
@@ -139,6 +182,8 @@ export default function JoinNowPage() {
     }
   };
 
+  const isPasswordSectionValid = isPasswordValid(password) && password === confirmPassword;
+
   const handleRegister = async (e) => {
     e.preventDefault();
     setErrorMsg('');
@@ -148,13 +193,35 @@ export default function JoinNowPage() {
       return;
     }
 
-    if (password !== confirmPassword) {
-      setErrorMsg('Passwords do not match.');
+    if (!firstName.trim() || !lastName.trim()) {
+      setErrorMsg('First name and last name are required.');
       return;
     }
 
-    if (!/^\d{10}$/.test(phoneNumber)) {
-      setErrorMsg('Phone number must contain exactly 10 digits.');
+    const emailValidationError = getEmailValidationError(email);
+    if (emailValidationError) {
+      setEmailError(emailValidationError);
+      setErrorMsg(emailValidationError);
+      return;
+    }
+    setEmailError('');
+
+    const phoneValidationError = getIndianPhoneError(phoneNumber);
+    if (phoneValidationError) {
+      setPhoneError(phoneValidationError);
+      setErrorMsg(phoneValidationError);
+      return;
+    }
+    setPhoneError('');
+
+    const passwordError = getPasswordValidationMessage(password);
+    if (passwordError) {
+      setErrorMsg(passwordError);
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setErrorMsg('Password and confirm password do not match.');
       return;
     }
 
@@ -163,19 +230,27 @@ export default function JoinNowPage() {
       return;
     }
 
-    if (captchaInput && captchaInput.trim().toUpperCase() !== captchaCode) {
+    if (selectedRole === 'STUDIO' && (!companyName.trim() || !headquarters.trim())) {
+      setErrorMsg('Production banner name and headquarters are required.');
+      return;
+    }
+
+    if (!captchaInput.trim() || captchaInput.trim().toUpperCase() !== captchaCode) {
       setErrorMsg('Please enter the CAPTCHA code shown.');
       return;
     }
 
+    const normalizedEmail = normalizeEmail(email);
+    const normalizedPhone = normalizeIndianPhone(phoneNumber);
     setLoading(true);
     try {
       const payload = {
         fullName,
-        email,
-        phoneNumber,
+        email: normalizedEmail,
+        phoneNumber: normalizedPhone,
         otp: phoneOtp.trim(),
         password,
+        confirmPassword,
         role: selectedRole,
         craft: selectedRole === 'TALENT' ? craft : productionProfileType,
         subCraft: selectedRole === 'TALENT' ? subCraft : null,
@@ -194,9 +269,9 @@ export default function JoinNowPage() {
           const socialProfileData = {
             userId: res.user.userId,
             name: fullName,
-            phone: phoneNumber,
+            phone: normalizedPhone,
             professionalPhone: '',
-            email: email,
+            email: email.trim(),
             experience: experienceYears || '',
             address: 'Hyderabad, India',
             languages: [],
@@ -225,7 +300,7 @@ export default function JoinNowPage() {
               method: 'PATCH',
               headers: {
                 'Content-Type': 'application/json',
-                'X-User-Email': email,
+                'X-User-Email': email.trim(),
                 ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
               },
               body: JSON.stringify(socialProfileData)
@@ -244,9 +319,9 @@ export default function JoinNowPage() {
             headquarters,
             address: headquarters,
             fullName,
-            email,
-            phone: phoneNumber,
-            phoneNumber,
+            email: email.trim(),
+            phone: normalizedPhone,
+            phoneNumber: normalizedPhone,
             role: 'Production House',
             primaryCraft: productionProfileType,
             createdAt: new Date().toISOString()
@@ -263,7 +338,23 @@ export default function JoinNowPage() {
         setErrorMsg(res.message || 'Registration failed');
       }
     } catch (err) {
-      setErrorMsg(err.message || 'An error occurred during registration.');
+      const message = err.message || 'An error occurred during registration.';
+      const backendEmailError = err.fields?.email;
+      const backendPhoneError = err.fields?.phoneNumber || err.fields?.phone;
+      const isEmailError = Boolean(backendEmailError)
+        || err.code === 'DUPLICATE_EMAIL'
+        || /email/i.test(message);
+      const isPhoneError = Boolean(backendPhoneError)
+        || err.code === 'DUPLICATE_PHONE_NUMBER'
+        || /phone/i.test(message);
+
+      if (isEmailError) {
+        setEmailError(backendEmailError || message);
+      }
+      if (isPhoneError) {
+        setPhoneError(backendPhoneError || message);
+      }
+      setErrorMsg(backendEmailError || backendPhoneError || message);
     } finally {
       setLoading(false);
     }
@@ -427,7 +518,7 @@ export default function JoinNowPage() {
           </div>
         )}
 
-        <form onSubmit={handleRegister} hidden={Boolean(generatedId)}>
+        <form onSubmit={handleRegister} noValidate hidden={Boolean(generatedId)}>
           
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
             <div className="form-group">
@@ -460,16 +551,45 @@ export default function JoinNowPage() {
           </div>
 
           <div className="form-group">
-            <label className="form-label">Professional Email *</label>
+            <label className="form-label" htmlFor="email">Professional Email *</label>
             <input
+              id="email"
               type="email"
-              className="form-control"
+              className={`form-control${emailError ? ' is-invalid' : ''}`}
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                setEmailError('');
+                if (errorMsg) {
+                  setErrorMsg('');
+                }
+              }}
+              onBlur={() => setEmailError(getEmailValidationError(email))}
               placeholder="name@cinema.com"
               autoComplete="email"
+              aria-invalid={Boolean(emailError)}
+              aria-describedby={emailError ? 'email-error' : undefined}
               required
             />
+            {emailError && (
+              <div
+                id="email-error"
+                role="alert"
+                className="form-error"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  color: '#B91C1C',
+                  fontSize: '13px',
+                  fontWeight: 500,
+                  marginTop: '6px'
+                }}
+              >
+                <AlertCircle size={14} style={{ flexShrink: 0 }} />
+                <span>{emailError}</span>
+              </div>
+            )}
           </div>
 
           <div className="form-group">
@@ -478,25 +598,32 @@ export default function JoinNowPage() {
               <input
                 id="phone-number"
                 type="tel"
-                className="form-control"
+                className={`form-control${phoneError ? ' is-invalid' : ''}`}
                 value={phoneNumber}
                 onChange={(e) => {
-                  setPhoneNumber(e.target.value.replace(/\D/g, '').slice(0, 10));
+                  const nextPhone = e.target.value;
+                  setPhoneNumber(nextPhone);
                   setPhoneOtp('');
                   setOtpRequested(false);
+                  setPhoneError(getIndianPhoneError(nextPhone));
+                  if (errorMsg) {
+                    setErrorMsg('');
+                  }
                 }}
-                placeholder="Enter your phone number"
+                onBlur={() => setPhoneError(getIndianPhoneError(phoneNumber))}
+                placeholder="Enter 10-digit mobile number (e.g. 9876543210)"
                 autoComplete="tel"
                 inputMode="numeric"
-                pattern="\d{10}"
-                maxLength={10}
+                maxLength={20}
+                aria-invalid={Boolean(phoneError)}
+                aria-describedby={phoneError ? 'phone-number-error' : undefined}
                 required
               />
               <button
                 type="button"
                 className="btn btn-maroon"
                 onClick={handleOtpRequest}
-                disabled={sendingOtp || !/^\d{10}$/.test(phoneNumber)}
+                disabled={sendingOtp || !isPhoneValid}
                 style={{ flexShrink: 0 }}
               >
                 {sendingOtp ? 'Sending...' : 'Send OTP'}
@@ -505,12 +632,32 @@ export default function JoinNowPage() {
                 type="button"
                 className="btn btn-outline-subtle"
                 onClick={handleOtpRequest}
-                disabled={sendingOtp || !otpRequested || !/^\d{10}$/.test(phoneNumber)}
+                disabled={sendingOtp || !otpRequested || !isPhoneValid}
                 style={{ flexShrink: 0 }}
               >
                 Resend OTP
               </button>
             </div>
+
+            {phoneError && (
+              <div
+                id="phone-number-error"
+                role="alert"
+                className="form-error"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  color: '#B91C1C',
+                  fontSize: '13px',
+                  fontWeight: 500,
+                  marginTop: '6px'
+                }}
+              >
+                <AlertCircle size={14} style={{ flexShrink: 0 }} />
+                <span>{phoneError}</span>
+              </div>
+            )}
 
             <div
               aria-hidden={!otpRequested}
@@ -544,102 +691,30 @@ export default function JoinNowPage() {
           </div>
 
           <div className="form-group">
-            <label className="form-label" htmlFor="create-password">Create Password *</label>
-            <div style={{ position: 'relative' }}>
-              <input
-                id="create-password"
-                type={showPassword ? 'text' : 'password'}
-                className="form-control"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Minimum 8 characters"
-                autoComplete="new-password"
-                required
-                minLength={6}
-                style={{ paddingRight: '42px' }}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword((visible) => !visible)}
-                aria-label={showPassword ? 'Hide password' : 'Show password'}
-                title={showPassword ? 'Hide password' : 'Show password'}
-                style={{
-                  position: 'absolute',
-                  right: '12px',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  padding: 0,
-                  border: 'none',
-                  background: 'none',
-                  color: 'var(--color-text-muted)',
-                  cursor: 'pointer'
-                }}
-              >
-                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-              </button>
-            </div>
+            <PasswordField
+              id="create-password"
+              name="password"
+              label="Create Password *"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="8-20 characters with A-Z, a-z, 0-9, and @#$%!&*"
+              autoComplete="new-password"
+              showValidation
+            />
           </div>
 
           <div className="form-group">
-            <label className="form-label" htmlFor="confirm-password">Confirm Password *</label>
-            <div style={{ position: 'relative' }}>
-              <input
-                id="confirm-password"
-                type={showConfirmPassword ? 'text' : 'password'}
-                className="form-control"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="Re-enter your password"
-                autoComplete="new-password"
-                required
-                aria-describedby="password-match-status"
-                style={{ paddingRight: '76px' }}
-              />
-              <button
-                type="button"
-                onClick={() => setShowConfirmPassword((visible) => !visible)}
-                aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
-                title={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
-                style={{
-                  position: 'absolute',
-                  right: '40px',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  padding: 0,
-                  border: 'none',
-                  background: 'none',
-                  color: 'var(--color-text-muted)',
-                  cursor: 'pointer'
-                }}
-              >
-                {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-              </button>
-              {confirmPassword && (
-                <span
-                  id="password-match-status"
-                  role="status"
-                  aria-label={password === confirmPassword ? 'Passwords match' : 'Passwords do not match'}
-                  style={{
-                    position: 'absolute',
-                    right: '12px',
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    display: 'flex',
-                    pointerEvents: 'none'
-                  }}
-                >
-                  {password === confirmPassword
-                    ? <CheckCircle2 size={20} color="#15803D" />
-                    : <XCircle size={20} color="#B91C1C" />}
-                </span>
-              )}
-            </div>
+            <PasswordField
+              id="confirm-password"
+              name="confirmPassword"
+              label="Confirm Password *"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Re-enter your password"
+              autoComplete="new-password"
+              isConfirm
+              compareValue={password}
+            />
           </div>
 
           {/* Role-Specific Fields */}
@@ -930,7 +1005,7 @@ export default function JoinNowPage() {
           <button 
             type="submit"
             id="join-now-submit-btn"
-            disabled={loading}
+            disabled={loading || !isPasswordSectionValid || !agreeTerms}
             className="btn btn-maroon btn-lg"
             style={{ width: '100%', fontSize: '16px', fontWeight: 700 }}
           >

@@ -10,7 +10,9 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
-import java.util.HashMap;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 @RestControllerAdvice
@@ -21,19 +23,50 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ApiException.class)
     public ResponseEntity<ApiResponse<Object>> handleApiException(ApiException ex) {
         log.warn("API Exception [{}]: {}", ex.getCode(), ex.getMessage());
-        return ResponseEntity.status(ex.getStatus())
-                .body(ApiResponse.error(ex.getCode(), ex.getMessage()));
+        ApiResponse<Object> body = (ex.getFields() != null && !ex.getFields().isEmpty())
+                ? ApiResponse.error(ex.getCode(), ex.getMessage(), ex.getFields())
+                : ApiResponse.error(ex.getCode(), ex.getMessage());
+        return ResponseEntity.status(ex.getStatus()).body(body);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiResponse<Object>> handleValidationException(MethodArgumentNotValidException ex) {
-        Map<String, String> fieldErrors = new HashMap<>();
-        for (FieldError error : ex.getBindingResult().getFieldErrors()) {
-            fieldErrors.put(error.getField(), error.getDefaultMessage());
+        Map<String, String> fieldErrors = new LinkedHashMap<>();
+        List<FieldError> sortedErrors = ex.getBindingResult().getFieldErrors().stream()
+                .sorted(Comparator.comparingInt(this::constraintPriority))
+                .toList();
+        for (FieldError error : sortedErrors) {
+            fieldErrors.putIfAbsent(error.getField(), error.getDefaultMessage());
         }
-        String message = fieldErrors.isEmpty() ? "Validation failed" : fieldErrors.values().iterator().next();
+        boolean hasPasswordError = fieldErrors.keySet().stream()
+                .anyMatch(field -> "password".equals(field)
+                        || "newPassword".equals(field)
+                        || "confirmPassword".equals(field));
+        String message = hasPasswordError
+                ? "Password validation failed"
+                : (fieldErrors.isEmpty() ? "Validation failed" : fieldErrors.values().iterator().next());
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(ApiResponse.error("VALIDATION_ERROR", message, fieldErrors));
+    }
+
+    private int constraintPriority(FieldError error) {
+        String code = error.getCode();
+        if ("NotBlank".equals(code) || "NotNull".equals(code) || "NotEmpty".equals(code)) {
+            return 0;
+        }
+        if ("Pattern".equals(code)) {
+            return 1;
+        }
+        if ("ValidPassword".equals(code)) {
+            return 2;
+        }
+        if ("Size".equals(code)) {
+            return 3;
+        }
+        if ("PasswordMatches".equals(code)) {
+            return 4;
+        }
+        return 5;
     }
 
     @ExceptionHandler(org.springframework.security.access.AccessDeniedException.class)
@@ -66,10 +99,50 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(org.springframework.dao.DataIntegrityViolationException.class)
-    public ResponseEntity<ApiResponse<Object>> handleDataIntegrity(Exception ex) {
+    public ResponseEntity<ApiResponse<Object>> handleDataIntegrity(org.springframework.dao.DataIntegrityViolationException ex) {
         log.warn("Data integrity violation: {}", ex.getMessage());
+        if (isDuplicateEmailViolation(ex)) {
+            String message = "This email is already registered. Please use another email address.";
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(ApiResponse.error("DUPLICATE_EMAIL", message, Map.of("email", message)));
+        }
+        if (isDuplicatePhoneViolation(ex)) {
+            String message = "This phone number is already registered. Please use another phone number.";
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(ApiResponse.error("DUPLICATE_PHONE_NUMBER", message, Map.of("phoneNumber", message)));
+        }
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(ApiResponse.error("CONFLICT", "This request conflicts with existing data. Please check the details and try again."));
+    }
+
+    private boolean isDuplicateEmailViolation(Throwable throwable) {
+        Throwable current = throwable;
+        while (current != null) {
+            String msg = current.getMessage();
+            if (msg != null) {
+                String lower = msg.toLowerCase(java.util.Locale.ROOT);
+                if (lower.contains("uk_user_accounts_email") || lower.contains("(email")) {
+                    return true;
+                }
+            }
+            current = current.getCause();
+        }
+        return false;
+    }
+
+    private boolean isDuplicatePhoneViolation(Throwable throwable) {
+        Throwable current = throwable;
+        while (current != null) {
+            String msg = current.getMessage();
+            if (msg != null) {
+                String lower = msg.toLowerCase(java.util.Locale.ROOT);
+                if (lower.contains("uk_user_accounts_phone_number") || lower.contains("phone_number")) {
+                    return true;
+                }
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 
     @ExceptionHandler({

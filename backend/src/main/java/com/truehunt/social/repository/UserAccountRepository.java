@@ -40,5 +40,7 @@ public interface UserAccountRepository extends JpaRepository<UserAccountEntity, 
 
     boolean existsByPublicUserId(String publicUserId);
     boolean existsByEmail(String email);
+    boolean existsByEmailIgnoreCase(String email);
     boolean existsByPhoneNumber(String phoneNumber);
+    boolean existsByPhoneNumberAndIdNot(String phoneNumber, Long id);
 }

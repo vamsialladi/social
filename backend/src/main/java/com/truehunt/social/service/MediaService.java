@@ -59,14 +59,8 @@ public class MediaService {
 
             String fileUrl = "/uploads/" + storedFileName;
 
-            Map<String, Object> result = new HashMap<>();
-            result.put("url", fileUrl);
-            result.put("fileName", originalName);
-            result.put("size", file.getSize());
-            result.put("sizeBytes", file.getSize());
-            result.put("contentType", file.getContentType());
-            result.put("category", category != null ? category : "general");
-            return result;
+            return buildUploadResult(fileUrl, originalName, file.getSize(), file.getContentType(),
+                    category != null ? category : "general");
         } catch (IOException e) {
             throw new RuntimeException("Failed to store media file: " + e.getMessage(), e);
         }
@@ -86,16 +80,44 @@ public class MediaService {
                     + Base64.getEncoder().encodeToString(file.getBytes());
             String originalName = file.getOriginalFilename() != null ? file.getOriginalFilename() : "profile-image";
 
-            Map<String, Object> result = new HashMap<>();
-            result.put("url", dataUrl);
-            result.put("fileName", originalName);
-            result.put("size", file.getSize());
-            result.put("sizeBytes", file.getSize());
-            result.put("contentType", contentType);
-            result.put("category", category);
-            return result;
+            return buildUploadResult(dataUrl, originalName, file.getSize(), contentType, category);
         } catch (IOException e) {
             throw new RuntimeException("Failed to process profile image: " + e.getMessage(), e);
         }
+    }
+
+    private Map<String, Object> buildUploadResult(
+            String url,
+            String fileName,
+            long size,
+            String contentType,
+            String category
+    ) {
+        Map<String, Object> result = new HashMap<>();
+        result.put("url", url);
+        result.put("fileName", fileName);
+        result.put("size", size);
+        result.put("sizeBytes", size);
+        result.put("contentType", contentType);
+        result.put("category", category != null ? category : "general");
+        result.put("kind", resolveKind(contentType));
+        return result;
+    }
+
+    private String resolveKind(String contentType) {
+        if (contentType == null || contentType.isBlank()) {
+            return "file";
+        }
+        String lower = contentType.toLowerCase();
+        if (lower.startsWith("image/")) {
+            return "image";
+        }
+        if (lower.startsWith("video/")) {
+            return "video";
+        }
+        if (lower.startsWith("audio/")) {
+            return "audio";
+        }
+        return "file";
     }
 }

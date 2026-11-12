@@ -1,20 +1,42 @@
 package com.truehunt.social.dto;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.truehunt.social.validation.PasswordMatches;
+import com.truehunt.social.validation.PasswordPolicy;
+import com.truehunt.social.validation.ValidPassword;
+import com.truehunt.social.validation.ValidPhoneNumber;
 import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import java.util.List;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
+@PasswordMatches
 public class RegisterRequest {
     private String name;
     private String fullName;
 
-    @Email(message = "Invalid email format")
+    @NotBlank(message = "Email is required.")
+    @Email(message = "Please enter a valid email address.")
     private String email;
 
+    @ValidPhoneNumber
     private String phone;
+    @ValidPhoneNumber
     private String phoneNumber;
+
+    @NotBlank(message = "Password is required")
+    @Size(min = PasswordPolicy.MIN_LENGTH, max = PasswordPolicy.MAX_LENGTH,
+            message = "Password must be between 8 and 20 characters")
+    @Pattern(regexp = PasswordPolicy.NO_SPACES_REGEX, message = "Password must not contain spaces")
+    @ValidPassword
     private String password;
+
+    @JsonAlias({"confirm-password", "confirmPassword"})
+    private String confirmPassword;
+
     private String role; // "TALENT" or "PRODUCER" / "STUDIO"
     private String primaryCraft;
     private String craft;
@@ -54,11 +76,17 @@ public class RegisterRequest {
     }
 
     public void setEmail(String email) {
-        this.email = email;
+        this.email = email == null ? null : email.trim();
     }
 
     public String getPhone() {
-        return (phone != null && !phone.isBlank()) ? phone : phoneNumber;
+        if (phone != null && !phone.isBlank()) {
+            return phone;
+        }
+        if (phoneNumber != null && !phoneNumber.isBlank()) {
+            return phoneNumber;
+        }
+        return phone != null ? phone : phoneNumber;
     }
 
     public void setPhone(String phone) {
@@ -79,6 +107,14 @@ public class RegisterRequest {
 
     public void setPassword(String password) {
         this.password = password;
+    }
+
+    public String getConfirmPassword() {
+        return confirmPassword;
+    }
+
+    public void setConfirmPassword(String confirmPassword) {
+        this.confirmPassword = confirmPassword;
     }
 
     public String getRole() {

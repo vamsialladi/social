@@ -47,19 +47,7 @@ public class ConversationService {
 
         if (userEmail != null && !userEmail.isBlank()) {
             final String cleanEmail = userEmail.trim().toLowerCase(Locale.ROOT);
-            final Set<String> callerIdentifiers = new HashSet<>();
-            callerIdentifiers.add(cleanEmail);
-
-            userAccountRepository.findByEmail(cleanEmail)
-                    .or(() -> userAccountRepository.findByPublicUserId(userEmail))
-                    .ifPresent(u -> {
-                        if (u.getEmail() != null)
-                            callerIdentifiers.add(u.getEmail().trim().toLowerCase(Locale.ROOT));
-                        if (u.getPublicUserId() != null)
-                            callerIdentifiers.add(u.getPublicUserId().trim().toLowerCase(Locale.ROOT));
-                        if (u.getId() != null)
-                            callerIdentifiers.add(String.valueOf(u.getId()));
-                    });
+            final Set<String> callerIdentifiers = resolveCallerIdentifiers(userEmail);
 
             return list.stream()
                     .filter(c -> {
@@ -76,12 +64,12 @@ public class ConversationService {
 
                         return matchU1 || matchU2 || matchName;
                     })
-                    .map(c -> c.toDto(cleanEmail, callerIdentifiers))
+                    .map(c -> toEnrichedDto(c, cleanEmail, callerIdentifiers))
                     .collect(Collectors.toList());
         }
 
         return list.stream()
-                .map(ConversationEntity::toDto)
+                .map(c -> toEnrichedDto(c, null, Collections.emptySet()))
                 .collect(Collectors.toList());
     }
 
@@ -93,22 +81,10 @@ public class ConversationService {
         ConversationEntity entity = findConversationEntity(id);
         if (userEmail != null && !userEmail.isBlank()) {
             final String cleanEmail = userEmail.trim().toLowerCase(Locale.ROOT);
-            final Set<String> callerIdentifiers = new HashSet<>();
-            callerIdentifiers.add(cleanEmail);
-
-            userAccountRepository.findByEmail(cleanEmail)
-                    .or(() -> userAccountRepository.findByPublicUserId(userEmail))
-                    .ifPresent(u -> {
-                        if (u.getEmail() != null)
-                            callerIdentifiers.add(u.getEmail().trim().toLowerCase(Locale.ROOT));
-                        if (u.getPublicUserId() != null)
-                            callerIdentifiers.add(u.getPublicUserId().trim().toLowerCase(Locale.ROOT));
-                        if (u.getId() != null)
-                            callerIdentifiers.add(String.valueOf(u.getId()));
-                    });
-            return entity.toDto(cleanEmail, callerIdentifiers);
+            final Set<String> callerIdentifiers = resolveCallerIdentifiers(userEmail);
+            return toEnrichedDto(entity, cleanEmail, callerIdentifiers);
         }
-        return entity.toDto(userEmail);
+        return toEnrichedDto(entity, userEmail);
     }
 
     @Transactional
@@ -134,7 +110,8 @@ public class ConversationService {
         java.security.Principal principal = finalEmail != null ? () -> finalEmail : null;
         com.truehunt.social.dto.ChatMessageDto sentDto = messageService.processAndSendMessage(chatDto, principal);
 
-        Map<String, Object> dto = entity.toDto(userEmail);
+        ConversationEntity refreshedEntity = conversationRepository.findById(entity.getId()).orElse(entity);
+        Map<String, Object> dto = toEnrichedDto(refreshedEntity, userEmail);
         dto.put("content", req.getContent());
         dto.put("message", sentDto);
         return dto;
@@ -186,7 +163,7 @@ public class ConversationService {
             conversation.setPreview(cleanContent);
         }
         conversation.setUpdatedAt(LocalDateTime.now());
-        return conversationRepository.save(conversation).toDto(userId, callerIdentifiers);
+        return toEnrichedDto(conversationRepository.save(conversation), userId, callerIdentifiers);
     }
 
     @Transactional
@@ -199,7 +176,7 @@ public class ConversationService {
         conversation.setDate("Now");
         conversation.setUnread(false);
         conversation.setUpdatedAt(LocalDateTime.now());
-        return conversationRepository.save(conversation).toDto(userId, callerIdentifiers);
+        return toEnrichedDto(conversationRepository.save(conversation), userId, callerIdentifiers);
     }
 
     @Transactional
@@ -222,7 +199,7 @@ public class ConversationService {
         if (sentDto.getConversationId() != null) {
             ConversationEntity entity = conversationRepository.findById(sentDto.getConversationId()).orElse(null);
             if (entity != null)
-                return entity.toDto(userEmail);
+                return toEnrichedDto(entity, userEmail);
         }
 
         ConversationEntity c = new ConversationEntity();
@@ -244,31 +221,46 @@ public class ConversationService {
         c.setThread(List.of(msg));
 
         ConversationEntity saved = conversationRepository.save(c);
-        return saved.toDto(userEmail);
+        return toEnrichedDto(saved, userEmail);
     }
 
     @Transactional
     public Map<String, Object> markAsRead(String id) {
+        return markAsRead(id, null);
+    }
+
+    @Transactional
+    public Map<String, Object> markAsRead(String id, String userEmail) {
         ConversationEntity entity = findConversationEntity(id);
         entity.setUnread(false);
         conversationRepository.save(entity);
-        return entity.toDto();
+        return toEnrichedDto(entity, userEmail);
     }
 
     @Transactional
     public Map<String, Object> starConversation(String id) {
+        return starConversation(id, null);
+    }
+
+    @Transactional
+    public Map<String, Object> starConversation(String id, String userEmail) {
         ConversationEntity entity = findConversationEntity(id);
         entity.setStarred(!entity.isStarred());
         conversationRepository.save(entity);
-        return entity.toDto();
+        return toEnrichedDto(entity, userEmail);
     }
 
     @Transactional
     public Map<String, Object> updateMailbox(String id, String mailbox) {
+        return updateMailbox(id, mailbox, null);
+    }
+
+    @Transactional
+    public Map<String, Object> updateMailbox(String id, String mailbox, String userEmail) {
         ConversationEntity entity = findConversationEntity(id);
         entity.setMailbox(mailbox);
         conversationRepository.save(entity);
-        return entity.toDto();
+        return toEnrichedDto(entity, userEmail);
     }
 
     @Transactional
@@ -353,6 +345,131 @@ public class ConversationService {
                 .filter(candidate -> Objects.equals(candidate.getContent(), originalContent))
                 .findFirst()
                 .orElse(null);
+    }
+
+    private Set<String> resolveCallerIdentifiers(String userEmail) {
+        Set<String> callerIdentifiers = new HashSet<>();
+        if (userEmail == null || userEmail.isBlank()) {
+            return callerIdentifiers;
+        }
+        String cleanEmail = userEmail.trim().toLowerCase(Locale.ROOT);
+        callerIdentifiers.add(cleanEmail);
+        userAccountRepository.findByEmail(cleanEmail)
+                .or(() -> userAccountRepository.findByPublicUserId(userEmail.trim()))
+                .ifPresent(u -> {
+                    if (u.getEmail() != null)
+                        callerIdentifiers.add(u.getEmail().trim().toLowerCase(Locale.ROOT));
+                    if (u.getPublicUserId() != null)
+                        callerIdentifiers.add(u.getPublicUserId().trim().toLowerCase(Locale.ROOT));
+                    if (u.getId() != null)
+                        callerIdentifiers.add(String.valueOf(u.getId()));
+                });
+        return callerIdentifiers;
+    }
+
+    private Map<String, Object> toEnrichedDto(ConversationEntity entity, String currentUserId) {
+        Set<String> callerIdentifiers = (currentUserId != null && !currentUserId.isBlank())
+                ? resolveCallerIdentifiers(currentUserId)
+                : Collections.emptySet();
+        return toEnrichedDto(entity, currentUserId, callerIdentifiers);
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> toEnrichedDto(ConversationEntity entity,
+                                              String currentUserId,
+                                              Set<String> callerIdentifiers) {
+        Map<String, Object> dto = entity.toDto(currentUserId, callerIdentifiers);
+
+        String liveUser1Name = resolveLiveParticipantName(entity.getUser1Id());
+        String liveUser2Name = resolveLiveParticipantName(entity.getUser2Id());
+
+        String effectiveUser1Name = (liveUser1Name != null && !liveUser1Name.isBlank())
+                ? liveUser1Name
+                : entity.getUser1Name();
+        String effectiveUser2Name = (liveUser2Name != null && !liveUser2Name.isBlank())
+                ? liveUser2Name
+                : entity.getUser2Name();
+
+        if (effectiveUser1Name != null && !effectiveUser1Name.isBlank()) {
+            dto.put("user1Name", effectiveUser1Name);
+        }
+        if (effectiveUser2Name != null && !effectiveUser2Name.isBlank()) {
+            dto.put("user2Name", effectiveUser2Name);
+        }
+
+        Set<String> cleanIdentifiers = new HashSet<>();
+        if (currentUserId != null && !currentUserId.isBlank()) {
+            cleanIdentifiers.add(normalizeIdentity(currentUserId));
+        }
+        if (callerIdentifiers != null) {
+            callerIdentifiers.stream()
+                    .filter(Objects::nonNull)
+                    .map(this::normalizeIdentity)
+                    .filter(s -> !s.isEmpty())
+                    .forEach(cleanIdentifiers::add);
+        }
+
+        String u1IdClean = normalizeIdentity(entity.getUser1Id());
+        String u2IdClean = normalizeIdentity(entity.getUser2Id());
+        boolean isUser1 = !u1IdClean.isEmpty() && cleanIdentifiers.contains(u1IdClean);
+        boolean isUser2 = !u2IdClean.isEmpty() && cleanIdentifiers.contains(u2IdClean);
+
+        if (isUser1 && effectiveUser2Name != null && !effectiveUser2Name.isBlank()) {
+            dto.put("name", effectiveUser2Name);
+            dto.put("initials", getInitials(effectiveUser2Name));
+        } else if (isUser2 && effectiveUser1Name != null && !effectiveUser1Name.isBlank()) {
+            dto.put("name", effectiveUser1Name);
+            dto.put("initials", getInitials(effectiveUser1Name));
+        } else if (!isUser1 && !isUser2 && liveUser2Name != null && !liveUser2Name.isBlank()) {
+            dto.put("name", liveUser2Name);
+            dto.put("initials", getInitials(liveUser2Name));
+        }
+
+        Object rawThread = dto.get("thread");
+        if (rawThread instanceof List<?> rawList && !rawList.isEmpty()) {
+            List<Map<String, Object>> enrichedThread = new ArrayList<>(rawList.size());
+            for (Object entry : rawList) {
+                if (!(entry instanceof Map<?, ?> rawMap)) continue;
+                Map<String, Object> msg = new HashMap<>((Map<String, Object>) rawMap);
+                Object senderIdObj = msg.get("senderId");
+                if (senderIdObj != null) {
+                    String msgSenderId = String.valueOf(senderIdObj);
+                    String msgSenderClean = normalizeIdentity(msgSenderId);
+                    if (!msgSenderClean.isEmpty() && msgSenderClean.equals(u1IdClean)
+                            && effectiveUser1Name != null && !effectiveUser1Name.isBlank()) {
+                        msg.put("senderName", effectiveUser1Name);
+                    } else if (!msgSenderClean.isEmpty() && msgSenderClean.equals(u2IdClean)
+                            && effectiveUser2Name != null && !effectiveUser2Name.isBlank()) {
+                        msg.put("senderName", effectiveUser2Name);
+                    } else {
+                        String resolvedSender = resolveLiveParticipantName(msgSenderId);
+                        if (resolvedSender != null && !resolvedSender.isBlank()) {
+                            msg.put("senderName", resolvedSender);
+                        }
+                    }
+                }
+                enrichedThread.add(msg);
+            }
+            dto.put("thread", enrichedThread);
+        }
+
+        return dto;
+    }
+
+    private String resolveLiveParticipantName(String identifier) {
+        if (identifier == null || identifier.isBlank()) {
+            return null;
+        }
+        String live = messageService.resolveLatestUserName(identifier);
+        if (live != null && !live.isBlank()) {
+            return live.trim();
+        }
+        Optional<UserAccountEntity> account = userAccountRepository.findByEmail(normalizeIdentity(identifier))
+                .or(() -> userAccountRepository.findByPublicUserId(identifier.trim()));
+        if (account.isPresent() && account.get().getName() != null && !account.get().getName().isBlank()) {
+            return account.get().getName().trim();
+        }
+        return null;
     }
 
     private String normalizeIdentity(String identity) {

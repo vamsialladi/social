@@ -556,7 +556,12 @@
 }
 
 .settings-password-note {
-  color: #77737d;
+  color: #15803d;
+}
+
+.settings-password-form .settings-edit-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .settings-detail-row {
@@ -779,4 +784,19 @@
 .cinemans-page.is-dark .settings-theme-option.is-selected {
   background: #23415c;
   color: #a8d4ff;
+}
+
+.cinemans-page.is-dark .settings-password-form {
+  border-color: #393d45;
+  background: #202329;
+}
+
+.cinemans-page.is-dark .settings-password-form h3 {
+  color: #e5e7eb;
+}
+
+.cinemans-page.is-dark .settings-password-form input {
+  border-color: #444953;
+  background: #181b20;
+  color: #e5e7eb;
 }

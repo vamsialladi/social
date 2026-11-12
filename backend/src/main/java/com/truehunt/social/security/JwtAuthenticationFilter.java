@@ -41,6 +41,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 String headerEmail = request.getHeader("X-User-Email");
                 if (StringUtils.hasText(headerEmail)) {
                     email = headerEmail.trim();
+                } else {
+                    String headerUserId = request.getHeader("X-User-Id");
+                    if (StringUtils.hasText(headerUserId)) {
+                        email = headerUserId.trim();
+                    }
                 }
             }
 

@@ -1,5 +1,10 @@
 import { useEffect, useState } from 'react'
 import api from '../../api'
+import PasswordField from '../../components/common/PasswordField'
+import {
+  getPasswordValidationMessage,
+  isPasswordValid,
+} from '../../components/common/passwordValidation'
 import {
   ArrowRight,
   Bell,
@@ -85,6 +90,11 @@ function Settings({ profileDetails, profilePreview, onEditProfile, theme, onThem
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false)
   const [securityMessage, setSecurityMessage] = useState('')
   const [passwordMessage, setPasswordMessage] = useState('')
+  const [passwordIsError, setPasswordIsError] = useState(false)
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false)
   const name = profileDetails.name || 'Your name'
   const email = profileDetails.email || 'Not added yet'
   const phone = profileDetails.phone || 'Not added yet'
@@ -105,27 +115,53 @@ function Settings({ profileDetails, profilePreview, onEditProfile, theme, onThem
     loadSettings()
   }, [])
 
+  const isChangePasswordValid =
+    currentPassword.length > 0 &&
+    isPasswordValid(newPassword) &&
+    newPassword === confirmPassword
+
   async function handlePasswordSubmit(event) {
     event.preventDefault()
-    const form = event.currentTarget
-    const formData = new FormData(form)
+    setPasswordMessage('')
+    setPasswordIsError(false)
 
-    if (formData.get('new-password') !== formData.get('confirm-password')) {
-      setPasswordMessage('The new passwords do not match.')
+    if (!currentPassword) {
+      setPasswordIsError(true)
+      setPasswordMessage('Current password is required.')
       return
     }
 
+    const passwordError = getPasswordValidationMessage(newPassword)
+    if (passwordError) {
+      setPasswordIsError(true)
+      setPasswordMessage(passwordError)
+      return
+    }
+
+    if (newPassword !== confirmPassword) {
+      setPasswordIsError(true)
+      setPasswordMessage('Password and confirm password do not match.')
+      return
+    }
+
+    setIsUpdatingPassword(true)
     try {
       await api.changePassword({
-        'current-password': formData.get('current-password')?.toString() || '',
-        'new-password': formData.get('new-password')?.toString() || '',
-        'confirm-password': formData.get('confirm-password')?.toString() || '',
+        'current-password': currentPassword,
+        'new-password': newPassword,
+        'confirm-password': confirmPassword,
       })
+      setPasswordIsError(false)
       setPasswordMessage('Password updated successfully!')
-      form.reset()
+      setCurrentPassword('')
+      setNewPassword('')
+      setConfirmPassword('')
       setTimeout(() => setIsPasswordFormOpen(false), 2000)
     } catch (err) {
+      setPasswordIsError(true)
       setPasswordMessage(err.message || 'Failed to update password.')
+    } finally {
+      setIsUpdatingPassword(false)
     }
   }
 
@@ -284,6 +320,10 @@ function Settings({ profileDetails, profilePreview, onEditProfile, theme, onThem
                     onClick={() => {
                       setIsPasswordFormOpen((open) => !open)
                       setPasswordMessage('')
+                      setPasswordIsError(false)
+                      setCurrentPassword('')
+                      setNewPassword('')
+                      setConfirmPassword('')
                       setSecurityMessage('')
                     }}
                   >
@@ -315,29 +355,63 @@ function Settings({ profileDetails, profilePreview, onEditProfile, theme, onThem
                 onSubmit={handlePasswordSubmit}
               >
                 <h3>Change password</h3>
-                <label>
-                  Current password
-                  <input name="current-password" type="password" autoComplete="current-password" required />
-                </label>
-                <label>
-                  New password
-                  <input name="new-password" type="password" autoComplete="new-password" minLength={8} required />
-                  <small>Use at least 8 characters.</small>
-                </label>
-                <label>
-                  Confirm new password
-                  <input name="confirm-password" type="password" autoComplete="new-password" minLength={8} required />
-                </label>
+                <PasswordField
+                  id="settings-current-password"
+                  name="current-password"
+                  label="Current password"
+                  inputClassName=""
+                  value={currentPassword}
+                  onChange={(e) => {
+                    setCurrentPassword(e.target.value)
+                    setPasswordMessage('')
+                  }}
+                  placeholder="Enter your current password"
+                  autoComplete="current-password"
+                  maxLength={100}
+                />
+                <PasswordField
+                  id="settings-new-password"
+                  name="new-password"
+                  label="New password"
+                  inputClassName=""
+                  value={newPassword}
+                  onChange={(e) => {
+                    setNewPassword(e.target.value)
+                    setPasswordMessage('')
+                  }}
+                  placeholder="8-20 characters with A-Z, a-z, 0-9, and @#$%!&*"
+                  autoComplete="new-password"
+                  showValidation
+                />
+                <PasswordField
+                  id="settings-confirm-password"
+                  name="confirm-password"
+                  label="Confirm new password"
+                  inputClassName=""
+                  value={confirmPassword}
+                  onChange={(e) => {
+                    setConfirmPassword(e.target.value)
+                    setPasswordMessage('')
+                  }}
+                  placeholder="Re-enter your new password"
+                  autoComplete="new-password"
+                  isConfirm
+                  compareValue={newPassword}
+                />
                 {passwordMessage && (
                   <p
-                    className={passwordMessage.startsWith('The new passwords') ? 'settings-password-error' : 'settings-password-note'}
+                    className={passwordIsError ? 'settings-password-error' : 'settings-password-note'}
                     role="status"
                   >
                     {passwordMessage}
                   </p>
                 )}
-                <button className="settings-edit-button" type="submit">
-                  Update password
+                <button
+                  className="settings-edit-button"
+                  type="submit"
+                  disabled={isUpdatingPassword || !isChangePasswordValid}
+                >
+                  {isUpdatingPassword ? 'Updating...' : 'Update password'}
                 </button>
               </form>
             )}
