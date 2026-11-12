@@ -374,24 +374,11 @@ export default function JoinNowPage() {
             {selectedRole === 'TALENT' ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 <Link
-                  to="/social#profile"
+                  to="/social/home"
                   className="btn btn-maroon btn-lg"
                   style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', textDecoration: 'none' }}
                 >
                   View My Profile in Social Platform â†’
-                </Link>
-                <Link
-                  to="/social#home"
-                  className="btn btn-lg"
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-white)', textDecoration: 'none', color: 'var(--color-navy)' }}
-                >
-                  Open Social Feed
-                </Link>
-                <Link
-                  to="/"
-                  style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginTop: '8px', textDecoration: 'underline' }}
-                >
-                  Return to Main Dashboard
                 </Link>
               </div>
             ) : (

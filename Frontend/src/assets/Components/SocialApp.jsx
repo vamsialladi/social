@@ -285,14 +285,6 @@ function getNavigationFromLocation(pathname) {
   return getNavigationFromHash()
 }
 
-function getProfilePath(name) {
-  const profileSlug = String(name || '').trim().toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
-
-  return profileSlug ? `/${encodeURIComponent(profileSlug)}/profile` : '/social/profile'
-}
-
 function NavigationIcon({ name }) {
   const iconPaths = {
     search: <><circle cx="11" cy="11" r="7" /><path d="m16 16 4 4" /></>,
@@ -1478,16 +1470,18 @@ export default function SocialApp() {
       const results = await Promise.allSettled([
         activeNavigation === 'endorsement' ? Promise.resolve(null) : api.getNotifications(),
         api.getInvitations(),
+        api.getIncomingContactAccessRequests(),
       ])
       if (!isCurrent) return
 
-      const [notificationsResult, invitationsResult] = results
+      const [notificationsResult, invitationsResult, contactRequestsResult] = results
+      let endorsementCount = 0
       if (notificationsResult.status === 'fulfilled') {
         const notifications = notificationsResult.value
         if (Array.isArray(notifications)) {
-          setUnreadEndorsementCount(notifications.filter(
+          endorsementCount += notifications.filter(
             (notification) => !(notification.read ?? notification.isRead),
-          ).length)
+          ).length
         }
       } else {
         console.warn('Could not refresh endorsement notification count:', notificationsResult.reason)
@@ -1498,6 +1492,15 @@ export default function SocialApp() {
       } else {
         console.warn('Could not refresh network request count:', invitationsResult.reason)
       }
+
+      if (contactRequestsResult.status === 'fulfilled') {
+        if (Array.isArray(contactRequestsResult.value)) {
+          endorsementCount += contactRequestsResult.value.length
+        }
+      } else {
+        console.warn('Could not refresh contact access request count:', contactRequestsResult.reason)
+      }
+      setUnreadEndorsementCount(endorsementCount)
     }
 
     function refreshOnConnectionChange() {
@@ -1533,7 +1536,7 @@ export default function SocialApp() {
   function showMyProfile() {
     setViewingCandidateProfile(null)
     setActiveNavigationState('profile')
-    navigate(getProfilePath(profileDetails.name || user?.name))
+    navigate('/social/profile')
     api.getProfile().then((fresh) => {
       if (fresh && fresh.name) {
         setProfileDetails((prev) => ({ ...prev, ...fresh }))
@@ -1822,6 +1825,7 @@ export default function SocialApp() {
         <Endorsement
           profileDetails={profileDetails}
           profilePreview={profilePreview}
+          isActive={activeNavigation === 'endorsement'}
           onViewProfile={showMyProfile}
           onManageNotifications={() => setActiveNavigation('settings')}
         />
@@ -1830,6 +1834,14 @@ export default function SocialApp() {
         <ConnectionsPage
           onBack={() => setActiveNavigation('profile')}
           onProfileSelect={showCandidateProfile}
+          currentUserIdentifiers={[
+            user?.userId,
+            user?.id,
+            user?.email,
+            profileDetails.userId,
+            profileDetails.id,
+            profileDetails.email,
+          ]}
         />
       </div>
       {(() => {
@@ -1864,6 +1876,12 @@ export default function SocialApp() {
               accountUserId={user?.userId || ''}
               profileDetails={activeProfileDetails}
               setProfileDetails={(updater) => {
+                if (!isProfileOwner) {
+                  setViewingCandidateProfile((currentProfile) => (
+                    typeof updater === 'function' ? updater(currentProfile) : updater
+                  ))
+                  return
+                }
                 setProfileDetails((prev) => {
                   const updated = typeof updater === 'function' ? updater(prev) : updater
                   if (profileStorageKey) {

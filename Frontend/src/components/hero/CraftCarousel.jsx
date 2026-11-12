@@ -13,6 +13,7 @@ function CraftSlideshowPhoto({ craft, photoSlideIndex }) {
 
   return (
     <img
+      key={currentPhoto?.image}
       src={currentPhoto?.image}
       alt={`${currentPhoto?.person} — ${craft.name}`}
       className="craft-circle-img"

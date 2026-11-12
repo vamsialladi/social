@@ -20,6 +20,39 @@ import { websocketService } from '../../services/websocket'
 const categories = ['Opportunities', 'Unread', 'Connections', 'InMail', 'Starred']
 const mailboxOptions = ['Focused', 'Other', 'Archived', 'Spam']
 const emojis = ['😀', '😂', '😍', '😊', '👍', '🎉', '❤️', '🙏']
+const genericContactNames = new Set(['truehunt member', 'cinema professional', 'member'])
+
+function getConversationContactName(conversation, user) {
+  const myIdentifiers = new Set([
+    user?.email,
+    user?.userId,
+    user?.publicUserId,
+    user?.id,
+  ].filter(Boolean).map((value) => String(value).trim().toLowerCase()))
+  const user1IsCurrent = myIdentifiers.has(String(conversation.user1Id || '').trim().toLowerCase())
+  const user2IsCurrent = myIdentifiers.has(String(conversation.user2Id || '').trim().toLowerCase())
+  const otherParticipantName = user1IsCurrent
+    ? conversation.user2Name
+    : user2IsCurrent ? conversation.user1Name : ''
+  const candidates = [
+    otherParticipantName,
+    conversation.name,
+    conversation.profile?.name,
+    conversation.user1Name,
+    conversation.user2Name,
+  ]
+
+  return candidates
+    .map((candidate) => String(candidate || '').trim())
+    .find((name) => name && !genericContactNames.has(name.toLowerCase())) || ''
+}
+
+function getConversationActivityTime(conversation) {
+  const thread = Array.isArray(conversation.thread) ? conversation.thread : []
+  const lastMessageTime = thread[thread.length - 1]?.sentAt
+  const timestamp = Date.parse(conversation.updatedAt || lastMessageTime || '')
+  return Number.isNaN(timestamp) ? 0 : timestamp
+}
 
 function formatMessageTimestamp(timestamp) {
   const date = new Date(timestamp)
@@ -152,6 +185,12 @@ function Messages({
   const [activeCategory, setActiveCategory] = useState('')
   const [mailbox, setMailbox] = useState('Focused')
   const [isMailboxOpen, setIsMailboxOpen] = useState(false)
+  const [isConversationMenuOpen, setIsConversationMenuOpen] = useState(false)
+  const [editingMessageId, setEditingMessageId] = useState('')
+  const [editMessageDraft, setEditMessageDraft] = useState('')
+  const [isUpdatingMessage, setIsUpdatingMessage] = useState(false)
+  const [isClearingChat, setIsClearingChat] = useState(false)
+  const [conversationActionError, setConversationActionError] = useState('')
   const [search, setSearch] = useState('')
   const [isComposeOpen, setIsComposeOpen] = useState(false)
   const [recipient, setRecipient] = useState('')
@@ -170,6 +209,7 @@ function Messages({
   const replyInputRef = useRef(null)
   const attachmentInputRef = useRef(null)
   const emojiPickerRef = useRef(null)
+  const conversationMenuRef = useRef(null)
   const previousInboxRequest = useRef(resetToInboxRequest)
 
   const currentUser = useMemo(() => {
@@ -185,25 +225,30 @@ function Messages({
     try {
       const data = await api.getConversations(currentMailbox)
       if (Array.isArray(data)) {
+        const namedConversations = data.map((conversation) => ({
+          ...conversation,
+          name: getConversationContactName(conversation, currentUser) || 'Profile',
+        }))
         setMessages((prev) => {
           const profileConversations = prev.filter((m) => String(m.id).startsWith('profile-'))
-          const backendIds = new Set(data.map((d) => String(d.id)))
+          const backendIds = new Set(namedConversations.map((d) => String(d.id)))
           const merged = [
-            ...data,
+            ...namedConversations,
             ...profileConversations.filter(
-              (p) => !backendIds.has(String(p.id)) && !data.some((d) => d.name.toLowerCase() === p.name.toLowerCase())
+              (p) => !backendIds.has(String(p.id))
+                && !namedConversations.some((d) => d.name.toLowerCase() === p.name.toLowerCase())
             ),
           ]
           return merged
         })
         setSelectedId((current) => {
-          const matchingConversation = data.find((conversation) => (
+          const matchingConversation = namedConversations.find((conversation) => (
             String(conversation.id) === String(current)
           ))
           if (matchingConversation) return matchingConversation.id
           if (current == null) return null
           if (String(current).startsWith('profile-')) return current
-          return data[0]?.id || null
+          return namedConversations[0]?.id || null
         })
       }
 
@@ -214,7 +259,7 @@ function Messages({
     } catch (err) {
       console.warn('Could not load conversations from backend:', err)
     }
-  }, [onUnreadCountChange])
+  }, [currentUser, onUnreadCountChange])
 
   useEffect(() => {
     if (previousInboxRequest.current === resetToInboxRequest) return
@@ -229,7 +274,43 @@ function Messages({
   }, [resetToInboxRequest])
 
   const handleIncomingWebSocketMessage = useCallback((newMsg) => {
-    if (!newMsg || !newMsg.content) return
+    if (!newMsg) return
+
+    const convId = newMsg.conversationId
+    if (newMsg.type === 'CONVERSATION_CLEARED') {
+      setMessages((prevMessages) => prevMessages.map((conversation) => (
+        String(conversation.id) === String(convId)
+          ? {
+            ...conversation,
+            thread: [],
+            preview: 'Start a conversation',
+            date: 'Now',
+            unread: false,
+          }
+          : conversation
+      )))
+      return
+    }
+    if (newMsg.type === 'MESSAGE_EDITED') {
+      const messageId = String(newMsg.id || '')
+      setMessages((prevMessages) => prevMessages.map((conversation) => {
+        if (String(conversation.id) !== String(convId)) return conversation
+        const thread = (conversation.thread || []).map((message) => (
+          String(message.id) === messageId
+            ? { ...message, content: newMsg.content, edited: Boolean(newMsg.edited) }
+            : message
+        ))
+        return {
+          ...conversation,
+          thread,
+          preview: String(thread[thread.length - 1]?.id) === messageId
+            ? newMsg.content
+            : conversation.preview,
+        }
+      }))
+      return
+    }
+    if (!newMsg.content) return
 
     let currentUser = null
     try {
@@ -237,9 +318,9 @@ function Messages({
       if (u) currentUser = JSON.parse(u)
     } catch {}
 
-    const convId = newMsg.conversationId
     const content = newMsg.content
     const msgId = newMsg.id || `msg-${Date.now()}`
+    const activityAt = newMsg.sentAt || new Date().toISOString()
 
     const myEmail = (currentUser?.email || '').trim().toLowerCase()
     const myId = String(currentUser?.userId || currentUser?.publicUserId || currentUser?.id || '').trim().toLowerCase()
@@ -329,6 +410,7 @@ function Messages({
                   thread: updatedThread,
                   preview: content,
                   date: 'Just now',
+                  updatedAt: activityAt,
                 }
               }
             }
@@ -339,6 +421,7 @@ function Messages({
               thread: [...thread, threadItem],
               preview: content,
               date: 'Just now',
+              updatedAt: activityAt,
               unread: !isOutgoing && !isSelectedConversationVisible,
             }
           }
@@ -352,6 +435,7 @@ function Messages({
           color: 'purple',
           preview: content,
           date: 'Just now',
+          updatedAt: activityAt,
           category: 'Connections',
           mailbox: 'Focused',
           unread: !isOutgoing && !isSelectedConversationVisible,
@@ -482,6 +566,19 @@ function Messages({
     return () => document.removeEventListener('pointerdown', closeOnOutsideClick)
   }, [isEmojiPickerOpen])
 
+  useEffect(() => {
+    if (!isConversationMenuOpen) return undefined
+
+    function closeConversationMenu(event) {
+      if (!conversationMenuRef.current?.contains(event.target)) {
+        setIsConversationMenuOpen(false)
+      }
+    }
+
+    document.addEventListener('pointerdown', closeConversationMenu)
+    return () => document.removeEventListener('pointerdown', closeConversationMenu)
+  }, [isConversationMenuOpen])
+
   const visibleMessages = useMemo(() => {
     const query = search.trim().toLowerCase()
 
@@ -500,6 +597,7 @@ function Messages({
       .map((message, index) => ({ message, index }))
       .sort((first, second) => (
         Number(Boolean(second.message.starred)) - Number(Boolean(first.message.starred))
+        || getConversationActivityTime(second.message) - getConversationActivityTime(first.message)
         || first.index - second.index
       ))
       .map(({ message }) => message)
@@ -508,6 +606,14 @@ function Messages({
   const selectedMessage = messages.find((message) => (
     String(message.id) === String(selectedId)
   ))
+  const lastOutgoingMessage = selectedMessage
+    ? [...(selectedMessage.thread || [])]
+      .reverse()
+      .find((message) => isMessageOutgoing(message, selectedMessage, currentUser))
+    : null
+  const lastEditableMessage = lastOutgoingMessage && !lastOutgoingMessage.edited
+    ? lastOutgoingMessage
+    : null
 
   useEffect(() => {
     const handleResize = () => {
@@ -552,6 +658,9 @@ function Messages({
 
   function handleSelectMessage(id) {
     void markConversationRead(id)
+    setEditingMessageId('')
+    setConversationActionError('')
+    setIsConversationMenuOpen(false)
 
     if (window.innerWidth <= 740) {
       setSelectedId(id)
@@ -586,6 +695,82 @@ function Messages({
         String(message.id) === String(id) ? { ...message, starred: conversation.starred } : message
       )))
       console.warn('Could not update pinned conversation:', error)
+    }
+  }
+
+  function startEditingLastMessage() {
+    if (!lastEditableMessage) return
+    setEditingMessageId(String(lastEditableMessage.id))
+    setEditMessageDraft(lastEditableMessage.content || '')
+    setConversationActionError('')
+    setIsConversationMenuOpen(false)
+  }
+
+  async function saveEditedMessage(event) {
+    event.preventDefault()
+    const content = editMessageDraft.trim()
+    if (!selectedMessage || !editingMessageId || !content || isUpdatingMessage) return
+
+    setIsUpdatingMessage(true)
+    setConversationActionError('')
+    try {
+      if (/^\d+$/.test(String(selectedMessage.id))) {
+        await api.editMessage(selectedMessage.id, editingMessageId, content)
+      }
+
+      setMessages((currentMessages) => currentMessages.map((conversation) => {
+        if (String(conversation.id) !== String(selectedMessage.id)) return conversation
+
+        const thread = (conversation.thread || []).map((message) => (
+          String(message.id) === editingMessageId ? { ...message, content, edited: true } : message
+        ))
+        const wasLastMessage = String(thread[thread.length - 1]?.id) === editingMessageId
+        return {
+          ...conversation,
+          thread,
+          preview: wasLastMessage ? content : conversation.preview,
+        }
+      }))
+      setEditingMessageId('')
+      setEditMessageDraft('')
+    } catch (error) {
+      console.error('Could not edit message:', error)
+      setConversationActionError(error.message || 'Could not edit this message. Please try again.')
+    } finally {
+      setIsUpdatingMessage(false)
+    }
+  }
+
+  async function clearSelectedChat() {
+    if (!selectedMessage || isClearingChat) return
+    const confirmed = window.confirm('Clear all messages for both people in this chat? This cannot be undone.')
+    if (!confirmed) return
+
+    setIsClearingChat(true)
+    setConversationActionError('')
+    try {
+      if (/^\d+$/.test(String(selectedMessage.id))) {
+        await api.clearConversationMessages(selectedMessage.id)
+      }
+      setMessages((currentMessages) => currentMessages.map((conversation) => (
+        String(conversation.id) === String(selectedMessage.id)
+          ? {
+            ...conversation,
+            thread: [],
+            preview: 'Start a conversation',
+            date: 'Now',
+            unread: false,
+          }
+          : conversation
+      )))
+      setEditingMessageId('')
+      setEditMessageDraft('')
+      setIsConversationMenuOpen(false)
+    } catch (error) {
+      console.error('Could not clear conversation:', error)
+      setConversationActionError(error.message || 'Could not clear this chat. Please try again.')
+    } finally {
+      setIsClearingChat(false)
     }
   }
 
@@ -630,12 +815,13 @@ function Messages({
     const messageId = `msg-${Date.now()}`
     const attachment = replyAttachment
 
+    const sentAt = new Date().toISOString()
     const outgoingItem = {
       id: messageId,
       content,
       attachment,
       direction: 'outgoing',
-      sentAt: new Date().toISOString(),
+      sentAt,
       createdAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       senderId: myIdentity,
       senderName: currentUser?.name || 'You',
@@ -657,6 +843,7 @@ function Messages({
           ],
           preview: content || (attachment ? `Attachment: ${attachment.name}` : ''),
           date: 'Now',
+          updatedAt: sentAt,
           unread: false,
         }
         : message
@@ -744,6 +931,7 @@ function Messages({
         color: 'purple',
         preview: content,
         date: 'Now',
+        updatedAt: created?.updatedAt || new Date().toISOString(),
         category: 'Direct',
         mailbox: 'Focused',
         unread: false,
@@ -958,9 +1146,43 @@ function Messages({
                     </div>
                   </div>
                   <div className="message-detail-actions">
-                    <button className="messages-icon-button" type="button" aria-label="More conversation options">
-                      <MoreHorizontal size={26} strokeWidth={2.8} />
-                    </button>
+                    <div className="conversation-menu-wrap" ref={conversationMenuRef}>
+                      <button
+                        className="messages-icon-button"
+                        type="button"
+                        aria-label="More conversation options"
+                        aria-expanded={isConversationMenuOpen}
+                        onClick={() => {
+                          setConversationActionError('')
+                          setIsConversationMenuOpen((isOpen) => !isOpen)
+                        }}
+                      >
+                        <MoreHorizontal size={26} strokeWidth={2.8} />
+                      </button>
+                      {isConversationMenuOpen && (
+                        <div className="conversation-options-menu" role="menu">
+                          <button
+                            type="button"
+                            role="menuitem"
+                            disabled={!lastEditableMessage || isUpdatingMessage}
+                            onClick={startEditingLastMessage}
+                          >
+                            Edit last message
+                          </button>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            disabled={isClearingChat}
+                            onClick={clearSelectedChat}
+                          >
+                            {isClearingChat ? 'Clearing…' : 'Clear chat'}
+                          </button>
+                          {conversationActionError && (
+                            <p role="alert">{conversationActionError}</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
                     <button
                       className={`messages-icon-button star-button${selectedMessage.starred ? ' is-starred' : ''}`}
                       type="button"
@@ -984,6 +1206,9 @@ function Messages({
 
                 {(!selectedMessage.sponsored || selectedMessage.thread?.length > 0) && (
                   <article className="message-conversation">
+                    {!selectedMessage.thread?.length && !selectedMessage.description && (
+                      <p className="messages-empty-chat">No messages yet.</p>
+                    )}
                     {!(selectedMessage.thread || []).some((message) => message.sentAt) && (
                       <p className="conversation-date">{selectedMessage.date}</p>
                     )}
@@ -1016,7 +1241,38 @@ function Messages({
                             </time>
                           )}
                           <div className={bubbleClassName}>
-                            {message.content && <span className="conversation-bubble-text">{message.content}</span>}
+                            {editingMessageId === String(message.id) ? (
+                              <form className="conversation-message-edit" onSubmit={saveEditedMessage}>
+                                <textarea
+                                  aria-label="Edit message"
+                                  value={editMessageDraft}
+                                  onChange={(event) => setEditMessageDraft(event.target.value)}
+                                  maxLength={5000}
+                                  autoFocus
+                                />
+                                {conversationActionError && (
+                                  <p role="alert">{conversationActionError}</p>
+                                )}
+                                <div>
+                                  <button type="submit" disabled={!editMessageDraft.trim() || isUpdatingMessage}>
+                                    {isUpdatingMessage ? 'Saving…' : 'Save'}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={isUpdatingMessage}
+                                    onClick={() => {
+                                      setEditingMessageId('')
+                                      setEditMessageDraft('')
+                                      setConversationActionError('')
+                                    }}
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </form>
+                            ) : (
+                              message.content && <span className="conversation-bubble-text">{message.content}</span>
+                            )}
                             {message.attachment && (
                               <span className="conversation-attachment">
                                 <Paperclip size={14} aria-hidden="true" />

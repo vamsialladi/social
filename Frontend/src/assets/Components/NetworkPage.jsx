@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import api from '../../api'
 import { api as directoryApi } from '../../services/api'
 import ProfileBanner from './ProfileBanner.jsx'
@@ -24,26 +24,69 @@ const networkSections = [
 
 function getProfileKey(profileOrId) {
   const id = typeof profileOrId === 'object' && profileOrId !== null
-    ? profileOrId.userId || profileOrId.id || profileOrId.user_id || profileOrId._id
+    ? profileOrId.userId
+      || profileOrId.id
+      || profileOrId.profileId
+      || profileOrId.senderId
+      || profileOrId.targetProfileId
+      || profileOrId.user_id
+      || profileOrId._id
+      || profileOrId.publicUserId
+      || profileOrId.email
     : profileOrId
   return String(id || '').trim().toLowerCase()
 }
 
 function getProfileIdentityKeys(profile) {
   return [
-    profile.id,
-    profile.userId,
-    profile.user_id,
-    profile._id,
-    profile.referId,
-    profile.email,
+    profile?.id,
+    profile?.userId,
+    profile?.user_id,
+    profile?._id,
+    profile?.referId,
+    profile?.profileId,
+    profile?.senderId,
+    profile?.targetProfileId,
+    profile?.publicUserId,
+    profile?.email,
   ]
     .filter(Boolean)
     .map((identifier) => String(identifier).trim().toLowerCase())
 }
 
+function profilesMatch(first, second) {
+  const secondKeys = new Set(getProfileIdentityKeys(second))
+  return getProfileIdentityKeys(first).some((key) => secondKeys.has(key))
+}
+
+function getProfileName(...profiles) {
+  for (const profile of profiles) {
+    const candidates = [
+      profile?.name,
+      profile?.fullName,
+      profile?.displayName,
+      profile?.userName,
+      profile?.profile?.name,
+      profile?.account?.name,
+      profile?.user?.name,
+    ]
+    const name = candidates
+      .map((candidate) => String(candidate || '').trim().replace(/\s+/g, ' '))
+      .find((candidate) => candidate && !['truehunt member', 'cinema professional', 'member'].includes(candidate.toLowerCase()))
+    if (name) return name
+  }
+  return ''
+}
+
+function getMutualConnectionsLabel(value) {
+  const label = String(value || '').trim()
+  return ['truehunt member', 'cinema professional', 'member'].includes(label.toLowerCase())
+    ? ''
+    : label
+}
+
 function getNormalizedProfileName(profile) {
-  return String(profile.name || '').trim().replace(/\s+/g, ' ').toLowerCase()
+  return getProfileName(profile).toLowerCase()
 }
 
 function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], isActive = true, isAdmin = false }) {
@@ -84,7 +127,28 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
     onMessage?.(profile)
   }
 
-  async function loadNetworkData() {
+  function findProfileByIdentity(profileOrId) {
+    const identity = getProfileKey(profileOrId)
+    return profiles.find((profile) => getProfileIdentityKeys(profile).includes(identity))
+  }
+
+  function getInvitationProfile(invitation) {
+    const profile = invitation?.profile || {}
+    const profileId = getProfileKey(profile)
+      || getProfileKey(invitation?.profileId)
+      || getProfileKey(invitation?.senderId)
+      || getProfileKey(invitation?.userId)
+      || getProfileKey(invitation)
+    const name = getProfileName(profile, invitation) || 'Profile'
+    return {
+      ...profile,
+      id: profile.id || profile.userId || invitation?.profileId || invitation?.senderId || invitation?.userId || profileId,
+      userId: profile.userId || profile.id || invitation?.profileId || invitation?.senderId || invitation?.userId || profileId,
+      name,
+    }
+  }
+
+  const loadNetworkData = useCallback(async () => {
     if (isAdmin) {
       setProfiles([])
       setConnectedProfiles([])
@@ -116,12 +180,23 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
         ...(Array.isArray(registeredProfiles) ? registeredProfiles : []),
         ...(Array.isArray(connectedList) ? connectedList : []),
         ...(Array.isArray(networkProfiles) ? networkProfiles : []),
-        ...(Array.isArray(incomingInvitations) ? incomingInvitations.map((inv) => inv.profile || inv) : []),
+        ...(Array.isArray(incomingInvitations) ? incomingInvitations.map((inv) => ({
+          ...(inv.profile || {}),
+          ...inv,
+          profile: inv.profile || {},
+        })) : []),
       ]
-      profilesToMerge.filter((profile) => profile && profile.name).forEach((profile) => {
+      profilesToMerge.filter((profile) => profile && getProfileIdentityKeys(profile).length > 0).forEach((sourceProfile) => {
+        const profileId = getProfileKey(sourceProfile)
+        const profile = {
+          ...sourceProfile,
+          id: sourceProfile.id || sourceProfile.userId || sourceProfile.profileId || sourceProfile.senderId || profileId,
+          userId: sourceProfile.userId || sourceProfile.id || sourceProfile.profileId || sourceProfile.senderId || profileId,
+          name: getProfileName(sourceProfile),
+        }
         const identityKeys = new Set(getProfileIdentityKeys(profile))
         const normalizedName = getNormalizedProfileName(profile)
-        const isGenericName = ['truehunt member', 'cinema professional', 'member', ''].includes(normalizedName)
+        const isGenericName = !normalizedName
         const existingIndex = directory.findIndex((existingProfile) => {
           const existingIdentityKeys = getProfileIdentityKeys(existingProfile)
           const hasMatchingKey = existingIdentityKeys.some((key) => identityKeys.has(key))
@@ -134,8 +209,7 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
           directory.push(profile)
         } else {
           const existingProfile = directory[existingIndex]
-          const existingNameIsGeneric = ['truehunt member', 'cinema professional', 'member', '']
-            .includes(getNormalizedProfileName(existingProfile))
+          const existingNameIsGeneric = !getNormalizedProfileName(existingProfile)
           const profileImageUrl = profile.profileImageUrl
             || profile.avatar
             || existingProfile.profileImageUrl
@@ -151,42 +225,39 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
         }
       })
 
-      const networkProfilesById = new Map(
-        networkProfiles.map((profile) => [getProfileKey(profile), profile]),
-      )
+      const networkProfilesById = new Map()
+      networkProfiles.forEach((profile) => {
+        getProfileIdentityKeys(profile).forEach((key) => networkProfilesById.set(key, profile))
+      })
 
       const serverConnectedKeys = new Set(
-        connectedList.map((p) => getProfileKey(p)),
+        connectedList.flatMap((profile) => profile ? getProfileIdentityKeys(profile) : []),
       )
 
       // Stored overrides can be cleared once fresh server data is loaded
       relationshipOverrides.current.clear()
 
       const allProfiles = directory
-        .filter((profile) => profile && (profile.id || profile.userId) && profile.name)
+        .filter((profile) => profile && getProfileKey(profile) && profile.name)
         .filter((profile) => {
-          const profileIdentifiers = [
-            profile.id,
-            profile.userId,
-            profile.referId,
-            profile.email,
-          ].filter(Boolean).map((identifier) => String(identifier).trim().toLowerCase())
+          const profileIdentifiers = getProfileIdentityKeys(profile)
           return !profileIdentifiers.some((identifier) => normalizedCurrentUserIdentifiers.has(identifier))
         })
         .map((profile, index) => {
           const profileIdentityKeys = getProfileIdentityKeys(profile)
           const registeredProfile = (Array.isArray(registeredProfiles) ? registeredProfiles : []).find((item) => (
-            getProfileIdentityKeys(item).some((key) => profileIdentityKeys.includes(key))
+            profilesMatch(item, profile)
           ))
           const profileImageUrl = registeredProfile
             ? registeredProfile.profileImageUrl || registeredProfile.avatar || ''
             : profile.profileImageUrl || profile.avatar || ''
           const id = String(profile.id || profile.userId)
-          const name = (profile.name || 'TrueHunt Member').trim()
+          const name = getProfileName(profile) || 'Profile'
           const nameParts = name.split(/\s+/)
-          const profileKey = getProfileKey(id)
-          const connection = networkProfilesById.get(profileKey)
-          const isConn = serverConnectedKeys.has(profileKey)
+          const connection = profileIdentityKeys
+            .map((key) => networkProfilesById.get(key))
+            .find(Boolean)
+          const isConn = profileIdentityKeys.some((key) => serverConnectedKeys.has(key))
             || Boolean(connection?.isConnected)
             || Boolean(profile.isConnected)
             || Boolean(profile.connected)
@@ -200,7 +271,7 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
             status: connection?.status || 'active',
             role: profile.headline || profile.role || profile.primaryCraft || profile.category || 'Cinema Professional',
             location: profile.location || profile.address || '',
-            mutualConnections: connection?.mutualConnections || 'TrueHunt member',
+            mutualConnections: getMutualConnectionsLabel(connection?.mutualConnections),
             avatarClass: index % 2 === 0 ? 'network-avatar-coral' : 'network-avatar-blue',
             profileImageUrl,
             avatar: profileImageUrl,
@@ -215,24 +286,24 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
       for (const conn of connectedList) {
         if (!conn) continue
         const cKey = getProfileKey(conn)
-        if (!cKey || normalizedCurrentUserIdentifiers.has(cKey)) continue
-        const existingIdx = allProfiles.findIndex((p) => getProfileKey(p) === cKey)
+        if (!cKey || getProfileIdentityKeys(conn).some((key) => normalizedCurrentUserIdentifiers.has(key))) continue
+        const existingIdx = allProfiles.findIndex((profile) => profilesMatch(profile, conn))
         if (existingIdx !== -1) {
           allProfiles[existingIdx].isConnected = true
           allProfiles[existingIdx].isPending = false
         } else {
-          const name = (conn.name || 'TrueHunt Member').trim()
+          const name = getProfileName(conn) || 'Profile'
           const nameParts = name.split(/\s+/)
           allProfiles.unshift({
             ...conn,
-            id: conn.id || conn.userId || cKey,
-            userId: conn.userId || conn.id || cKey,
+            id: conn.id || conn.userId || conn.profileId || cKey,
+            userId: conn.userId || conn.id || conn.profileId || cKey,
             name,
             initials: conn.initials || nameParts.slice(0, 2).map((part) => part[0]).join('').toUpperCase() || 'TH',
             status: 'active',
             role: conn.role || conn.headline || conn.primaryCraft || 'Cinema Professional',
             location: conn.location || conn.address || '',
-            mutualConnections: conn.mutualConnections || 'TrueHunt member',
+            mutualConnections: getMutualConnectionsLabel(conn.mutualConnections),
             avatarClass: 'network-avatar-coral',
             profileImageUrl: conn.profileImageUrl || conn.avatar || '',
             coverImageUrl: conn.coverImageUrl || conn.coverImage || '',
@@ -246,22 +317,25 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
       setProfiles(allProfiles)
       const allConnectedKeys = Array.from(new Set([
         ...connectedList.map((p) => getProfileKey(p)),
-        ...allProfiles.filter((profile) => profile.isConnected).map((profile) => getProfileKey(profile.id)),
+        ...allProfiles.filter((profile) => profile.isConnected).map((profile) => getProfileKey(profile)),
       ])).filter(Boolean)
       setConnectedProfiles(allConnectedKeys)
-      setFollowedProfiles(allProfiles.filter((profile) => profile.isFollowing).map((profile) => getProfileKey(profile.id)))
-      setPendingProfiles(allProfiles.filter((profile) => profile.isPending).map((profile) => getProfileKey(profile.id)))
+      setFollowedProfiles(allProfiles.filter((profile) => profile.isFollowing).map((profile) => getProfileKey(profile)))
+      setPendingProfiles(allProfiles.filter((profile) => profile.isPending).map((profile) => getProfileKey(profile)))
     } catch (err) {
       console.warn('Network profiles load error:', err)
     } finally {
       setLoadingProfiles(false)
     }
-  }
+  }, [currentUserIdentityKey, isAdmin])
 
   useEffect(() => {
     if (!isActive) return undefined
 
-    loadNetworkData()
+    let disposed = false
+    Promise.resolve().then(() => {
+      if (!disposed) loadNetworkData()
+    })
 
     const handleFocus = () => {
       if (!document.hidden) loadNetworkData()
@@ -274,10 +348,11 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
     document.addEventListener('visibilitychange', handleVisibility)
 
     return () => {
+      disposed = true
       window.removeEventListener('focus', handleFocus)
       document.removeEventListener('visibilitychange', handleVisibility)
     }
-  }, [currentUserIdentityKey, isActive, isAdmin])
+  }, [isActive, loadNetworkData])
 
   useEffect(() => {
     function showNetworkHome() {
@@ -292,18 +367,52 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
   useEffect(() => {
     function handleConnectionChanged(event) {
       if (isAdmin) return
+      const detail = event.detail || {}
+      const {
+        connected: connectedValue,
+        isConnected,
+        pending: pendingValue,
+        isPending,
+        profile,
+        senderProfile,
+        receiverProfile,
+        senderId,
+        receiverId,
+        profileId: eventProfileId,
+      } = detail
+      const connected = typeof connectedValue === 'boolean' ? connectedValue : Boolean(isConnected)
+      const pending = typeof pendingValue === 'boolean' ? pendingValue
+        : typeof isPending === 'boolean' ? isPending : undefined
+      const currentIds = new Set(JSON.parse(currentUserIdentityKey || '[]'))
+      const matchesCurrentUser = (value) => {
+        const keys = typeof value === 'object' && value !== null
+          ? getProfileIdentityKeys(value)
+          : [String(value || '').trim().toLowerCase()]
+        return keys.some((key) => currentIds.has(key))
+      }
+      const hasParticipants = Boolean(senderId || receiverId || senderProfile || receiverProfile)
+      let targetProfile
+
+      if (hasParticipants) {
+        const isSender = matchesCurrentUser(senderProfile) || matchesCurrentUser(senderId)
+        const isReceiver = matchesCurrentUser(receiverProfile) || matchesCurrentUser(receiverId)
+        if (isSender === isReceiver) return
+        targetProfile = isSender
+          ? receiverProfile || { id: receiverId }
+          : senderProfile || { id: senderId }
+      } else {
+        targetProfile = profile || (eventProfileId ? { id: eventProfileId } : null)
+      }
+      if (!targetProfile) return
+
       loadNetworkData()
-      const { connected, pending, profile, senderProfile, receiverProfile, senderId, receiverId } = event.detail || {}
-      const targetProfile = profile || senderProfile || receiverProfile
-      const profileId = String(
-        targetProfile?.userId || targetProfile?.id || targetProfile?.user_id || targetProfile?._id || receiverId || senderId || '',
-      )
+      const profileId = getProfileKey(targetProfile)
       if (!profileId) return
-      const profileKey = getProfileKey(profileId)
+      const profileKey = getProfileKey(targetProfile)
       relationshipOverrides.current.set(profileKey, {
         ...relationshipOverrides.current.get(profileKey),
-        connected: Boolean(connected),
-        pending: typeof pending === 'boolean' ? Boolean(pending) : false,
+        connected,
+        pending: typeof pending === 'boolean' ? pending : false,
       })
 
       setConnectedProfiles((current) => (
@@ -322,20 +431,20 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
         ))
       }
       setProfiles((current) => {
-        const exists = current.some((item) => getProfileKey(item) === profileKey)
-        if (!exists && targetProfile && targetProfile.name) {
-          const name = targetProfile.name.trim()
+        const exists = current.some((item) => profilesMatch(item, targetProfile))
+        if (!exists) {
+          const name = getProfileName(targetProfile) || 'Profile'
           const nameParts = name.split(/\s+/)
           return [{
             ...targetProfile,
-            id: profileId,
-            userId: profileId,
+            id: targetProfile.id || targetProfile.userId || profileId,
+            userId: targetProfile.userId || targetProfile.id || profileId,
             name,
             initials: targetProfile.initials || nameParts.slice(0, 2).map((part) => part[0]).join('').toUpperCase() || 'TH',
             status: 'active',
             role: targetProfile.role || targetProfile.headline || 'Cinema Professional',
             location: targetProfile.location || '',
-            mutualConnections: 'TrueHunt member',
+            mutualConnections: '',
             avatarClass: 'network-avatar-coral',
             profileImageUrl: targetProfile.profileImageUrl || targetProfile.avatar || '',
             coverImageUrl: targetProfile.coverImageUrl || targetProfile.coverImage || '',
@@ -344,11 +453,11 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
           }, ...current]
         }
         return current.map((item) => (
-          getProfileKey(item) === profileKey
+          profilesMatch(item, targetProfile)
             ? {
                 ...item,
-                isConnected: Boolean(connected),
-                isPending: typeof pending === 'boolean' ? Boolean(pending) : (connected ? false : item.isPending),
+                isConnected: connected,
+                isPending: typeof pending === 'boolean' ? pending : (connected ? false : item.isPending),
               }
             : item
         ))
@@ -358,11 +467,9 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
     function handleFollowChanged(event) {
       if (isAdmin) return
       const { following, profile } = event.detail || {}
-      const profileId = String(
-        profile?.userId || profile?.id || profile?.user_id || profile?._id || '',
-      )
+      const profileId = getProfileKey(profile)
       if (!profileId) return
-      const profileKey = getProfileKey(profileId)
+      const profileKey = getProfileKey(profile)
       relationshipOverrides.current.set(profileKey, {
         ...relationshipOverrides.current.get(profileKey),
         following: Boolean(following),
@@ -374,13 +481,13 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
           : current.filter((id) => id !== profileKey)
       ))
       setProfiles((current) => {
-        const hasProfile = current.some((item) => getProfileKey(item) === profileKey)
+        const hasProfile = current.some((item) => profilesMatch(item, profile))
         const updatedProfiles = current.map((item) => (
-          getProfileKey(item) === profileKey ? { ...item, isFollowing: Boolean(following) } : item
+          profilesMatch(item, profile) ? { ...item, isFollowing: Boolean(following) } : item
         ))
-        if (!following || hasProfile || !profile?.name) return updatedProfiles
+        if (!following || hasProfile) return updatedProfiles
 
-        const name = String(profile.name).trim()
+        const name = getProfileName(profile) || 'Profile'
         return [...updatedProfiles, {
           ...profile,
           id: profileId,
@@ -405,26 +512,25 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
       window.removeEventListener('truehunt-connection-changed', handleConnectionChanged)
       window.removeEventListener('truehunt-follow-changed', handleFollowChanged)
     }
-  }, [isAdmin])
+  }, [currentUserIdentityKey, isAdmin, loadNetworkData])
 
   async function handleAcceptInvitation(profileId, invitation) {
     if (processingInvitationId) return
-    const profileKey = getProfileKey(profileId)
+    const profileKey = getProfileKey(findProfileByIdentity(profileId) || invitation?.profile || invitation || profileId)
     setProcessingInvitationId(profileId)
     try {
-      const result = await api.acceptConnectionRequest(profileId)
-      const connected = typeof result?.connected === 'boolean' ? result.connected : true
+      await api.acceptConnectionRequest(profileId)
       relationshipOverrides.current.set(profileKey, {
         ...relationshipOverrides.current.get(profileKey),
         connected: true,
         pending: false,
       })
-      const profileData = profiles.find((item) => getProfileKey(item) === profileKey)
+      const profileData = findProfileByIdentity(profileId)
         || {
           ...(invitation?.profile || {}),
           id: invitation?.profileId || invitation?.profile?.id || profileId,
           userId: invitation?.profile?.userId || invitation?.profileId || profileId,
-          name: invitation?.name || invitation?.profile?.name || 'TrueHunt Member',
+          name: getProfileName(invitation?.profile, invitation) || 'Profile',
         }
 
       setProfiles((current) => {
@@ -454,7 +560,7 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
 
   async function handleRejectInvitation(profileId) {
     if (processingInvitationId) return
-    const profileKey = getProfileKey(profileId)
+    const profileKey = getProfileKey(findProfileByIdentity(profileId) || profileId)
     setProcessingInvitationId(profileId)
     try {
       await api.rejectConnectionRequest(profileId)
@@ -473,8 +579,8 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
 
   async function handleRemoveRequest(profileId) {
     if (updatingConnectionProfileId) return
-    const profileKey = getProfileKey(profileId)
-    const profile = profiles.find((item) => getProfileKey(item) === profileKey)
+    const profile = findProfileByIdentity(profileId)
+    const profileKey = getProfileKey(profile || profileId)
     setConnectionError('')
     setUpdatingConnectionProfileId(profileId)
     try {
@@ -504,10 +610,8 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
 
   async function toggleConnection(profileId) {
     if (updatingConnectionProfileId) return
-    const profileKey = getProfileKey(profileId)
-    const isConnected = connectedProfiles.includes(profileKey)
-    const isPending = pendingProfiles.includes(profileKey)
-    const profile = profiles.find((item) => getProfileKey(item) === profileKey)
+    const profile = findProfileByIdentity(profileId)
+    const profileKey = getProfileKey(profile || profileId)
     setConnectionError('')
     setUpdatingConnectionProfileId(profileId)
     try {
@@ -531,7 +635,7 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
           : current.filter((id) => id !== profileKey)
       ))
       setProfiles((current) => current.map((item) => (
-        getProfileKey(item) === profileKey
+        profile && profilesMatch(item, profile)
           ? { ...item, isConnected: connected, isPending: pending }
           : item
       )))
@@ -548,7 +652,8 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
 
   async function toggleFollow(profileId) {
     if (updatingFollowProfileId) return
-    const profileKey = getProfileKey(profileId)
+    const profile = findProfileByIdentity(profileId)
+    const profileKey = getProfileKey(profile || profileId)
     const isFollowing = followedProfiles.includes(profileKey)
     setFollowError('')
     setUpdatingFollowProfileId(profileId)
@@ -564,9 +669,8 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
           ? current.includes(profileKey) ? current : [...current, profileKey]
           : current.filter((id) => id !== profileKey)
       ))
-      const profile = profiles.find((item) => getProfileKey(item) === profileKey)
       setProfiles((current) => current.map((item) => (
-        getProfileKey(item) === profileKey ? { ...item, isFollowing: following } : item
+        profile && profilesMatch(item, profile) ? { ...item, isFollowing: following } : item
       )))
       window.dispatchEvent(new CustomEvent('truehunt-follow-changed', {
         detail: { following, profile },
@@ -586,7 +690,7 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
     const isFollowing = followedProfiles.includes(profileKey)
 
     return (
-      <article className="network-profile-card" key={profile.id}>
+      <article className="network-profile-card" key={profile.id || profile.userId}>
         <div className={`network-profile-cover ${profile.avatarClass}`}>
           {profile.coverImageUrl && (
             <img src={profile.coverImageUrl} alt="" aria-hidden="true" />
@@ -616,10 +720,12 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
           <h3>{profile.name}</h3>
           <p className="network-profile-role">{profile.role}</p>
           <p className="network-profile-location">{profile.location}</p>
-          <p className="network-mutual-connections">
-            <UsersRound size={14} aria-hidden="true" />
-            {profile.mutualConnections}
-          </p>
+          {profile.mutualConnections && (
+            <p className="network-mutual-connections">
+              <UsersRound size={14} aria-hidden="true" />
+              {profile.mutualConnections}
+            </p>
+          )}
           <div className="network-profile-actions">
             <button
               className={`network-connect-button${isConnected ? ' is-connected' : isPending ? ' is-pending' : ''}`}
@@ -873,8 +979,8 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
                           <button
                             type="button"
                             className="network-invitation-avatar"
-                            aria-label={`View ${inv.name}'s profile`}
-                            onClick={() => onProfileSelect?.(inv.profile || { id: inv.profileId, name: inv.name })}
+                            aria-label={`View ${getProfileName(inv.profile, inv) || 'Profile'}'s profile`}
+                            onClick={() => onProfileSelect?.(getInvitationProfile(inv))}
                           >
                             {inv.avatar || inv.profileImageUrl ? (
                               <img src={inv.avatar || inv.profileImageUrl} alt="" />
@@ -886,14 +992,14 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
                             <h3
                               role="button"
                               tabIndex={0}
-                              onClick={() => onProfileSelect?.(inv.profile || { id: inv.profileId, name: inv.name })}
+                              onClick={() => onProfileSelect?.(getInvitationProfile(inv))}
                               onKeyDown={(e) => {
                                 if (e.key === 'Enter' || e.key === ' ') {
-                                  onProfileSelect?.(inv.profile || { id: inv.profileId, name: inv.name })
+                                  onProfileSelect?.(getInvitationProfile(inv))
                                 }
                               }}
                             >
-                              {inv.name}
+                              {getProfileName(inv.profile, inv) || 'Profile'}
                             </h3>
                             <p className="network-invitation-role">{inv.role || 'Cinema Professional'}</p>
                             {inv.location && <p className="network-invitation-location">{inv.location}</p>}

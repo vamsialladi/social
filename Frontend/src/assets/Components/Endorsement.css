@@ -149,8 +149,136 @@
   letter-spacing: 0;
 }
 
+.notifications-list {
+  display: grid;
+  gap: 12px;
+  padding: 16px 20px 20px;
+}
+
+.notification-card {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border: 1px solid #e3e1dd;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(25, 25, 25, 0.04);
+}
+
+.notification-card-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  color: #242424;
+  font-size: 15px;
+}
+
+.notification-card-heading small {
+  flex: 0 0 auto;
+  color: #777;
+  font-size: 11px;
+}
+
+.notification-message {
+  margin: 0;
+  color: #555;
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.contact-access-notification {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  border-color: #e6c9c4;
+  background: #fffaf9;
+}
+
+.contact-access-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.contact-access-actions button {
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.contact-access-actions button:focus-visible {
+  outline: 3px solid rgba(10, 102, 194, 0.35);
+  outline-offset: 2px;
+}
+
+.contact-access-actions button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.contact-access-accept {
+  background: #d94b30;
+  color: #fff;
+}
+
+.contact-access-accept:hover:not(:disabled) {
+  background: #bb3922;
+}
+
+.contact-access-reject {
+  border-color: #dedbd6 !important;
+  background: #fff;
+  color: #454545;
+}
+
+.contact-access-reject:hover:not(:disabled) {
+  background: #f5f3f1;
+}
+
+.notifications-request-error {
+  margin: 16px 20px 0;
+  color: #a32619;
+  font-size: 13px;
+}
+
 .notifications-empty-space {
-  min-height: 420px;
+  display: grid;
+  min-height: 320px;
+  place-items: center;
+  padding: 20px;
+  color: #777;
+  text-align: center;
+}
+
+.notifications-empty-space p {
+  margin: 0;
+}
+
+@media (max-width: 700px) {
+  .notifications-list {
+    padding: 12px;
+  }
+
+  .contact-access-notification {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .contact-access-actions {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 600px) {
+  .notification-card-heading {
+    flex-direction: column;
+    gap: 4px;
+  }
 }
 
 @media (max-width: 600px) {

@@ -1009,6 +1009,30 @@
   color: #e5e7eb;
 }
 
+.cinemans-page.is-dark .notifications-page .notification-card {
+  border-color: #393d45;
+  background-color: #22252b;
+}
+
+.cinemans-page.is-dark .notifications-page .notification-card-heading,
+.cinemans-page.is-dark .notifications-page .notification-message {
+  color: #e5e7eb;
+}
+
+.cinemans-page.is-dark .notifications-page .notification-card-heading small {
+  color: #b6bac2;
+}
+
+.cinemans-page.is-dark .notifications-page .contact-access-notification {
+  background-color: #2b2424;
+}
+
+.cinemans-page.is-dark .notifications-page .contact-access-reject {
+  border-color: #555963 !important;
+  background-color: #282c33;
+  color: #e5e7eb;
+}
+
 .cinemans-page.is-dark .cinemans-page,
 .cinemans-page.is-dark .artist-identity,
 .cinemans-page.is-dark .artist-section,

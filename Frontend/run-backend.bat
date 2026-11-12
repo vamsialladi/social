@@ -20,5 +20,5 @@ if %errorlevel% equ 0 (
 )
 
 echo Using Maven from: %MVN_CMD%
-"%MVN_CMD%" spring-boot:run
+"%MVN_CMD%" spring-boot:run -Dspring-boot.run.profiles=dev
 pause

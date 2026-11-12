@@ -173,7 +173,9 @@ public class ProfileService {
             }
         }
 
-        Set<String> ownerIds = resolveAllUserIdentifiers(userEmail);
+        Set<String> ownerIds = userEmail == null || userEmail.isBlank()
+                ? Collections.emptySet()
+                : resolveAllUserIdentifiers(userEmail);
         Set<String> lowerOwnerIds = ownerIds.stream().map(s -> s.toLowerCase(Locale.ROOT)).collect(Collectors.toSet());
 
         Set<String> targetIds = new HashSet<>();
@@ -201,9 +203,9 @@ public class ProfileService {
 
         boolean isOwner = lowerTargetIds.stream().anyMatch(lowerOwnerIds::contains);
         dto.setIsOwner(isOwner);
+        boolean isConnected = false;
 
         if (!isOwner) {
-            boolean isConnected = false;
             boolean isFollowing = false;
             boolean isPending = false;
             boolean isOutgoingPending = false;
@@ -250,6 +252,28 @@ public class ProfileService {
             dto.setConnectionStatus("NONE");
         }
 
+        if (!isOwner) {
+            dto.setPhone(null);
+            dto.setEmail(null);
+            dto.setProfessionalPhone(null);
+        }
+
+        return dto;
+    }
+
+    public ProfileDto getProfileByIdForContactAccess(String id) {
+        if (isAdminAccount(findAccountByEmail(id).or(() -> findAccountByPublicUserId(id)))) {
+            throw new ResourceNotFoundException("Profile", "id", id);
+        }
+
+        Optional<ProfileEntity> profile = profileRepository.findByUserId(id);
+        if (profile.isEmpty()) {
+            profile = findAccountByPublicUserId(id)
+                    .flatMap(account -> profileRepository.findByUserId(account.getPublicUserId()));
+        }
+        ProfileEntity entity = profile.orElseThrow(() -> new ResourceNotFoundException("Profile", "id", id));
+        ProfileDto dto = mapEntityToDto(entity);
+        dto.setIsOwner(true);
         return dto;
     }
 
@@ -1118,18 +1142,6 @@ public class ProfileService {
             projDtos.add(proj);
         }
         dto.setProjects(projDtos);
-
-        // Populate posts belonging to this profile so /profiles/me and /profiles/{id} include posts
-        try {
-            List<Map<String, Object>> profilePosts = postRepository.findAllByOrderByCreatedAtDesc().stream()
-                    .filter(post -> post.getAuthorId() != null
-                            && profileIds.contains(post.getAuthorId().trim().toLowerCase(Locale.ROOT)))
-                    .map(PostEntity::toDto)
-                    .toList();
-            dto.setPosts(profilePosts);
-        } catch (Exception ignored) {
-            dto.setPosts(List.of());
-        }
 
         return dto;
     }

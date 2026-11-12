@@ -3,8 +3,17 @@ import './Endorsement.css'
 import api from '../../api'
 import ProfileBanner from './ProfileBanner.jsx'
 
-function Notifications({ profileDetails, profilePreview, onViewProfile, onManageNotifications }) {
+function Notifications({
+  profileDetails,
+  profilePreview,
+  onViewProfile,
+  onManageNotifications,
+  isActive,
+}) {
   const [endorsements, setEndorsements] = useState([])
+  const [contactRequests, setContactRequests] = useState([])
+  const [requestError, setRequestError] = useState('')
+  const [respondingToRequestId, setRespondingToRequestId] = useState('')
   const name = profileDetails.name.trim() || 'Your name'
   const languages = [
     ...profileDetails.languages.filter((language) => language !== 'Other'),
@@ -13,18 +22,56 @@ function Notifications({ profileDetails, profilePreview, onViewProfile, onManage
   const profileTags = [...languages, ...profileDetails.workTypes]
 
   useEffect(() => {
-    async function loadNotifications() {
-      try {
-        const data = await api.getNotifications()
-        if (Array.isArray(data)) {
-          setEndorsements(data)
-        }
-      } catch (err) {
-        console.warn('Backend notifications load error:', err)
+    if (!isActive) return undefined
+
+    let isCurrent = true
+    async function loadEndorsements() {
+      const [notificationsResult, requestsResult] = await Promise.allSettled([
+        api.getNotifications(),
+        api.getIncomingContactAccessRequests(),
+      ])
+      if (!isCurrent) return
+
+      if (notificationsResult.status === 'fulfilled' && Array.isArray(notificationsResult.value)) {
+        setEndorsements(notificationsResult.value)
+      } else if (notificationsResult.status === 'rejected') {
+        console.warn('Backend notifications load error:', notificationsResult.reason)
+      }
+
+      if (requestsResult.status === 'fulfilled' && Array.isArray(requestsResult.value)) {
+        setContactRequests(requestsResult.value)
+      } else if (requestsResult.status === 'rejected') {
+        console.warn('Contact access requests load error:', requestsResult.reason)
+        setRequestError('Could not load contact requests. Please try again later.')
       }
     }
-    loadNotifications()
-  }, [])
+    loadEndorsements()
+    const refreshOnFocus = () => {
+      if (!document.hidden) loadEndorsements()
+    }
+    const intervalId = window.setInterval(loadEndorsements, 30_000)
+    window.addEventListener('focus', refreshOnFocus)
+    return () => {
+      isCurrent = false
+      window.clearInterval(intervalId)
+      window.removeEventListener('focus', refreshOnFocus)
+    }
+  }, [isActive])
+
+  async function respondToContactRequest(requestId, decision) {
+    if (respondingToRequestId) return
+    setRespondingToRequestId(requestId)
+    setRequestError('')
+    try {
+      await api.respondToContactAccessRequest(requestId, decision)
+      setContactRequests((current) => current.filter((request) => request.id !== requestId))
+    } catch (error) {
+      console.error(`Could not ${decision} contact access request:`, error)
+      setRequestError(error.message || 'Could not update this request. Please try again.')
+    } finally {
+      setRespondingToRequestId('')
+    }
+  }
 
   return (
     <section className="notifications-page" aria-label="Notifications page">
@@ -112,31 +159,46 @@ function Notifications({ profileDetails, profilePreview, onViewProfile, onManage
 
       <section className="notifications-content" aria-labelledby="notifications-heading">
         <h2 id="notifications-heading">Endorsement</h2>
-        {endorsements.length > 0 ? (
-          <div className="notifications-list" style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '16px' }}>
-            {endorsements.map((item) => (
-              <div
-                key={item.id}
-                style={{
-                  background: 'var(--color-surface, #fff)',
-                  padding: '16px',
-                  borderRadius: '12px',
-                  border: '1px solid var(--color-border, #e0e0e0)',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                  <strong style={{ fontSize: '15px' }}>{item.title}</strong>
-                  <small style={{ color: '#888' }}>{item.createdAt}</small>
+        {requestError && <p className="notifications-request-error" role="alert">{requestError}</p>}
+        {endorsements.length > 0 || contactRequests.length > 0 ? (
+          <div className="notifications-list">
+            {contactRequests.map((request) => (
+              <article className="notification-card contact-access-notification" key={`contact-${request.id}`}>
+                <p className="notification-message">{request.message}</p>
+                <div className="contact-access-actions">
+                  <button
+                    className="contact-access-accept"
+                    type="button"
+                    onClick={() => respondToContactRequest(request.id, 'accept')}
+                    disabled={Boolean(respondingToRequestId)}
+                  >
+                    {respondingToRequestId === request.id ? 'Saving…' : 'Accept'}
+                  </button>
+                  <button
+                    className="contact-access-reject"
+                    type="button"
+                    onClick={() => respondToContactRequest(request.id, 'reject')}
+                    disabled={Boolean(respondingToRequestId)}
+                  >
+                    Reject
+                  </button>
                 </div>
-                <p style={{ margin: 0, color: 'var(--color-text-muted, #555)', fontSize: '14px', lineHeight: '1.4' }}>
-                  {item.message}
-                </p>
-              </div>
+              </article>
+            ))}
+            {endorsements.map((item) => (
+              <article className="notification-card" key={`notification-${item.id}`}>
+                <div className="notification-card-heading">
+                  <strong>{item.title}</strong>
+                  {item.createdAt && <small>{item.createdAt}</small>}
+                </div>
+                <p className="notification-message">{item.message}</p>
+              </article>
             ))}
           </div>
         ) : (
-          <div className="notifications-empty-space" aria-label="No endorsements yet" />
+          <div className="notifications-empty-space" aria-label="No endorsements yet">
+            <p>No endorsements or contact requests yet.</p>
+          </div>
         )}
       </section>
     </section>

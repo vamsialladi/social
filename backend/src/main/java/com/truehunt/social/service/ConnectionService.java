@@ -19,6 +19,8 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -51,42 +53,56 @@ public class ConnectionService {
     }
 
     private void broadcastConnectionEvent(String action, String senderId, String receiverId, boolean isConnected, boolean isPending) {
-        try {
-            SimpMessagingTemplate template = messagingTemplateProvider != null ? messagingTemplateProvider.getIfAvailable() : null;
-            if (template != null) {
-                Map<String, Object> payload = new HashMap<>();
-                payload.put("type", "CONNECTION_UPDATED");
-                payload.put("action", action);
-                payload.put("senderId", senderId);
-                payload.put("receiverId", receiverId);
-                payload.put("connected", isConnected);
-                payload.put("isConnected", isConnected);
-                payload.put("pending", isPending);
-                payload.put("isPending", isPending);
-                payload.put("timestamp", java.time.LocalDateTime.now().toString());
+        Runnable publishEvent = () -> {
+            try {
+                SimpMessagingTemplate template = messagingTemplateProvider != null ? messagingTemplateProvider.getIfAvailable() : null;
+                if (template != null) {
+                    Map<String, Object> payload = new HashMap<>();
+                    payload.put("type", "CONNECTION_UPDATED");
+                    payload.put("action", action);
+                    payload.put("senderId", senderId);
+                    payload.put("receiverId", receiverId);
+                    payload.put("connected", isConnected);
+                    payload.put("isConnected", isConnected);
+                    payload.put("pending", isPending);
+                    payload.put("isPending", isPending);
+                    payload.put("timestamp", java.time.LocalDateTime.now().toString());
 
-                if (senderId != null && !senderId.isBlank()) {
-                    payload.put("senderProfile", getProfileDto(senderId, isConnected, false));
-                }
-                if (receiverId != null && !receiverId.isBlank()) {
-                    payload.put("receiverProfile", getProfileDto(receiverId, isConnected, false));
-                }
+                    if (senderId != null && !senderId.isBlank()) {
+                        payload.put("senderProfile", getProfileDto(senderId, isConnected, false));
+                    }
+                    if (receiverId != null && !receiverId.isBlank()) {
+                        payload.put("receiverProfile", getProfileDto(receiverId, isConnected, false));
+                    }
 
-                template.convertAndSend("/topic/connections", payload);
-                if (senderId != null && !senderId.isBlank()) {
-                    Set<String> allSenderIds = resolveAllUserIdentifiers(senderId);
-                    for (String sId : allSenderIds) {
-                        template.convertAndSend("/topic/user." + sId.trim().toLowerCase(Locale.ROOT) + ".connections", payload);
+                    template.convertAndSend("/topic/connections", payload);
+                    if (senderId != null && !senderId.isBlank()) {
+                        Set<String> allSenderIds = resolveAllUserIdentifiers(senderId);
+                        for (String sId : allSenderIds) {
+                            template.convertAndSend("/topic/user." + sId.trim().toLowerCase(Locale.ROOT) + ".connections", payload);
+                        }
+                    }
+                    if (receiverId != null && !receiverId.isBlank()) {
+                        Set<String> allReceiverIds = resolveAllUserIdentifiers(receiverId);
+                        for (String rId : allReceiverIds) {
+                            template.convertAndSend("/topic/user." + rId.trim().toLowerCase(Locale.ROOT) + ".connections", payload);
+                        }
                     }
                 }
-                if (receiverId != null && !receiverId.isBlank()) {
-                    Set<String> allReceiverIds = resolveAllUserIdentifiers(receiverId);
-                    for (String rId : allReceiverIds) {
-                        template.convertAndSend("/topic/user." + rId.trim().toLowerCase(Locale.ROOT) + ".connections", payload);
-                    }
-                }
+            } catch (Exception ignored) {
             }
-        } catch (Exception ignored) {
+        };
+
+        if (TransactionSynchronizationManager.isActualTransactionActive()
+                && TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    publishEvent.run();
+                }
+            });
+        } else {
+            publishEvent.run();
         }
     }
 

@@ -3,8 +3,11 @@ package com.truehunt.social.controller;
 import com.truehunt.social.dto.ApiResponse;
 import com.truehunt.social.dto.CreateConversationRequest;
 import com.truehunt.social.dto.SendMessageRequest;
+import com.truehunt.social.security.AuthenticatedUserResolver;
 import com.truehunt.social.service.ConversationService;
+import com.truehunt.social.service.MessageService;
 import jakarta.validation.Valid;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -18,9 +21,17 @@ import java.util.Map;
 public class ConversationController {
 
     private final ConversationService conversationService;
+    private final MessageService messageService;
+    private final AuthenticatedUserResolver authenticatedUserResolver;
 
-    public ConversationController(ConversationService conversationService) {
+    public ConversationController(
+            ConversationService conversationService,
+            MessageService messageService,
+            AuthenticatedUserResolver authenticatedUserResolver
+    ) {
         this.conversationService = conversationService;
+        this.messageService = messageService;
+        this.authenticatedUserResolver = authenticatedUserResolver;
     }
 
     private String resolveCaller(String userEmail, String userId) {
@@ -63,6 +74,46 @@ public class ConversationController {
             @RequestHeader(value = "X-User-Id", required = false) String userId
     ) {
         return ResponseEntity.ok(ApiResponse.success(conversationService.sendMessage(id, req, resolveCaller(userEmail, userId))));
+    }
+
+    @PatchMapping("/{id}/messages/{messageId}")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> editMessage(
+            @PathVariable String id,
+            @PathVariable String messageId,
+            @Valid @RequestBody SendMessageRequest req,
+            HttpServletRequest request
+    ) {
+        Map<String, Object> conversation = conversationService.editMessage(
+                id,
+                messageId,
+                req.getContent(),
+                authenticatedUserResolver.requireEmail(request)
+        );
+        messageService.broadcastConversationChange(
+                Long.parseLong(String.valueOf(conversation.get("id"))),
+                "MESSAGE_EDITED",
+                messageId,
+                req.getContent().trim()
+        );
+        return ResponseEntity.ok(ApiResponse.success(conversation));
+    }
+
+    @DeleteMapping("/{id}/messages")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> clearMessages(
+            @PathVariable String id,
+            HttpServletRequest request
+    ) {
+        Map<String, Object> conversation = conversationService.clearMessages(
+                id,
+                authenticatedUserResolver.requireEmail(request)
+        );
+        messageService.broadcastConversationChange(
+                Long.parseLong(String.valueOf(conversation.get("id"))),
+                "CONVERSATION_CLEARED",
+                null,
+                null
+        );
+        return ResponseEntity.ok(ApiResponse.success(conversation));
     }
 
     @PostMapping

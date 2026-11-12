@@ -4,13 +4,17 @@ import com.truehunt.social.dto.CreateConversationRequest;
 import com.truehunt.social.dto.SendMessageRequest;
 import com.truehunt.social.exception.BadRequestException;
 import com.truehunt.social.exception.ResourceNotFoundException;
+import com.truehunt.social.exception.UnauthorizedException;
 import com.truehunt.social.model.ConversationEntity;
+import com.truehunt.social.model.MessageEntity;
 import com.truehunt.social.model.UserAccountEntity;
 import com.truehunt.social.repository.ConversationRepository;
+import com.truehunt.social.repository.MessageRepository;
 import com.truehunt.social.repository.UserAccountRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -18,13 +22,16 @@ import java.util.stream.Collectors;
 public class ConversationService {
 
     private final ConversationRepository conversationRepository;
+    private final MessageRepository messageRepository;
     private final MessageService messageService;
     private final UserAccountRepository userAccountRepository;
 
     public ConversationService(ConversationRepository conversationRepository,
+            MessageRepository messageRepository,
             MessageService messageService,
             UserAccountRepository userAccountRepository) {
         this.conversationRepository = conversationRepository;
+        this.messageRepository = messageRepository;
         this.messageService = messageService;
         this.userAccountRepository = userAccountRepository;
     }
@@ -134,6 +141,68 @@ public class ConversationService {
     }
 
     @Transactional
+    public Map<String, Object> editMessage(String conversationId, String messageId, String content, String userId) {
+        String cleanContent = content == null ? "" : content.trim();
+        if (cleanContent.isEmpty()) {
+            throw new BadRequestException("Message content cannot be empty.");
+        }
+
+        ConversationEntity conversation = findConversationEntity(conversationId);
+        Set<String> callerIdentifiers = requireConversationParticipant(conversation, userId);
+        List<Map<String, Object>> thread = conversation.getThread();
+        int messageIndex = -1;
+        for (int index = 0; index < thread.size(); index++) {
+            if (messageId.equals(String.valueOf(thread.get(index).get("id")))) {
+                messageIndex = index;
+                break;
+            }
+        }
+        if (messageIndex < 0) {
+            throw new ResourceNotFoundException("Message", "id", messageId);
+        }
+
+        Map<String, Object> message = thread.get(messageIndex);
+        String senderId = String.valueOf(message.getOrDefault("senderId", ""));
+        if (!callerIdentifiers.contains(normalizeIdentity(senderId))) {
+            throw new UnauthorizedException("You can only edit your own messages.");
+        }
+        if (Boolean.TRUE.equals(message.get("edited"))) {
+            throw new BadRequestException("A message can only be edited once.");
+        }
+
+        MessageEntity storedMessage = findStoredMessage(conversation.getId(), message, senderId);
+        if (storedMessage != null) {
+            if (!callerIdentifiers.contains(normalizeIdentity(storedMessage.getSenderId()))) {
+                throw new UnauthorizedException("You can only edit your own messages.");
+            }
+            storedMessage.setContent(cleanContent);
+            messageRepository.save(storedMessage);
+        }
+
+        message.put("content", cleanContent);
+        message.put("edited", true);
+        conversation.setThread(thread);
+        if (messageIndex == thread.size() - 1) {
+            conversation.setPreview(cleanContent);
+        }
+        conversation.setUpdatedAt(LocalDateTime.now());
+        return conversationRepository.save(conversation).toDto(userId, callerIdentifiers);
+    }
+
+    @Transactional
+    public Map<String, Object> clearMessages(String conversationId, String userId) {
+        ConversationEntity conversation = findConversationEntity(conversationId);
+        Set<String> callerIdentifiers = requireConversationParticipant(conversation, userId);
+        messageRepository.deleteAll(messageRepository.findAllByConversationIdOrderByCreatedAtAsc(conversation.getId()));
+        conversation.setThread(List.of());
+        conversation.setPreview("Start a conversation");
+        conversation.setDate("Now");
+        conversation.setUnread(false);
+        conversation.setUpdatedAt(LocalDateTime.now());
+        return conversationRepository.save(conversation).toDto(userId, callerIdentifiers);
+    }
+
+    @Transactional
     public Map<String, Object> createConversation(CreateConversationRequest req) {
         return createConversation(req, null);
     }
@@ -232,6 +301,62 @@ public class ConversationService {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    private Set<String> requireConversationParticipant(ConversationEntity conversation, String userId) {
+        if (userId == null || userId.isBlank()) {
+            throw new UnauthorizedException("A valid sign-in is required to manage messages.");
+        }
+
+        Set<String> identifiers = new HashSet<>();
+        identifiers.add(normalizeIdentity(userId));
+        Optional<UserAccountEntity> account = userAccountRepository.findByEmail(userId.trim().toLowerCase(Locale.ROOT))
+                .or(() -> userAccountRepository.findByPublicUserId(userId.trim()));
+        if (account.isEmpty()) {
+            try {
+                account = userAccountRepository.findById(Long.parseLong(userId.trim()));
+            } catch (NumberFormatException ignored) {
+                account = Optional.empty();
+            }
+        }
+        account.ifPresent(user -> {
+            if (user.getEmail() != null) identifiers.add(normalizeIdentity(user.getEmail()));
+            if (user.getPublicUserId() != null) identifiers.add(normalizeIdentity(user.getPublicUserId()));
+            if (user.getId() != null) identifiers.add(normalizeIdentity(String.valueOf(user.getId())));
+        });
+
+        boolean isParticipant = identifiers.contains(normalizeIdentity(conversation.getUser1Id()))
+                || identifiers.contains(normalizeIdentity(conversation.getUser2Id()));
+        if (!isParticipant) {
+            throw new UnauthorizedException("You cannot manage messages in this conversation.");
+        }
+        return identifiers;
+    }
+
+    private MessageEntity findStoredMessage(Long conversationId, Map<String, Object> message, String senderId) {
+        Object storedId = message.get("messageId");
+        if (storedId != null) {
+            try {
+                MessageEntity storedMessage = messageRepository.findById(Long.parseLong(String.valueOf(storedId)))
+                        .orElse(null);
+                if (storedMessage != null && conversationId.equals(storedMessage.getConversationId())) {
+                    return storedMessage;
+                }
+            } catch (NumberFormatException ignored) {
+                // Fall back to the message content for older conversation records.
+            }
+        }
+
+        String originalContent = String.valueOf(message.getOrDefault("content", ""));
+        return messageRepository.findAllByConversationIdOrderByCreatedAtDesc(conversationId).stream()
+                .filter(candidate -> normalizeIdentity(candidate.getSenderId()).equals(normalizeIdentity(senderId)))
+                .filter(candidate -> Objects.equals(candidate.getContent(), originalContent))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private String normalizeIdentity(String identity) {
+        return identity == null ? "" : identity.trim().toLowerCase(Locale.ROOT);
     }
 
     private String getInitials(String name) {

@@ -42,7 +42,6 @@ const MAX_VIDEO_DURATION = 3 * 60
 const MAX_ABOUT_WORDS = 300
 const PROFILE_IMAGE_CROP_SIZE = 360
 const PROFILE_IMAGE_OUTPUT_SIZE = 512
-const PHONE_ACCESS_EVENT = 'truehunt-professional-phone-access-changed'
 const CINEMA_ORGANIZATIONS = [
   { name: 'Netflix', domain: 'netflix.com' },
   { name: 'Disney', domain: 'disney.com' },
@@ -229,26 +228,6 @@ function OrganizationPicker({ options, value, onChange }) {
       )}
     </div>
   )
-}
-
-function getPhoneAccessStorageKey(profileId) {
-  return `truehunt-professional-phone-requests:${encodeURIComponent(profileId)}`
-}
-
-function readPhoneAccessRequests(profileId) {
-  try {
-    const savedRequests = localStorage.getItem(getPhoneAccessStorageKey(profileId))
-    const requests = savedRequests ? JSON.parse(savedRequests) : []
-    return Array.isArray(requests) ? requests : []
-  } catch (error) {
-    console.warn('Could not read professional phone access requests:', error)
-    return []
-  }
-}
-
-function savePhoneAccessRequests(profileId, requests) {
-  localStorage.setItem(getPhoneAccessStorageKey(profileId), JSON.stringify(requests))
-  window.dispatchEvent(new CustomEvent(PHONE_ACCESS_EVENT, { detail: { profileId } }))
 }
 
 function getCurrentUser() {
@@ -494,11 +473,12 @@ function ProfilePage({
   const [isSavingExperience, setIsSavingExperience] = useState(false)
   const [organizationDraft, setOrganizationDraft] = useState('')
   const [isContactModalOpen, setIsContactModalOpen] = useState(false)
-  const [phoneAccessState, setPhoneAccessState] = useState(() => {
-    const profileId = String(profileDetails.userId || 'me')
-    return { profileId, requests: readPhoneAccessRequests(profileId) }
+  const [contactAccessState, setContactAccessState] = useState({
+    profileId: '',
+    status: 'NONE',
+    message: '',
   })
-  const [phoneRequestMessage, setPhoneRequestMessage] = useState('')
+  const [isSubmittingContactAccess, setIsSubmittingContactAccess] = useState(false)
   const [editingSection, setEditingSection] = useState('')
   const [openProfileActionsFor, setOpenProfileActionsFor] = useState(null)
   const [connectionState, setConnectionState] = useState({
@@ -513,14 +493,13 @@ function ProfilePage({
   })
   const [relationshipActionState, setRelationshipActionState] = useState({ profileId: '', action: '' })
   const [relationshipErrorState, setRelationshipErrorState] = useState({ profileId: '', message: '' })
+  const setProfileDetailsRef = useRef(setProfileDetails)
+  setProfileDetailsRef.current = setProfileDetails
   const profileActionsRef = useRef(null)
   const profilePostsListRef = useRef(null)
   const profileAccessId = String(profileDetails.userId || 'me')
   const targetProfileId = String(profileDetails.userId || profileDetails.id || '')
   const isOwnerView = isOwner
-  const phoneAccessRequests = phoneAccessState.profileId === profileAccessId
-    ? phoneAccessState.requests
-    : readPhoneAccessRequests(profileAccessId)
   const [currentUser] = useState(getCurrentUser)
   const [currentUserId] = useState(getCurrentUserIdentity)
   const profilePostOwnerId = String(
@@ -548,9 +527,12 @@ function ProfilePage({
       URL.revokeObjectURL(profilePostMediaPreviewRef.current)
     }
   }, [])
-  const currentPhoneRequest = phoneAccessRequests.find((request) => (
-    request.requesterId === currentUserId
-  ))
+  const contactAccessStatus = contactAccessState.profileId === profileAccessId
+    ? contactAccessState.status
+    : 'NONE'
+  const isLoadingContactAccess = !isOwnerView
+    && contactAccessState.profileId === profileAccessId
+    && contactAccessStatus === 'LOADING'
   const displayedUserId = String(
     accountUserId
       || profileDetails.userId
@@ -567,7 +549,7 @@ function ProfilePage({
     ? parsedConnectionCount
     : (connectedProfiles?.length ?? 0)
   const formattedConnectionCount = connectionCount >= 500 ? '500+' : connectionCount
-  const hasProfessionalPhoneAccess = isOwnerView || currentPhoneRequest?.status === 'approved'
+  const hasProfessionalPhoneAccess = isOwnerView || contactAccessStatus === 'ACCEPTED'
   const experienceBeingEdited = (profileDetails.experiences || [])
     .find((experience) => experience.id === editingExperienceId)
   const experiences = profileDetails.experiences || []
@@ -633,31 +615,37 @@ function ProfilePage({
   }, [openProfileActionsFor, targetProfileId])
 
   useEffect(() => {
-    function refreshPhoneAccessRequests(event) {
-      if (!event.detail?.profileId || event.detail.profileId === profileAccessId) {
-        setPhoneAccessState({
-          profileId: profileAccessId,
-          requests: readPhoneAccessRequests(profileAccessId),
-        })
-      }
-    }
+    if (!isContactModalOpen || isOwnerView || !targetProfileId) return undefined
 
-    function refreshFromOtherTab(event) {
-      if (!event.key || event.key === getPhoneAccessStorageKey(profileAccessId)) {
-        setPhoneAccessState({
-          profileId: profileAccessId,
-          requests: readPhoneAccessRequests(profileAccessId),
-        })
-      }
-    }
+    let isCurrent = true
+    api.getContactAccessStatus(targetProfileId)
+      .then((status) => {
+        if (isCurrent) {
+          setContactAccessState({
+            profileId: profileAccessId,
+            status: status.status || 'NONE',
+            message: status.message || '',
+            phone: status.phone || '',
+            professionalPhone: status.professionalPhone || '',
+            email: status.email || '',
+          })
+        }
+      })
+      .catch((error) => {
+        console.error('Could not load contact access status:', error)
+        if (isCurrent) {
+          setContactAccessState({
+            profileId: profileAccessId,
+            status: 'ERROR',
+            message: 'Could not load contact access status. Please try again.',
+          })
+        }
+      })
 
-    window.addEventListener(PHONE_ACCESS_EVENT, refreshPhoneAccessRequests)
-    window.addEventListener('storage', refreshFromOtherTab)
     return () => {
-      window.removeEventListener(PHONE_ACCESS_EVENT, refreshPhoneAccessRequests)
-      window.removeEventListener('storage', refreshFromOtherTab)
+      isCurrent = false
     }
-  }, [profileAccessId])
+  }, [isContactModalOpen, isOwnerView, profileAccessId, targetProfileId])
 
   function getSecondaryCrafts() {
     const savedSecondaryCrafts = profileDetails.secondaryCrafts
@@ -721,40 +709,110 @@ function ProfilePage({
 
   useEffect(() => {
     function syncConnectionState(event) {
-      const { connected, pending, profile } = event.detail || {}
-      const changedProfileId = String(
-        profile?.userId || profile?.id || profile?.user_id || profile?._id || '',
-      ).trim().toLowerCase()
-      if (!changedProfileId) return
-      const targetId = String(targetProfileId || '').trim().toLowerCase()
-      if (changedProfileId === targetId) {
+      const detail = event.detail || {}
+      const {
+        connected: connectedValue,
+        isConnected,
+        pending: pendingValue,
+        isPending,
+        profile,
+        senderProfile,
+        receiverProfile,
+        senderId,
+        receiverId,
+      } = detail
+      const connected = typeof connectedValue === 'boolean' ? connectedValue : Boolean(isConnected)
+      const pending = typeof pendingValue === 'boolean' ? pendingValue
+        : typeof isPending === 'boolean' ? isPending : false
+      const identityKeys = (value) => {
+        const values = Array.isArray(value)
+          ? value
+          : typeof value === 'object' && value !== null
+            ? [
+                value.userId,
+                value.id,
+                value.user_id,
+                value._id,
+                value.profileId,
+                value.publicUserId,
+                value.email,
+                value.senderId,
+                value.targetProfileId,
+              ]
+            : [value]
+        return values.filter(Boolean).map((id) => String(id).trim().toLowerCase())
+      }
+      const viewedProfileIds = new Set(identityKeys([
+        targetProfileId,
+        profileDetails.userId,
+        profileDetails.id,
+        profileDetails.email,
+        profileDetails.referId,
+      ]))
+      const ownerProfileIds = new Set(identityKeys([
+        accountUserId,
+        currentUserId,
+        currentUser?.userId,
+        currentUser?.id,
+        currentUser?.email,
+      ]))
+      const matchesIdentifiers = (value, identifiers) => identityKeys(value)
+        .some((id) => identifiers.has(id))
+      const hasParticipants = Boolean(senderId || receiverId || senderProfile || receiverProfile)
+      const relevantIdentifiers = isOwnerView ? ownerProfileIds : viewedProfileIds
+      const relevant = hasParticipants
+        ? matchesIdentifiers(senderProfile, relevantIdentifiers) || matchesIdentifiers(senderId, relevantIdentifiers)
+          || matchesIdentifiers(receiverProfile, relevantIdentifiers) || matchesIdentifiers(receiverId, relevantIdentifiers)
+        : isOwnerView || matchesIdentifiers(profile, relevantIdentifiers)
+      if (!relevant) return
+
+      if (!isOwnerView && targetProfileId) {
         setConnectionState({
           profileId: targetProfileId,
-          connected: Boolean(connected),
-          pending: typeof pending === 'boolean' ? Boolean(pending) : false,
+          connected,
+          pending,
         })
       }
-
-      setConnectedProfiles((current) => {
-        const currentProfiles = current || []
-        const matchesProfile = (item) => String(
-          item.userId || item.id || item.user_id || item._id || '',
-        ).trim().toLowerCase() === changedProfileId
-        if (!connected) return currentProfiles.filter((item) => !matchesProfile(item))
-        if (currentProfiles.some(matchesProfile)) return currentProfiles
-        return [...currentProfiles, { ...profile, id: changedProfileId, userId: changedProfileId }]
-      })
 
       if (isOwnerView) {
         api.getConnectedProfiles().then((list) => {
           if (Array.isArray(list)) setConnectedProfiles(list)
-        }).catch(() => {})
+        }).catch((error) => {
+          console.warn('Could not refresh profile connections:', error)
+        })
+      } else if (targetProfileId) {
+        api.getProfileById(targetProfileId).then((freshProfile) => {
+          if (!freshProfile) return
+          setConnectionState({
+            profileId: targetProfileId,
+            connected: Boolean(freshProfile.isConnected || freshProfile.connected),
+            pending: Boolean(freshProfile.isPending || freshProfile.isOutgoingPending),
+          })
+          setProfileDetailsRef.current?.((currentProfile) => {
+            if (!matchesIdentifiers(currentProfile, viewedProfileIds)) return currentProfile
+            return { ...currentProfile, ...freshProfile }
+          })
+        }).catch((error) => {
+          console.warn('Could not refresh viewed profile after connection change:', error)
+        })
       }
     }
 
     window.addEventListener('truehunt-connection-changed', syncConnectionState)
     return () => window.removeEventListener('truehunt-connection-changed', syncConnectionState)
-  }, [isOwnerView, targetProfileId])
+  }, [
+    accountUserId,
+    currentUser?.email,
+    currentUser?.id,
+    currentUser?.userId,
+    currentUserId,
+    isOwnerView,
+    profileDetails.email,
+    profileDetails.id,
+    profileDetails.referId,
+    profileDetails.userId,
+    targetProfileId,
+  ])
 
   useEffect(() => {
     function syncFollowState(event) {
@@ -837,7 +895,7 @@ function ProfilePage({
       loadConnectionsCount()
       api.getProfile().then((fresh) => {
         if (isCurrent && fresh && fresh.name) {
-          setProfileDetails?.((prev) => ({ ...prev, ...fresh }))
+          setProfileDetailsRef.current?.((prev) => ({ ...prev, ...fresh }))
         }
       }).catch(() => {})
     }
@@ -1647,52 +1705,26 @@ function ProfilePage({
     setIsEditingProfile(true)
   }
 
-  function requestProfessionalPhone() {
-    if (!currentUserId) {
-      setPhoneRequestMessage('Could not identify your request. Please try again.')
-      return
-    }
-    if (currentPhoneRequest?.status === 'approved') {
-      setPhoneRequestMessage('You already have permission to view this number.')
-      return
-    }
-    if (currentPhoneRequest?.status === 'pending') {
-      setPhoneRequestMessage('Your request is waiting for approval.')
-      return
-    }
+  async function requestProfessionalPhone() {
+    if (!targetProfileId || isSubmittingContactAccess) return
 
-    const nextRequests = [
-      ...phoneAccessRequests.filter((request) => request.requesterId !== currentUserId),
-      {
-        id: `${currentUserId}-${Date.now()}`,
-        requesterId: currentUserId,
-        requesterName: currentUser?.name || currentUser?.email || 'Social member',
-        status: 'pending',
-        requestedAt: new Date().toISOString(),
-      },
-    ]
-
+    setIsSubmittingContactAccess(true)
     try {
-      savePhoneAccessRequests(profileAccessId, nextRequests)
-      setPhoneAccessState({ profileId: profileAccessId, requests: nextRequests })
-      setPhoneRequestMessage('Request sent. The profile owner must approve it before the number is shown.')
+      const request = await api.requestContactAccess(targetProfileId)
+      setContactAccessState({
+        profileId: profileAccessId,
+        status: request.status || 'PENDING',
+        message: request.message || 'Request sent. The profile owner must accept it before your contact details are shown.',
+      })
     } catch (error) {
-      console.error('Could not save professional phone access request:', error)
-      setPhoneRequestMessage('Could not send your request. Please try again.')
-    }
-  }
-
-  function decidePhoneAccessRequest(requestId, status) {
-    const nextRequests = phoneAccessRequests.map((request) => (
-      request.id === requestId ? { ...request, status } : request
-    ))
-
-    try {
-      savePhoneAccessRequests(profileAccessId, nextRequests)
-      setPhoneAccessState({ profileId: profileAccessId, requests: nextRequests })
-    } catch (error) {
-      console.error('Could not update professional phone access request:', error)
-      setPhoneRequestMessage('Could not update the request. Please try again.')
+      console.error('Could not send contact access request:', error)
+      setContactAccessState({
+        profileId: profileAccessId,
+        status: 'ERROR',
+        message: error.message || 'Could not send your request. Please try again.',
+      })
+    } finally {
+      setIsSubmittingContactAccess(false)
     }
   }
 
@@ -2096,7 +2128,11 @@ function ProfilePage({
                 className="identity-contact-button"
                 type="button"
                 onClick={() => {
-                  setPhoneRequestMessage('')
+                  setContactAccessState({
+                    profileId: profileAccessId,
+                    status: isOwnerView ? 'NONE' : 'LOADING',
+                    message: '',
+                  })
                   setIsContactModalOpen(true)
                 }}
               >
@@ -3002,7 +3038,7 @@ function ProfilePage({
             <div className="reference-modal-heading">
               <div>
                 <span className="eyebrow">CONTACT ARTIST</span>
-                <h2 id="reference-modal-title">{isOwnerView ? 'Your contact details' : 'Professional phone access'}</h2>
+                <h2 id="reference-modal-title">{isOwnerView ? 'Your contact details' : 'Contact details'}</h2>
               </div>
               <button
                 className="profile-modal-close"
@@ -3042,37 +3078,6 @@ function ProfilePage({
                     </dd>
                   </div>
                 </dl>
-                <section className="phone-access-requests" aria-labelledby="phone-access-requests-title">
-                  <h3 id="phone-access-requests-title">Professional phone requests</h3>
-                  {phoneAccessRequests.filter((request) => request.status === 'pending').length > 0 ? (
-                    phoneAccessRequests
-                      .filter((request) => request.status === 'pending')
-                      .map((request) => (
-                        <div className="phone-access-request" key={request.id}>
-                          <span>{request.requesterName} requested access to your professional phone.</span>
-                          <div className="phone-access-request-actions">
-                            <button
-                              className="contact-button"
-                              type="button"
-                              onClick={() => decidePhoneAccessRequest(request.id, 'approved')}
-                            >
-                              Accept
-                            </button>
-                            <button
-                              className="secondary-button"
-                              type="button"
-                              onClick={() => decidePhoneAccessRequest(request.id, 'declined')}
-                            >
-                              Decline
-                            </button>
-                          </div>
-                        </div>
-                      ))
-                  ) : (
-                    <p>No pending requests.</p>
-                  )}
-                  {phoneRequestMessage && <p role="status">{phoneRequestMessage}</p>}
-                </section>
                 <button
                   className="contact-button"
                   type="button"
@@ -3083,29 +3088,29 @@ function ProfilePage({
               </div>
             ) : hasProfessionalPhoneAccess ? (
               <div className="reference-modal-success" role="status">
-                <p>The profile owner approved your request to view their contact details.</p>
+                <p>{contactAccessState.message || 'The profile owner approved your request to view their contact details.'}</p>
                 <dl className="reference-contact-details">
                   <div>
                     <dt>Phone</dt>
                     <dd>
-                      {profileDetails.phone
-                        ? <a href={`tel:${profileDetails.phone}`}>{profileDetails.phone}</a>
+                        {contactAccessState.phone
+                          ? <a href={`tel:${contactAccessState.phone}`}>{contactAccessState.phone}</a>
                         : 'Not provided'}
                     </dd>
                   </div>
                   <div>
                     <dt>Email</dt>
                     <dd>
-                      {profileDetails.email
-                        ? <a href={`mailto:${profileDetails.email}`}>{profileDetails.email}</a>
+                        {contactAccessState.email
+                          ? <a href={`mailto:${contactAccessState.email}`}>{contactAccessState.email}</a>
                         : 'Not provided'}
                     </dd>
                   </div>
                   <div>
                     <dt>Professional phone</dt>
                     <dd>
-                      {profileDetails.professionalPhone
-                        ? <a href={`tel:${profileDetails.professionalPhone}`}>{profileDetails.professionalPhone}</a>
+                        {contactAccessState.professionalPhone
+                          ? <a href={`tel:${contactAccessState.professionalPhone}`}>{contactAccessState.professionalPhone}</a>
                         : 'Not provided'}
                     </dd>
                   </div>
@@ -3120,41 +3125,39 @@ function ProfilePage({
               </div>
             ) : (
               <div className="reference-modal-success">
-                <p>Personal contact details are available below. The professional phone stays hidden unless the profile owner accepts your request.</p>
-                <dl className="reference-contact-details">
-                  <div>
-                    <dt>Phone</dt>
-                    <dd>
-                      {profileDetails.phone
-                        ? <a href={`tel:${profileDetails.phone}`}>{profileDetails.phone}</a>
-                        : 'Not provided'}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Email</dt>
-                    <dd>
-                      {profileDetails.email
-                        ? <a href={`mailto:${profileDetails.email}`}>{profileDetails.email}</a>
-                        : 'Not provided'}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Professional phone</dt>
-                    <dd>Hidden until the profile owner accepts your request.</dd>
-                  </div>
-                </dl>
-                {currentPhoneRequest?.status === 'pending' && (
-                  <p role="status">Your request is waiting for the profile owner’s approval.</p>
+                {isLoadingContactAccess ? (
+                  <p role="status">Checking contact access…</p>
+                ) : (
+                  <>
+                    <p>
+                      {contactAccessState.message
+                        || 'Phone numbers and email are hidden until the profile owner accepts your request.'}
+                    </p>
+                  </>
                 )}
-                {currentPhoneRequest?.status === 'declined' && (
-                  <p role="status">The profile owner declined your request. The professional phone remains hidden.</p>
-                )}
-                {!currentPhoneRequest && (
-                  <button className="contact-button" type="button" onClick={requestProfessionalPhone}>
-                    Send request
+                {(contactAccessStatus === 'NONE' || contactAccessStatus === 'REJECTED')
+                  && !isLoadingContactAccess && (
+                  <button
+                    className="contact-button"
+                    type="button"
+                    onClick={requestProfessionalPhone}
+                    disabled={isSubmittingContactAccess}
+                  >
+                    {isSubmittingContactAccess
+                      ? 'Sending…'
+                      : contactAccessStatus === 'REJECTED' ? 'Send request again' : 'Send request'}
                   </button>
                 )}
-                {phoneRequestMessage && <p role="status">{phoneRequestMessage}</p>}
+                {contactAccessStatus === 'ERROR' && !isLoadingContactAccess && (
+                  <button
+                    className="contact-button"
+                    type="button"
+                    onClick={requestProfessionalPhone}
+                    disabled={isSubmittingContactAccess}
+                  >
+                    {isSubmittingContactAccess ? 'Sending…' : 'Try again'}
+                  </button>
+                )}
                 <div className="reference-form-actions">
                   <button
                     className="secondary-button"

@@ -125,6 +125,11 @@ public class MessageService {
                 : "msg-" + messageEntity.getId();
 
         conversation.addMessage(outId, senderEmail, senderName, receiverEmail, req.getContent().trim(), "outgoing", req.getAttachment());
+        List<Map<String, Object>> conversationThread = conversation.getThread();
+        if (!conversationThread.isEmpty()) {
+            conversationThread.get(conversationThread.size() - 1).put("messageId", messageEntity.getId());
+            conversation.setThread(conversationThread);
+        }
         conversation.setPreview(req.getContent().trim());
         conversation.setDate("Just now");
         conversation.setUnread(true);
@@ -221,6 +226,16 @@ public class MessageService {
         ConversationEntity conv = conversationRepository.findById(conversationId).orElse(null);
         return conv != null ? conv.toDto(resolvedId).get("thread") instanceof List ?
                 (List<Map<String, Object>>) conv.toDto(resolvedId).get("thread") : List.of() : List.of();
+    }
+
+    public void broadcastConversationChange(Long conversationId, String type, String messageId, String content) {
+        Map<String, Object> event = new LinkedHashMap<>();
+        event.put("type", type);
+        event.put("conversationId", conversationId);
+        if (messageId != null) event.put("id", messageId);
+        if (content != null) event.put("content", content);
+        if (messageId != null) event.put("edited", true);
+        messagingTemplate.convertAndSend("/topic/conversations/" + conversationId, event);
     }
 
     private ConversationEntity findOrCreateConversation(String senderEmail, String senderPublicId, String senderName,

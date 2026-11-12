@@ -202,6 +202,7 @@ export default function FilmStrip3D({
                 {/* Circular Craft Image */}
                 {photo.image ? (
                   <img
+                    key={photo.image}
                     src={photo.image}
                     alt={`${photo.person} — ${craft.name}`}
                     title={`${photo.person} — ${craft.name}`}

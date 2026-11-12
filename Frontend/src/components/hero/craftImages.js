@@ -668,7 +668,7 @@ Object.assign(CRAFT_ADDITIONAL_IMAGES, {
   "SET Designer": CRAFT_ADDITIONAL_IMAGES["Set Design"],
   DISTRIBUTION: CRAFT_ADDITIONAL_IMAGES.Distribution,
   "production Support": CRAFT_ADDITIONAL_IMAGES["Other Crafts"],
-  Modal: CRAFT_ADDITIONAL_IMAGES["Modelling"],
+  Model: CRAFT_ADDITIONAL_IMAGES.modal,
 });
 
 export default CRAFT_ADDITIONAL_IMAGES;

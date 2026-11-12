@@ -144,7 +144,7 @@ export default function Navbar() {
     { name: 'Jobs', path: '/jobs', icon: Briefcase },
     { name: 'Investors Connect', path: '/investors-connect', icon: TrendingUp },
     { name: 'Protect Producer', path: '/protect-producer', icon: Shield },
-    { name: 'LCM App', path: '/lcm-app', icon: Smartphone },
+    { name: 'ZineWood', path: '/lcm-app', icon: Smartphone },
     { name: 'Get Support', path: '/get-support', icon: HelpCircle },
   ];
 
@@ -244,7 +244,7 @@ export default function Navbar() {
           {isAuthenticated && user ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <Link
-                to={user.role === 'STUDIO' ? '/protect-producer' : '/social'}
+                to="/social/profile"
                 className="btn btn-sm btn-outline-navy"
                 style={{
                   display: 'inline-flex',
@@ -435,7 +435,7 @@ export default function Navbar() {
             {isAuthenticated && user ? (
               <>
                 <Link
-                  to={user.role === 'STUDIO' ? '/protect-producer' : '/social'}
+                  to="/social/profile"
                   onClick={() => setMobileMenuOpen(false)}
                   className="btn btn-outline-navy"
                   style={{ width: '100%', minHeight: '38px', padding: '8px 12px', textAlign: 'center', textDecoration: 'none' }}

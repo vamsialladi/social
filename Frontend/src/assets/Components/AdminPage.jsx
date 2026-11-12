@@ -278,7 +278,11 @@ export default function AdminPage() {
               {isSigningIn ? 'Signing in…' : 'Sign in'}
             </button>
           </form>
-          <p className="admin-login-note">Administrator access is verified by the sign-in service.</p>
+          <p className="admin-login-note">
+            {demoAdminCredentials
+              ? 'The development admin account is created when the backend starts with the dev profile. Use npm run backend or mvn spring-boot:run.'
+              : 'Administrator access is verified by the sign-in service.'}
+          </p>
         </section>
       </main>
     )
@@ -319,9 +323,6 @@ export default function AdminPage() {
             <strong>{getDisplayName(adminUser)}</strong>
             <small>Administrator</small>
           </span>
-          <button type="button" className="admin-signout" onClick={handleSignOut} aria-label="Sign out">
-            <LogOut size={17} aria-hidden="true" />
-          </button>
         </div>
       </aside>
 
@@ -332,8 +333,14 @@ export default function AdminPage() {
             <h1>{activeLabel}</h1>
           </div>
           <div className="admin-topbar-user">
-            <span className="admin-avatar">{getInitials(getDisplayName(adminUser))}</span>
-            <span>{getDisplayName(adminUser)}</span>
+            <span className="admin-topbar-identity">
+              <span className="admin-avatar">{getInitials(getDisplayName(adminUser))}</span>
+              <span className="admin-topbar-user-name">{getDisplayName(adminUser)}</span>
+            </span>
+            <button type="button" className="admin-profile-logout" onClick={handleSignOut}>
+              <LogOut size={15} aria-hidden="true" />
+              <span>Logout</span>
+            </button>
           </div>
         </header>
 

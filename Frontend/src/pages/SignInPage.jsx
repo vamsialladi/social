@@ -31,7 +31,7 @@ export default function SignInPage() {
         if (connectTalent) {
           navigate('/social/profile', { state: { connectTalent } });
         } else {
-          navigate(selectedRole === 'STUDIO' ? '/protect-producer' : '/social');
+          navigate(selectedRole === 'STUDIO' ? '/protect-producer' : '/social/home');
         }
       } else {
         setErrorMsg(res.message || 'Invalid credentials');

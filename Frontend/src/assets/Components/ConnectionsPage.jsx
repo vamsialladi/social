@@ -5,46 +5,110 @@ import './StylePage.css'
 
 function getInitials(profile) {
   if (profile.initials) return profile.initials
-  return String(profile.name || 'Member')
+  return String(getProfileName(profile) || 'Profile')
     .split(/\s+/)
     .map((part) => part[0])
     .join('')
     .slice(0, 2)
 }
 
-export default function ConnectionsPage({ onBack, onProfileSelect }) {
+function getProfileName(profile) {
+  const candidates = [
+    profile?.name,
+    profile?.fullName,
+    profile?.displayName,
+    profile?.userName,
+    profile?.profile?.name,
+    profile?.account?.name,
+    profile?.user?.name,
+  ]
+  return candidates
+    .map((candidate) => String(candidate || '').trim().replace(/\s+/g, ' '))
+    .find((name) => name && !['truehunt member', 'cinema professional', 'member'].includes(name.toLowerCase())) || ''
+}
+
+function getIdentityKeys(profile) {
+  return [
+    profile?.userId,
+    profile?.id,
+    profile?.user_id,
+    profile?._id,
+    profile?.profileId,
+    profile?.publicUserId,
+    profile?.email,
+  ]
+    .filter(Boolean)
+    .map((value) => String(value).trim().toLowerCase())
+}
+
+function profilesMatch(first, second) {
+  const secondKeys = new Set(getIdentityKeys(second))
+  return getIdentityKeys(first).some((key) => secondKeys.has(key))
+}
+
+export default function ConnectionsPage({ onBack, onProfileSelect, currentUserIdentifiers = [] }) {
   const [profiles, setProfiles] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
   const [actionError, setActionError] = useState('')
   const [updatingProfileId, setUpdatingProfileId] = useState('')
+  const currentUserIdentityKey = currentUserIdentifiers
+    .filter(Boolean)
+    .map((value) => String(value).trim().toLowerCase())
+    .join('|')
 
   useEffect(() => {
     function handleConnectionChanged(event) {
-      const { connected, profile } = event.detail || {}
-      const profileId = String(
-        profile?.userId || profile?.id || profile?.user_id || profile?._id || '',
+      const detail = event.detail || {}
+      const {
+        connected: connectedValue,
+        isConnected,
+        pending: pendingValue,
+        isPending,
+        profile,
+        senderProfile,
+        receiverProfile,
+        senderId,
+        receiverId,
+      } = detail
+      const connected = typeof connectedValue === 'boolean' ? connectedValue : Boolean(isConnected)
+      const pending = typeof pendingValue === 'boolean' ? pendingValue
+        : typeof isPending === 'boolean' ? isPending : false
+      const currentIds = new Set(currentUserIdentityKey.split('|').filter(Boolean))
+      const matchesCurrentUser = (value) => (
+        getIdentityKeys(value).some((key) => currentIds.has(key))
+        || currentIds.has(String(value || '').trim().toLowerCase())
       )
-      if (!profileId) return
+      const hasParticipants = Boolean(senderId || receiverId || senderProfile || receiverProfile)
+      let targetProfile
+      if (hasParticipants) {
+        const isSender = matchesCurrentUser(senderProfile) || matchesCurrentUser(senderId)
+        const isReceiver = matchesCurrentUser(receiverProfile) || matchesCurrentUser(receiverId)
+        if (isSender === isReceiver) return
+        targetProfile = isSender
+          ? receiverProfile || { id: receiverId }
+          : senderProfile || { id: senderId }
+      } else {
+        targetProfile = profile || (detail.profileId ? { id: detail.profileId } : null)
+      }
+      if (!targetProfile || (!connected && pending)) return
 
       setProfiles((currentProfiles) => {
         if (!connected) {
-          return currentProfiles.filter((item) => String(
-            item.userId || item.id || item.user_id || item._id || '',
-          ) !== profileId)
+          return currentProfiles.filter((item) => !profilesMatch(item, targetProfile))
         }
-        if (currentProfiles.some((item) => String(
-          item.userId || item.id || item.user_id || item._id || '',
-        ) === profileId)) {
-          return currentProfiles
+        if (currentProfiles.some((item) => profilesMatch(item, targetProfile))) {
+          return currentProfiles.map((item) => (
+            profilesMatch(item, targetProfile) ? { ...item, ...targetProfile } : item
+          ))
         }
-        return [...currentProfiles, profile]
+        return [...currentProfiles, targetProfile]
       })
     }
 
     window.addEventListener('truehunt-connection-changed', handleConnectionChanged)
     return () => window.removeEventListener('truehunt-connection-changed', handleConnectionChanged)
-  }, [])
+  }, [currentUserIdentityKey])
 
   useEffect(() => {
     let isCurrent = true
@@ -115,7 +179,7 @@ export default function ConnectionsPage({ onBack, onProfileSelect }) {
             {actionError && <p className="social-connections-message" role="alert">{actionError}</p>}
             <ul className="social-connections-list">
               {profiles.map((profile) => {
-                const name = profile.name || 'TrueHunt member'
+                const name = getProfileName(profile) || 'Profile'
                 const image = profile.profileImageUrl || profile.avatar || ''
                 const profileId = String(
                   profile.userId || profile.id || profile.user_id || profile._id || '',
@@ -131,6 +195,7 @@ export default function ConnectionsPage({ onBack, onProfileSelect }) {
                         ...profile,
                         id: profileId,
                         userId: profile.userId || profile.user_id || profileId,
+                        name,
                         isConnected: true,
                       })}
                     >
@@ -145,6 +210,7 @@ export default function ConnectionsPage({ onBack, onProfileSelect }) {
                         ...profile,
                         id: profileId,
                         userId: profile.userId || profile.user_id || profileId,
+                        name,
                         isConnected: true,
                       })}
                       onKeyDown={(e) => {
@@ -153,6 +219,7 @@ export default function ConnectionsPage({ onBack, onProfileSelect }) {
                             ...profile,
                             id: profileId,
                             userId: profile.userId || profile.user_id || profileId,
+                            name,
                             isConnected: true,
                           })
                         }

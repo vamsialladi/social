@@ -214,6 +214,7 @@ public class ConversationEntity {
         dto.put("color", color != null ? color : "blue");
         dto.put("preview", preview != null ? preview : "");
         dto.put("date", date != null ? date : "");
+        dto.put("updatedAt", updatedAt != null ? updatedAt.toString() : "");
         dto.put("category", category != null ? category : "Connections");
         dto.put("unread", unread);
         dto.put("sponsored", sponsored);

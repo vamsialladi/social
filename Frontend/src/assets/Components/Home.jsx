@@ -18,6 +18,61 @@ function ProfileAvatarPlaceholder() {
   )
 }
 
+function getConnectionProfileId(profile) {
+  return String(
+    profile?.userId
+      || profile?.id
+      || profile?.profileId
+      || profile?.senderId
+      || profile?.targetProfileId
+      || profile?.user_id
+      || profile?._id
+    || profile?.email
+      || '',
+  ).trim()
+}
+
+function getConnectionIdentityKeys(profile) {
+  return [
+    profile?.userId,
+    profile?.id,
+    profile?.profileId,
+    profile?.senderId,
+    profile?.targetProfileId,
+    profile?.user_id,
+    profile?._id,
+    profile?.publicUserId,
+    profile?.email,
+  ]
+    .filter(Boolean)
+    .map((value) => String(value).trim().toLowerCase())
+}
+
+function normalizeConnectionProfile(profile) {
+  const profileId = getConnectionProfileId(profile)
+  if (!profileId) return null
+
+  const name = String(profile?.name || '').trim() || 'TrueHunt Member'
+  const profileImageUrl = profile?.profileImageUrl || profile?.avatar || ''
+  const initials = profile?.initials
+    || name.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase()
+
+  return {
+    ...profile,
+    id: profile?.id || profileId,
+    userId: profile?.userId || profile?.id || profileId,
+    name,
+    initials: initials || 'TH',
+    profileImageUrl,
+    avatar: profileImageUrl,
+  }
+}
+
+function isSameConnectionProfile(first, second) {
+  const secondKeys = new Set(getConnectionIdentityKeys(second))
+  return getConnectionIdentityKeys(first).some((key) => secondKeys.has(key))
+}
+
 function getDismissedPostsStorageKey(userId) {
   const accountId = String(userId || 'guest').trim().toLowerCase()
   return `truehunt-not-interested-posts:${encodeURIComponent(accountId)}`
@@ -301,7 +356,29 @@ function Home({
       setConnectionsError('')
       try {
         const data = await api.getConnectedProfiles()
-        if (isCurrent) setConnectedProfiles(Array.isArray(data) ? data : [])
+        if (isCurrent) {
+          const uniqueConnections = new Map()
+          ;(Array.isArray(data) ? data : []).forEach((profile) => {
+            const normalizedProfile = normalizeConnectionProfile(profile)
+            if (!normalizedProfile) return
+            const existing = Array.from(uniqueConnections.values())
+              .find((item) => isSameConnectionProfile(item, normalizedProfile))
+            if (existing) {
+              uniqueConnections.set(getConnectionProfileId(existing), {
+                ...existing,
+                ...normalizedProfile,
+                name: normalizedProfile.name === 'TrueHunt Member'
+                  ? existing.name
+                  : normalizedProfile.name,
+                profileImageUrl: normalizedProfile.profileImageUrl || existing.profileImageUrl,
+                avatar: normalizedProfile.profileImageUrl || existing.avatar,
+              })
+            } else {
+              uniqueConnections.set(getConnectionProfileId(normalizedProfile), normalizedProfile)
+            }
+          })
+          setConnectedProfiles(Array.from(uniqueConnections.values()))
+        }
       } catch (error) {
         console.error('Failed to load connections:', error)
         if (isCurrent) setConnectionsError('Could not load your connections. Please try again.')
@@ -312,7 +389,7 @@ function Home({
     return () => {
       isCurrent = false
     }
-  }, [activeNavigation])
+  }, [activeNavigation, accountEmail, currentUserId])
 
   useEffect(() => {
     if (activeNavigation !== 'home') return undefined
@@ -342,25 +419,73 @@ function Home({
 
   useEffect(() => {
     function handleConnectionChanged(event) {
-      const { connected, profile } = event.detail || {}
-      const profileId = String(
-        profile?.userId || profile?.id || profile?.user_id || profile?._id || '',
+      const detail = event.detail || {}
+      const {
+        connected: connectedValue,
+        isConnected,
+        pending: pendingValue,
+        isPending,
+        senderId,
+        receiverId,
+        senderProfile,
+        receiverProfile,
+      } = detail
+      const connected = typeof connectedValue === 'boolean' ? connectedValue : Boolean(isConnected)
+      const pending = typeof pendingValue === 'boolean' ? pendingValue
+        : typeof isPending === 'boolean' ? isPending : false
+      const currentIds = new Set([
+        currentUserId,
+        profileDetails.userId,
+        profileDetails.id,
+        profileDetails.email,
+        accountEmail,
+      ].filter(Boolean).map((id) => String(id).trim().toLowerCase()))
+      const matchesCurrentUser = (value) => getConnectionIdentityKeys(value)
+        .some((key) => currentIds.has(key))
+        || currentIds.has(String(value || '').trim().toLowerCase())
+      const hasParticipants = Boolean(senderId || receiverId || senderProfile || receiverProfile)
+      let targetProfile
+      if (hasParticipants) {
+        const isSender = matchesCurrentUser(senderProfile) || matchesCurrentUser(senderId)
+        const isReceiver = matchesCurrentUser(receiverProfile) || matchesCurrentUser(receiverId)
+        if (isSender === isReceiver) return
+        targetProfile = isSender
+          ? receiverProfile || { id: receiverId }
+          : senderProfile || { id: senderId }
+      } else {
+        targetProfile = detail.profile
+          || (detail.profileId ? { id: detail.profileId } : null)
+      }
+      if (!targetProfile || (!connected && pending)) return
+
+      const profile = normalizeConnectionProfile(
+        targetProfile,
       )
-      if (!profileId) return
+      if (!profile) return
 
       setConnectedProfiles((current) => {
-        const matchesProfile = (item) => String(
-          item.userId || item.id || item.user_id || item._id || '',
-        ) === profileId
-        if (!connected) return current.filter((item) => !matchesProfile(item))
-        if (current.some(matchesProfile)) return current
-        return [...current, { ...profile, id: profileId, userId: profile.userId || profileId }]
+        const existing = current.find((item) => isSameConnectionProfile(item, profile))
+        if (!connected) return current.filter((item) => !isSameConnectionProfile(item, profile))
+        if (existing) {
+          return current.map((item) => (
+            isSameConnectionProfile(item, profile)
+              ? {
+                  ...item,
+                  ...profile,
+                  name: profile.name === 'TrueHunt Member' ? item.name : profile.name,
+                  profileImageUrl: profile.profileImageUrl || item.profileImageUrl,
+                  avatar: profile.profileImageUrl || item.avatar,
+                }
+              : item
+          ))
+        }
+        return [...current, profile]
       })
     }
 
     window.addEventListener('truehunt-connection-changed', handleConnectionChanged)
     return () => window.removeEventListener('truehunt-connection-changed', handleConnectionChanged)
-  }, [])
+  }, [accountEmail, currentUserId, profileDetails.email, profileDetails.id, profileDetails.userId])
 
   function selectMedia(event) {
     const file = event.target.files?.[0]

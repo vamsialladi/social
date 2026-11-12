@@ -224,13 +224,13 @@ const CINEMA_24_CRAFTS = [
     targetCraft: 'Studio/Production Support Workers'
   },
   {
-    name:'MOdel',
+    name:'Model',
     shortName:'Model',
     tagline:'Model for the Camera',
     desc:'Look wherever you want, but look forward and we shall succeed',
     icon:'🎯',
     image:'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRRajBCqF5pQqpqep2ADaM4dhU-tksZkKi3xxqxtRm9Ybn67frvK2uX-Ds&s=10',
-    targetCraft:'Modal'
+    targetCraft:'Model'
   }
 ];
 export default function CinematicHero() {
