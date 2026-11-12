@@ -1,5 +1,6 @@
 package com.truehunt.social.dto;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.validation.constraints.NotBlank;
 
@@ -9,6 +10,7 @@ public class JobApplicationRequest {
     private String applicantName;
 
     private String applicantEmail;
+    @JsonAlias({"phone"})
     private String applicantPhone;
     private String experience;
     private String coverLetter;

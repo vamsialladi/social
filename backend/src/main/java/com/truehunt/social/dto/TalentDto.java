@@ -11,6 +11,8 @@ import java.util.Map;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class TalentDto {
     private String id;
+    private String userId;
+    private String email;
     private String name;
     private String role;
     private String category;
@@ -28,6 +30,12 @@ public class TalentDto {
     private String showreel;
     private String availability;
     private Boolean verified = false;
+    private Boolean isConnected = false;
+    private Boolean connected = false;
+    private Boolean isPending = false;
+    private Boolean isOutgoingPending = false;
+    private Boolean isIncomingPending = false;
+    private String connectionStatus;
     private Integer connectionsCount = 0;
     private Integer followersCount = 0;
     private String headline;
@@ -38,6 +46,72 @@ public class TalentDto {
     private List<EducationDto> educations = new ArrayList<>();
     private List<ProjectDto> projects = new ArrayList<>();
     private List<Map<String, Object>> posts = new ArrayList<>();
+
+    public String getUserId() {
+        return userId != null && !userId.isBlank() ? userId : id;
+    }
+
+    public void setUserId(String userId) {
+        this.userId = userId;
+    }
+
+    public String getEmail() {
+        return email;
+    }
+
+    public void setEmail(String email) {
+        this.email = email;
+    }
+
+    public Boolean getIsConnected() {
+        return isConnected;
+    }
+
+    public void setIsConnected(Boolean isConnected) {
+        this.isConnected = Boolean.TRUE.equals(isConnected);
+        this.connected = Boolean.TRUE.equals(isConnected);
+    }
+
+    public Boolean getConnected() {
+        return connected != null ? connected : isConnected;
+    }
+
+    public void setConnected(Boolean connected) {
+        this.connected = Boolean.TRUE.equals(connected);
+        this.isConnected = Boolean.TRUE.equals(connected);
+    }
+
+    public Boolean getIsPending() {
+        return isPending;
+    }
+
+    public void setIsPending(Boolean isPending) {
+        this.isPending = isPending;
+    }
+
+    public Boolean getIsOutgoingPending() {
+        return isOutgoingPending;
+    }
+
+    public void setIsOutgoingPending(Boolean isOutgoingPending) {
+        this.isOutgoingPending = isOutgoingPending;
+    }
+
+    public Boolean getIsIncomingPending() {
+        return isIncomingPending;
+    }
+
+    public void setIsIncomingPending(Boolean isIncomingPending) {
+        this.isIncomingPending = isIncomingPending;
+    }
+
+    public String getConnectionStatus() {
+        return connectionStatus;
+    }
+
+    public void setConnectionStatus(String connectionStatus) {
+        this.connectionStatus = connectionStatus;
+    }
 
     public TalentDto() {}
 

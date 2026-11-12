@@ -6,6 +6,8 @@ import com.truehunt.social.dto.SendMessageRequest;
 import com.truehunt.social.service.ConversationService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -21,14 +23,27 @@ public class ConversationController {
         this.conversationService = conversationService;
     }
 
+    private String resolveCaller(String userEmail, String userId) {
+        if (userEmail != null && !userEmail.isBlank()) {
+            return userEmail.trim();
+        }
+        if (userId != null && !userId.isBlank()) {
+            return userId.trim();
+        }
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.isAuthenticated() && !"anonymousUser".equals(auth.getPrincipal())) {
+            return auth.getName();
+        }
+        return null;
+    }
+
     @GetMapping
     public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getConversations(
             @RequestParam(required = false) String mailbox,
             @RequestHeader(value = "X-User-Email", required = false) String userEmail,
             @RequestHeader(value = "X-User-Id", required = false) String userId
     ) {
-        String caller = (userEmail != null && !userEmail.isBlank()) ? userEmail : userId;
-        return ResponseEntity.ok(ApiResponse.success(conversationService.getConversations(mailbox, caller)));
+        return ResponseEntity.ok(ApiResponse.success(conversationService.getConversations(mailbox, resolveCaller(userEmail, userId))));
     }
 
     @GetMapping("/{id}")
@@ -37,8 +52,7 @@ public class ConversationController {
             @RequestHeader(value = "X-User-Email", required = false) String userEmail,
             @RequestHeader(value = "X-User-Id", required = false) String userId
     ) {
-        String caller = (userEmail != null && !userEmail.isBlank()) ? userEmail : userId;
-        return ResponseEntity.ok(ApiResponse.success(conversationService.getConversation(id, caller)));
+        return ResponseEntity.ok(ApiResponse.success(conversationService.getConversation(id, resolveCaller(userEmail, userId))));
     }
 
     @PostMapping("/{id}/messages")
@@ -48,8 +62,7 @@ public class ConversationController {
             @RequestHeader(value = "X-User-Email", required = false) String userEmail,
             @RequestHeader(value = "X-User-Id", required = false) String userId
     ) {
-        String caller = (userEmail != null && !userEmail.isBlank()) ? userEmail : userId;
-        return ResponseEntity.ok(ApiResponse.success(conversationService.sendMessage(id, req, caller)));
+        return ResponseEntity.ok(ApiResponse.success(conversationService.sendMessage(id, req, resolveCaller(userEmail, userId))));
     }
 
     @PostMapping
@@ -58,8 +71,7 @@ public class ConversationController {
             @RequestHeader(value = "X-User-Email", required = false) String userEmail,
             @RequestHeader(value = "X-User-Id", required = false) String userId
     ) {
-        String caller = (userEmail != null && !userEmail.isBlank()) ? userEmail : userId;
-        return ResponseEntity.ok(ApiResponse.success(conversationService.createConversation(req, caller)));
+        return ResponseEntity.ok(ApiResponse.success(conversationService.createConversation(req, resolveCaller(userEmail, userId))));
     }
 
     @PatchMapping("/{id}/read")

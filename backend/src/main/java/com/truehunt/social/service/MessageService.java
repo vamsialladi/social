@@ -211,13 +211,16 @@ public class MessageService {
     }
 
     public List<Map<String, Object>> getMessagesForConversation(Long conversationId, String currentUserId) {
+        String resolvedId = resolveUserAccount(currentUserId)
+                .map(UserAccountEntity::getEmail)
+                .orElse(currentUserId);
         List<MessageEntity> messages = messageRepository.findAllByConversationIdOrderByCreatedAtAsc(conversationId);
         if (!messages.isEmpty()) {
-            return messages.stream().map(m -> m.toDto(currentUserId)).collect(Collectors.toList());
+            return messages.stream().map(m -> m.toDto(resolvedId)).collect(Collectors.toList());
         }
         ConversationEntity conv = conversationRepository.findById(conversationId).orElse(null);
-        return conv != null ? conv.toDto(currentUserId).get("thread") instanceof List ?
-                (List<Map<String, Object>>) conv.toDto(currentUserId).get("thread") : List.of() : List.of();
+        return conv != null ? conv.toDto(resolvedId).get("thread") instanceof List ?
+                (List<Map<String, Object>>) conv.toDto(resolvedId).get("thread") : List.of() : List.of();
     }
 
     private ConversationEntity findOrCreateConversation(String senderEmail, String senderPublicId, String senderName,
@@ -241,9 +244,14 @@ public class MessageService {
             Optional<ConversationEntity> byName = conversationRepository.findFirstByNameIgnoreCase(receiverName.trim());
             if (byName.isPresent()) {
                 ConversationEntity conv = byName.get();
-                if (conv.getUser1Id() == null) conv.setUser1Id(senderEmail);
-                if (conv.getUser2Id() == null) conv.setUser2Id(receiverEmail);
-                return conversationRepository.save(conv);
+                boolean isUnassigned = conv.getUser1Id() == null || conv.getUser2Id() == null;
+                boolean matchesSender = (senderEmail != null && (senderEmail.equalsIgnoreCase(conv.getUser1Id()) || senderEmail.equalsIgnoreCase(conv.getUser2Id())))
+                        || (senderPublicId != null && (senderPublicId.equalsIgnoreCase(conv.getUser1Id()) || senderPublicId.equalsIgnoreCase(conv.getUser2Id())));
+                if (isUnassigned || matchesSender) {
+                    if (conv.getUser1Id() == null) conv.setUser1Id(senderEmail);
+                    if (conv.getUser2Id() == null) conv.setUser2Id(receiverEmail);
+                    return conversationRepository.save(conv);
+                }
             }
         }
 

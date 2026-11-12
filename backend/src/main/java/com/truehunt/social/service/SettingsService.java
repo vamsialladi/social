@@ -72,13 +72,22 @@ public class SettingsService {
         return res;
     }
 
+    private Optional<UserAccountEntity> resolveUserAccount(String identifier) {
+        if (identifier == null || identifier.isBlank()) {
+            return Optional.empty();
+        }
+        String trimmed = identifier.trim();
+        return userAccountRepository.findByEmail(trimmed.toLowerCase(Locale.ROOT))
+                .or(() -> userAccountRepository.findByPublicUserId(trimmed));
+    }
+
     @Transactional
     public Map<String, Object> changePassword(PasswordChangeRequest req, String userEmail) {
         if (userEmail == null || userEmail.isBlank()) {
             throw new BadRequestException("User email header required");
         }
 
-        Optional<UserAccountEntity> opt = userAccountRepository.findByEmail(userEmail.trim().toLowerCase(Locale.ROOT));
+        Optional<UserAccountEntity> opt = resolveUserAccount(userEmail);
         if (opt.isEmpty()) {
             throw new UnauthorizedException("User not found");
         }
@@ -99,9 +108,8 @@ public class SettingsService {
 
     @Transactional
     public Map<String, Object> deleteAccount(String userEmail) {
-        if (userEmail != null && !userEmail.isBlank()) {
-            userAccountRepository.findByEmail(userEmail.trim().toLowerCase(Locale.ROOT))
-                    .ifPresent(user -> {
+        resolveUserAccount(userEmail)
+                .ifPresent(user -> {
                         Set<String> profileIds = new HashSet<>();
                         if (user.getPublicUserId() != null && !user.getPublicUserId().isBlank()) {
                             profileIds.add(user.getPublicUserId());
@@ -126,7 +134,6 @@ public class SettingsService {
                         profileIds.forEach(networkProfileRepository::deleteById);
                         userAccountRepository.delete(user);
                     });
-        }
         Map<String, Object> res = new HashMap<>();
         res.put("success", true);
         res.put("message", "Account scheduled for deletion.");

@@ -5,8 +5,14 @@ import com.truehunt.social.dto.ExperienceDto;
 import com.truehunt.social.dto.ProjectDto;
 import com.truehunt.social.dto.TalentDto;
 import com.truehunt.social.exception.ResourceNotFoundException;
+import com.truehunt.social.model.PostEntity;
 import com.truehunt.social.model.ProfileEntity;
+import com.truehunt.social.model.UserProfileRelationshipEntity;
+import com.truehunt.social.repository.PostRepository;
 import com.truehunt.social.repository.ProfileRepository;
+import com.truehunt.social.repository.UserProfileRelationshipRepository;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
@@ -16,15 +22,49 @@ import java.util.stream.Collectors;
 @Service
 public class TalentService {
 
+    private static final List<List<String>> CRAFT_EQUIVALENCE_GROUPS = List.of(
+            List.of("act", "cast"),
+            List.of("cinemat", "dop", "camera"),
+            List.of("direct"),
+            List.of("screenwrit", "storywrit", "dialoguewrit", "scriptwrit", "writer"),
+            List.of("music", "composer", "score"),
+            List.of("sound", "audiograph", "dubbing"),
+            List.of("edit", "colorist"),
+            List.of("artdirect", "productiondesign"),
+            List.of("vfx", "animation", "cgi"),
+            List.of("makeup", "hairstylist"),
+            List.of("costume", "wardrobe"),
+            List.of("dance", "choreograph"),
+            List.of("production", "producer", "productionexecutive")
+    );
+
     private final Map<String, TalentDto> talentMap = new ConcurrentHashMap<>();
     private final ProfileRepository profileRepository;
+    private final PostRepository postRepository;
+    private final UserProfileRelationshipRepository relationshipRepository;
+    private final ObjectProvider<ConnectionService> connectionServiceProvider;
 
     public TalentService(ProfileRepository profileRepository) {
+        this(profileRepository, null, null, null);
+    }
+
+    @Autowired
+    public TalentService(ProfileRepository profileRepository,
+                         PostRepository postRepository,
+                         UserProfileRelationshipRepository relationshipRepository,
+                         ObjectProvider<ConnectionService> connectionServiceProvider) {
         this.profileRepository = profileRepository;
+        this.postRepository = postRepository;
+        this.relationshipRepository = relationshipRepository;
+        this.connectionServiceProvider = connectionServiceProvider;
         initDefaultTalents();
     }
 
     public List<TalentDto> getAll(Map<String, String> params) {
+        return getAll(params, null);
+    }
+
+    public List<TalentDto> getAll(Map<String, String> params, String callerIdentifier) {
         String c = params != null ? params.get("category") : null;
         if (c == null && params != null) c = params.get("craft");
         if (c == null && params != null) c = params.get("role");
@@ -42,7 +82,7 @@ public class TalentService {
         if (s == null && params != null) s = params.get("query");
         final String search = s;
 
-        return getCombinedTalents().stream()
+        return getCombinedTalents(callerIdentifier).stream()
                 .filter(t -> isCraftMatching(t, category))
                 .filter(t -> isSubCraftMatching(t, subCraft))
                 .filter(t -> isLocationMatching(t, location))
@@ -51,14 +91,20 @@ public class TalentService {
     }
 
     public TalentDto getById(String id) {
-        return getCombinedTalents().stream()
-                .filter(t -> Objects.equals(t.getId(), id))
+        return getById(id, null);
+    }
+
+    public TalentDto getById(String id, String callerIdentifier) {
+        return getCombinedTalents(callerIdentifier).stream()
+                .filter(t -> Objects.equals(t.getId(), id)
+                        || (t.getUserId() != null && t.getUserId().equalsIgnoreCase(id))
+                        || (t.getEmail() != null && t.getEmail().equalsIgnoreCase(id)))
                 .findFirst()
                 .orElseThrow(() -> new ResourceNotFoundException("Talent", "id", id));
     }
 
     public List<TalentDto> search(String term, String category, String location) {
-        return getCombinedTalents().stream()
+        return getCombinedTalents(null).stream()
                 .filter(t -> term == null || term.isBlank() || matchesSearch(t, term))
                 .filter(t -> isCraftMatching(t, category))
                 .filter(t -> isLocationMatching(t, location))
@@ -69,16 +115,17 @@ public class TalentService {
         talentMap.put(talent.getId(), talent);
     }
 
-    private List<TalentDto> getCombinedTalents() {
+    private List<TalentDto> getCombinedTalents(String callerIdentifier) {
         Map<String, TalentDto> map = new LinkedHashMap<>();
 
         // Add pre-configured default talents
         for (TalentDto t : talentMap.values()) {
-            map.put(t.getId(), t);
+            map.put(t.getId(), copyWithCallerState(t, callerIdentifier));
         }
 
         // Add registered database profiles
         if (profileRepository != null) {
+            List<PostEntity> allPosts = postRepository != null ? postRepository.findAllByOrderByCreatedAtDesc() : List.of();
             List<ProfileEntity> registeredProfiles = profileRepository.findAll().stream()
                     .filter(profile -> profile.getName() != null && !profile.getName().isBlank())
                     .toList();
@@ -92,6 +139,8 @@ public class TalentService {
                 if (!map.containsKey(uid)) {
                     TalentDto dto = new TalentDto();
                     dto.setId(uid);
+                    dto.setUserId(uid);
+                    dto.setEmail(p.getEmail());
                     dto.setName(p.getName());
                     String pCraft = p.getPrimaryCraft() != null && !p.getPrimaryCraft().isBlank()
                             ? p.getPrimaryCraft() : "Cast (Actors)";
@@ -181,12 +230,110 @@ public class TalentService {
                         dto.setProjects(projs);
                     }
 
+                    // Populate posts belonging to this profile
+                    if (!allPosts.isEmpty()) {
+                        Set<String> authorKeys = new HashSet<>();
+                        authorKeys.add(uid.toLowerCase(Locale.ROOT));
+                        if (p.getEmail() != null && !p.getEmail().isBlank()) {
+                            authorKeys.add(p.getEmail().trim().toLowerCase(Locale.ROOT));
+                        }
+                        if (p.getId() != null) {
+                            authorKeys.add(String.valueOf(p.getId()));
+                        }
+                        List<Map<String, Object>> matchingPosts = allPosts.stream()
+                                .filter(post -> post.getAuthorId() != null && authorKeys.contains(post.getAuthorId().trim().toLowerCase(Locale.ROOT)))
+                                .map(PostEntity::toDto)
+                                .collect(Collectors.toList());
+                        dto.setPosts(matchingPosts);
+                    }
+
+                    applyCallerConnectionState(dto, callerIdentifier);
                     map.put(uid, dto);
                 }
             }
         }
 
         return new ArrayList<>(map.values());
+    }
+
+    private TalentDto copyWithCallerState(TalentDto src, String callerIdentifier) {
+        if (callerIdentifier == null || callerIdentifier.isBlank()) {
+            return src;
+        }
+        TalentDto copy = new TalentDto();
+        copy.setId(src.getId());
+        copy.setUserId(src.getUserId());
+        copy.setEmail(src.getEmail());
+        copy.setName(src.getName());
+        copy.setRole(src.getRole());
+        copy.setCategory(src.getCategory());
+        copy.setPrimaryCraft(src.getPrimaryCraft());
+        copy.setSubCraft(src.getSubCraft());
+        copy.setLocation(src.getLocation());
+        copy.setExperience(src.getExperience());
+        copy.setAvatar(src.getAvatar());
+        copy.setCoverImage(src.getCoverImage());
+        copy.setBio(src.getBio());
+        copy.setSkills(src.getSkills());
+        copy.setCredits(src.getCredits());
+        copy.setShowreel(src.getShowreel());
+        copy.setAvailability(src.getAvailability());
+        copy.setVerified(src.getVerified());
+        copy.setConnectionsCount(src.getConnectionsCount());
+        copy.setFollowersCount(src.getFollowersCount());
+        copy.setHeadline(src.getHeadline());
+        copy.setCompany(src.getCompany());
+        copy.setIndustry(src.getIndustry());
+        copy.setWebsiteUrl(src.getWebsiteUrl());
+        copy.setExperiences(src.getExperiences());
+        copy.setEducations(src.getEducations());
+        copy.setProjects(src.getProjects());
+        copy.setPosts(src.getPosts());
+        applyCallerConnectionState(copy, callerIdentifier);
+        return copy;
+    }
+
+    private void applyCallerConnectionState(TalentDto dto, String callerIdentifier) {
+        ConnectionService connService = connectionServiceProvider != null ? connectionServiceProvider.getIfAvailable() : null;
+        if (connService == null || callerIdentifier == null || callerIdentifier.isBlank()) {
+            return;
+        }
+        Set<String> callerIds = connService.resolveAllUserIdentifiers(callerIdentifier);
+        Set<String> targetIds = new LinkedHashSet<>(connService.resolveAllUserIdentifiers(dto.getUserId()));
+        if (dto.getEmail() != null && !dto.getEmail().isBlank()) {
+            targetIds.addAll(connService.resolveAllUserIdentifiers(dto.getEmail()));
+        }
+
+        if (relationshipRepository != null && !callerIds.isEmpty() && !targetIds.isEmpty()) {
+            List<UserProfileRelationshipEntity> rels = relationshipRepository.findAll();
+            boolean connected = false;
+            boolean outgoingPending = false;
+            boolean incomingPending = false;
+            for (UserProfileRelationshipEntity r : rels) {
+                String owner = r.getOwnerUserId() != null ? r.getOwnerUserId().trim().toLowerCase(Locale.ROOT) : "";
+                String target = r.getTargetProfileId() != null ? r.getTargetProfileId().trim().toLowerCase(Locale.ROOT) : "";
+                boolean matchPair = (callerIds.contains(owner) && targetIds.contains(target))
+                        || (targetIds.contains(owner) && callerIds.contains(target));
+                if (!matchPair) {
+                    continue;
+                }
+                if (r.isConnected() || "ACCEPTED".equalsIgnoreCase(r.getStatus())) {
+                    connected = true;
+                } else if ("PENDING".equalsIgnoreCase(r.getStatus())) {
+                    String sender = r.getSenderUserId() != null ? r.getSenderUserId().trim().toLowerCase(Locale.ROOT) : owner;
+                    if (callerIds.contains(sender)) {
+                        outgoingPending = true;
+                    } else {
+                        incomingPending = true;
+                    }
+                }
+            }
+            dto.setIsConnected(connected);
+            dto.setIsOutgoingPending(outgoingPending);
+            dto.setIsIncomingPending(incomingPending);
+            dto.setIsPending(outgoingPending || incomingPending);
+            dto.setConnectionStatus(connected ? "CONNECTED" : (outgoingPending ? "PENDING_OUTGOING" : (incomingPending ? "PENDING_INCOMING" : "NONE")));
+        }
     }
 
     private String normalizeName(String name) {
@@ -204,42 +351,23 @@ public class TalentService {
         if (t.getRole() != null) crafts.add(t.getRole());
         if (t.getHeadline() != null) crafts.add(t.getHeadline());
 
-        for (String c : crafts) {
-            String norm = c.toLowerCase().replaceAll("[^a-z0-9]", "");
+        List<String> normalizedCrafts = crafts.stream()
+                .map(c -> c.toLowerCase().replaceAll("[^a-z0-9]", ""))
+                .toList();
+
+        for (String norm : normalizedCrafts) {
             if (norm.equals(q) || norm.contains(q) || q.contains(norm)) {
                 return true;
             }
         }
 
-        // Actor / Cast / Acting equivalence
-        boolean isActorQuery = q.contains("act") || q.contains("cast");
-        if (isActorQuery) {
-            for (String c : crafts) {
-                String norm = c.toLowerCase().replaceAll("[^a-z0-9]", "");
-                if (norm.contains("act") || norm.contains("cast")) {
-                    return true;
-                }
-            }
-        }
-
-        // Cinematography / DOP / Camera equivalence
-        boolean isDopQuery = q.contains("cinemat") || q.contains("dop") || q.contains("camera");
-        if (isDopQuery) {
-            for (String c : crafts) {
-                String norm = c.toLowerCase().replaceAll("[^a-z0-9]", "");
-                if (norm.contains("cinemat") || norm.contains("dop") || norm.contains("camera")) {
-                    return true;
-                }
-            }
-        }
-
-        // Direction equivalence
-        boolean isDirQuery = q.contains("direct");
-        if (isDirQuery) {
-            for (String c : crafts) {
-                String norm = c.toLowerCase().replaceAll("[^a-z0-9]", "");
-                if (norm.contains("direct")) {
-                    return true;
+        for (List<String> group : CRAFT_EQUIVALENCE_GROUPS) {
+            boolean queryInGroup = group.stream().anyMatch(q::contains);
+            if (queryInGroup) {
+                for (String norm : normalizedCrafts) {
+                    if (group.stream().anyMatch(norm::contains)) {
+                        return true;
+                    }
                 }
             }
         }

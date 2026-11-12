@@ -1,14 +1,28 @@
 package com.truehunt.social.service;
 
 import com.truehunt.social.dto.InvestmentInterestRequest;
+import com.truehunt.social.model.InvestmentInterestEntity;
+import com.truehunt.social.repository.InvestmentInterestRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.*;
 
 @Service
 public class InvestorService {
 
     private final List<Map<String, Object>> recordedInterests = Collections.synchronizedList(new ArrayList<>());
+    private final InvestmentInterestRepository investmentInterestRepository;
+
+    public InvestorService() {
+        this(null);
+    }
+
+    @Autowired
+    public InvestorService(InvestmentInterestRepository investmentInterestRepository) {
+        this.investmentInterestRepository = investmentInterestRepository;
+    }
 
     public List<Map<String, Object>> getAll() {
         List<Map<String, Object>> list = new ArrayList<>();
@@ -59,8 +73,25 @@ public class InvestorService {
     }
 
     public Map<String, Object> expressInterest(InvestmentInterestRequest req) {
+        String id = "interest-" + UUID.randomUUID().toString().substring(0, 8);
+        if (investmentInterestRepository != null) {
+            InvestmentInterestEntity entity = new InvestmentInterestEntity();
+            entity.setId(id);
+            entity.setInvestorId(req.getInvestorId());
+            entity.setInvestorName(req.getInvestorName());
+            entity.setProjectTitle(req.getProjectTitle());
+            entity.setProducerName(req.getProducerName());
+            entity.setProducerEmail(req.getProducerEmail());
+            entity.setBudgetRequested(req.getBudgetRequested());
+            entity.setLookbookUrl(req.getLookbookUrl());
+            entity.setSynopsis(req.getSynopsis());
+            entity.setStatus("SUBMITTED");
+            entity.setSubmittedAt(LocalDateTime.now());
+            investmentInterestRepository.save(entity);
+        }
+
         Map<String, Object> record = new HashMap<>();
-        record.put("id", "interest-" + UUID.randomUUID().toString().substring(0, 8));
+        record.put("id", id);
         record.put("investorId", req.getInvestorId());
         record.put("investorName", req.getInvestorName());
         record.put("projectTitle", req.getProjectTitle());
@@ -73,7 +104,7 @@ public class InvestorService {
         recordedInterests.add(record);
 
         Map<String, Object> res = new HashMap<>();
-        res.put("interestId", record.get("id"));
+        res.put("interestId", id);
         res.put("status", "SUBMITTED");
         res.put("message", "Pitch package submitted successfully to " + (req.getInvestorName() != null ? req.getInvestorName() : "investor"));
         return res;

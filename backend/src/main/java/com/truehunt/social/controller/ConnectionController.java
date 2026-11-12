@@ -4,6 +4,8 @@ import com.truehunt.social.dto.ApiResponse;
 import com.truehunt.social.dto.ConnectionRequestDto;
 import com.truehunt.social.service.ConnectionService;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -23,7 +25,14 @@ public class ConnectionController {
         if (userId != null && !userId.isBlank()) {
             return userId.trim();
         }
-        return userEmail;
+        if (userEmail != null && !userEmail.isBlank()) {
+            return userEmail.trim();
+        }
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.isAuthenticated() && !"anonymousUser".equals(auth.getPrincipal())) {
+            return auth.getName();
+        }
+        return null;
     }
 
     @GetMapping("/suggestions")

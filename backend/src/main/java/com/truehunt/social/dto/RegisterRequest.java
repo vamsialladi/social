@@ -18,6 +18,7 @@ public class RegisterRequest {
     private String role; // "TALENT" or "PRODUCER" / "STUDIO"
     private String primaryCraft;
     private String craft;
+    private String productionProfileType;
     private String subCraft;
     private String experience;
     private String experienceYears;
@@ -89,7 +90,17 @@ public class RegisterRequest {
     }
 
     public String getPrimaryCraft() {
-        return (primaryCraft != null && !primaryCraft.isBlank()) ? primaryCraft : craft;
+        if (primaryCraft != null && !primaryCraft.isBlank()) return primaryCraft;
+        if (craft != null && !craft.isBlank()) return craft;
+        return productionProfileType;
+    }
+
+    public String getProductionProfileType() {
+        return productionProfileType;
+    }
+
+    public void setProductionProfileType(String productionProfileType) {
+        this.productionProfileType = productionProfileType;
     }
 
     public void setPrimaryCraft(String primaryCraft) {

@@ -282,6 +282,7 @@ public class PostEntity {
         dto.put("authorName", authorName != null ? authorName : "");
         dto.put("authorAvatar", authorAvatar != null ? authorAvatar : "");
         dto.put("authorHeadline", authorHeadline != null ? authorHeadline : "");
+        dto.put("authorRole", authorHeadline != null ? authorHeadline : "");
         dto.put("type", type != null ? type : "post");
         dto.put("title", title != null ? title : "");
         dto.put("content", content != null ? content : "");

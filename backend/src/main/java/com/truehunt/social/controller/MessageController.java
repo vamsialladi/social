@@ -6,6 +6,8 @@ import com.truehunt.social.service.MessageService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
 
@@ -38,6 +40,31 @@ public class MessageController {
         messageService.processAndSendMessage(message, principal);
     }
 
+    private Principal resolveCallerPrincipal(Principal principal, String userEmail, String userId) {
+        if (principal != null && principal.getName() != null && !principal.getName().isBlank()) {
+            return principal;
+        }
+        String identifier = resolveCallerIdentifier(principal, userEmail, userId);
+        return identifier != null ? () -> identifier : null;
+    }
+
+    private String resolveCallerIdentifier(Principal principal, String userEmail, String userId) {
+        if (userId != null && !userId.isBlank()) {
+            return userId.trim();
+        }
+        if (userEmail != null && !userEmail.isBlank()) {
+            return userEmail.trim();
+        }
+        if (principal != null && principal.getName() != null && !principal.getName().isBlank()) {
+            return principal.getName().trim();
+        }
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.isAuthenticated() && !"anonymousUser".equals(auth.getPrincipal())) {
+            return auth.getName();
+        }
+        return null;
+    }
+
     /**
      * REST endpoint for sending messages with full fallback support
      */
@@ -46,12 +73,11 @@ public class MessageController {
     public ResponseEntity<ApiResponse<ChatMessageDto>> sendRestMessage(
             @RequestBody ChatMessageDto message,
             @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId,
             Principal principal
     ) {
-        if (principal == null && userEmail != null && !userEmail.isBlank()) {
-            principal = () -> userEmail;
-        }
-        ChatMessageDto result = messageService.processAndSendMessage(message, principal);
+        Principal callerPrincipal = resolveCallerPrincipal(principal, userEmail, userId);
+        ChatMessageDto result = messageService.processAndSendMessage(message, callerPrincipal);
         return ResponseEntity.ok(ApiResponse.success(result));
     }
 
@@ -62,9 +88,12 @@ public class MessageController {
     @ResponseBody
     public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getConversationMessages(
             @PathVariable Long conversationId,
-            @RequestHeader(value = "X-User-Email", required = false) String userEmail
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId,
+            Principal principal
     ) {
-        List<Map<String, Object>> messages = messageService.getMessagesForConversation(conversationId, userEmail);
+        String caller = resolveCallerIdentifier(principal, userEmail, userId);
+        List<Map<String, Object>> messages = messageService.getMessagesForConversation(conversationId, caller);
         return ResponseEntity.ok(ApiResponse.success(messages));
     }
 }

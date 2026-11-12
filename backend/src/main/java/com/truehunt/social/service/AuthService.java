@@ -65,33 +65,8 @@ public class AuthService {
         ensurePublicUserId(user);
 
         String token = tokenProvider.generateToken(user.getEmail(), user.getRole());
-
-        AuthResponse resp = new AuthResponse();
-        resp.setToken(token);
         String publicId = user.getPublicUserId() != null ? user.getPublicUserId() : user.getId().toString();
-        resp.setUserId(publicId);
-        resp.setEmail(user.getEmail());
-        resp.setRole(user.getRole());
-        resp.setName(user.getName());
-        resp.setPhone(user.getPhone());
-        resp.setPrimaryCraft(user.getPrimaryCraft());
-        resp.setSubCraft(user.getSubCraft());
-
-        Map<String, Object> userMap = new HashMap<>();
-        userMap.put("id", publicId);
-        userMap.put("userId", publicId);
-        userMap.put("email", user.getEmail());
-        userMap.put("name", user.getName());
-        userMap.put("role", user.getRole());
-        userMap.put("phone", user.getPhone());
-        userMap.put("primaryCraft", user.getPrimaryCraft());
-        userMap.put("subCraft", user.getSubCraft());
-        userMap.put("experience", user.getExperience());
-        userMap.put("companyName", user.getCompanyName());
-        userMap.put("headquarters", user.getHeadquarters());
-        resp.setUser(userMap);
-
-        return resp;
+        return buildAuthResponse(user, publicId, token);
     }
 
     @Transactional
@@ -168,63 +143,63 @@ public class AuthService {
         profileRepository.save(profile);
 
         String token = tokenProvider.generateToken(user.getEmail(), user.getRole());
-
-        AuthResponse resp = new AuthResponse();
-        resp.setToken(token);
-        resp.setUserId(publicUserId);
-        resp.setEmail(user.getEmail());
-        resp.setRole(user.getRole());
-        resp.setName(user.getName());
-        resp.setPhone(user.getPhone());
-        resp.setPrimaryCraft(user.getPrimaryCraft());
-        resp.setSubCraft(user.getSubCraft());
-
-        Map<String, Object> userMap = new HashMap<>();
-        userMap.put("id", publicUserId);
-        userMap.put("userId", publicUserId);
-        userMap.put("email", user.getEmail());
-        userMap.put("name", user.getName());
-        userMap.put("role", user.getRole());
-        userMap.put("phone", user.getPhone());
-        userMap.put("primaryCraft", user.getPrimaryCraft());
-        userMap.put("subCraft", user.getSubCraft());
-        userMap.put("experience", user.getExperience());
-        userMap.put("companyName", user.getCompanyName());
-        userMap.put("headquarters", user.getHeadquarters());
-        resp.setUser(userMap);
-
-        return resp;
+        return buildAuthResponse(user, publicUserId, token);
     }
 
-    public Map<String, Object> getCurrentUser(String userEmail) {
-        Optional<UserAccountEntity> opt = userAccountRepository.findByEmail(normalizeEmail(userEmail));
+    public Map<String, Object> getCurrentUser(String identifier) {
+        Optional<UserAccountEntity> opt = Optional.empty();
+        if (identifier != null && !identifier.isBlank()) {
+            String trimmed = identifier.trim();
+            opt = userAccountRepository.findByEmail(normalizeEmail(trimmed))
+                    .or(() -> userAccountRepository.findByPublicUserId(trimmed));
+        }
         if (opt.isPresent()) {
             UserAccountEntity u = opt.get();
             String publicId = u.getPublicUserId() != null ? u.getPublicUserId() : u.getId().toString();
-            Map<String, Object> data = new HashMap<>();
-            data.put("id", publicId);
-            data.put("userId", publicId);
-            data.put("email", u.getEmail());
-            data.put("name", u.getName());
-            data.put("role", u.getRole());
-            data.put("phone", u.getPhone());
-            data.put("primaryCraft", u.getPrimaryCraft());
-            data.put("subCraft", u.getSubCraft());
-            data.put("experience", u.getExperience());
-            data.put("companyName", u.getCompanyName());
-            data.put("headquarters", u.getHeadquarters());
-            return data;
+            return buildUserMap(u, publicId);
         }
 
         // Default cinema professional fallback if not signed in
         Map<String, Object> fallback = new HashMap<>();
         fallback.put("id", "1000001");
         fallback.put("userId", "1000001");
+        fallback.put("publicUserId", "1000001");
         fallback.put("name", "Cinema Professional");
         fallback.put("email", "pro@truehunt.in");
         fallback.put("role", "TALENT");
         fallback.put("primaryCraft", "Acting");
         return fallback;
+    }
+
+    private AuthResponse buildAuthResponse(UserAccountEntity user, String publicId, String token) {
+        AuthResponse resp = new AuthResponse();
+        resp.setToken(token);
+        resp.setUserId(publicId);
+        resp.setEmail(user.getEmail());
+        resp.setRole(user.getRole());
+        resp.setName(user.getName());
+        resp.setPhone(user.getPhone());
+        resp.setPrimaryCraft(user.getPrimaryCraft());
+        resp.setSubCraft(user.getSubCraft());
+        resp.setUser(buildUserMap(user, publicId));
+        return resp;
+    }
+
+    private Map<String, Object> buildUserMap(UserAccountEntity u, String publicId) {
+        Map<String, Object> data = new HashMap<>();
+        data.put("id", publicId);
+        data.put("userId", publicId);
+        data.put("publicUserId", publicId);
+        data.put("email", u.getEmail());
+        data.put("name", u.getName());
+        data.put("role", u.getRole());
+        data.put("phone", u.getPhone());
+        data.put("primaryCraft", u.getPrimaryCraft());
+        data.put("subCraft", u.getSubCraft());
+        data.put("experience", u.getExperience());
+        data.put("companyName", u.getCompanyName());
+        data.put("headquarters", u.getHeadquarters());
+        return data;
     }
 
     public void logout(String token) {
@@ -245,11 +220,19 @@ public class AuthService {
     }
 
     private String generateUniquePublicUserId(String name, String role) {
-        String initials = name == null ? "" : name.replaceAll("[^\\p{L}]", "").toUpperCase(Locale.ROOT);
-        initials = initials.length() >= 2 ? initials.substring(0, 2) : (initials + "XX").substring(0, 2);
+        String[] words = name == null ? new String[0] : name.trim().split("\\s+");
+        String firstWordLetters = words.length > 0 ? words[0].replaceAll("[^\\p{L}]", "").toUpperCase(Locale.ROOT) : "";
+        String lastWordLetters = words.length > 1 ? words[words.length - 1].replaceAll("[^\\p{L}]", "").toUpperCase(Locale.ROOT) : "";
+        String initials;
+        if (!firstWordLetters.isEmpty() && !lastWordLetters.isEmpty()) {
+            initials = firstWordLetters.substring(0, 1) + lastWordLetters.substring(0, 1);
+        } else {
+            String compact = name == null ? "" : name.replaceAll("[^\\p{L}]", "").toUpperCase(Locale.ROOT);
+            initials = compact.length() >= 2 ? compact.substring(0, 2) : (compact + "XX").substring(0, 2);
+        }
         String prefix = "PRODUCER".equalsIgnoreCase(role) || "STUDIO".equalsIgnoreCase(role)
-                ? "THP"
-                : "THSC";
+                ? "thP"
+                : "thsc";
 
         for (int i = 0; i < 100; i++) {
             String candidate = prefix + initials

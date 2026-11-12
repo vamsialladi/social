@@ -5,6 +5,7 @@ import com.truehunt.social.dto.PasswordChangeRequest;
 import com.truehunt.social.service.SettingsService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
@@ -17,6 +18,19 @@ public class SettingsController {
 
     public SettingsController(SettingsService settingsService) {
         this.settingsService = settingsService;
+    }
+
+    private String resolveCaller(String userEmail, String userId, Authentication authentication) {
+        if (userEmail != null && !userEmail.isBlank()) {
+            return userEmail;
+        }
+        if (userId != null && !userId.isBlank()) {
+            return userId;
+        }
+        if (authentication != null && authentication.isAuthenticated() && !"anonymousUser".equals(authentication.getPrincipal())) {
+            return authentication.getName();
+        }
+        return null;
     }
 
     @GetMapping
@@ -38,15 +52,19 @@ public class SettingsController {
     @PostMapping("/change-password")
     public ResponseEntity<ApiResponse<Map<String, Object>>> changePassword(
             @Valid @RequestBody PasswordChangeRequest req,
-            @RequestHeader(value = "X-User-Email", required = false) String userEmail
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId,
+            Authentication authentication
     ) {
-        return ResponseEntity.ok(ApiResponse.success(settingsService.changePassword(req, userEmail)));
+        return ResponseEntity.ok(ApiResponse.success(settingsService.changePassword(req, resolveCaller(userEmail, userId, authentication))));
     }
 
     @PostMapping("/delete-account")
     public ResponseEntity<ApiResponse<Map<String, Object>>> deleteAccount(
-            @RequestHeader(value = "X-User-Email", required = false) String userEmail
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId,
+            Authentication authentication
     ) {
-        return ResponseEntity.ok(ApiResponse.success(settingsService.deleteAccount(userEmail)));
+        return ResponseEntity.ok(ApiResponse.success(settingsService.deleteAccount(resolveCaller(userEmail, userId, authentication))));
     }
 }

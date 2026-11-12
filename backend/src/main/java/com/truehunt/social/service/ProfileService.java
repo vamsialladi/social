@@ -1119,6 +1119,18 @@ public class ProfileService {
         }
         dto.setProjects(projDtos);
 
+        // Populate posts belonging to this profile so /profiles/me and /profiles/{id} include posts
+        try {
+            List<Map<String, Object>> profilePosts = postRepository.findAllByOrderByCreatedAtDesc().stream()
+                    .filter(post -> post.getAuthorId() != null
+                            && profileIds.contains(post.getAuthorId().trim().toLowerCase(Locale.ROOT)))
+                    .map(PostEntity::toDto)
+                    .toList();
+            dto.setPosts(profilePosts);
+        } catch (Exception ignored) {
+            dto.setPosts(List.of());
+        }
+
         return dto;
     }
 

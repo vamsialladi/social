@@ -1,18 +1,47 @@
 package com.truehunt.social.service;
 
 import com.truehunt.social.dto.SupportTicketRequest;
+import com.truehunt.social.model.SupportTicketEntity;
+import com.truehunt.social.repository.SupportTicketRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.*;
 
 @Service
 public class SupportService {
 
     private final List<Map<String, Object>> tickets = Collections.synchronizedList(new ArrayList<>());
+    private final SupportTicketRepository supportTicketRepository;
+
+    public SupportService() {
+        this(null);
+    }
+
+    @Autowired
+    public SupportService(SupportTicketRepository supportTicketRepository) {
+        this.supportTicketRepository = supportTicketRepository;
+    }
 
     public Map<String, Object> submitTicket(SupportTicketRequest req) {
+        String id = "ticket-" + UUID.randomUUID().toString().substring(0, 8);
+        if (supportTicketRepository != null) {
+            SupportTicketEntity entity = new SupportTicketEntity();
+            entity.setId(id);
+            entity.setName(req.getName());
+            entity.setEmail(req.getEmail());
+            entity.setSubject(req.getSubject());
+            entity.setCategory(req.getCategory());
+            entity.setMessage(req.getMessage());
+            entity.setPriority(req.getPriority());
+            entity.setStatus("OPEN");
+            entity.setCreatedAt(LocalDateTime.now());
+            supportTicketRepository.save(entity);
+        }
+
         Map<String, Object> ticket = new HashMap<>();
-        ticket.put("id", "ticket-" + UUID.randomUUID().toString().substring(0, 8));
+        ticket.put("id", id);
         ticket.put("name", req.getName());
         ticket.put("email", req.getEmail());
         ticket.put("subject", req.getSubject());
@@ -24,8 +53,8 @@ public class SupportService {
         tickets.add(ticket);
 
         Map<String, Object> res = new HashMap<>();
-        res.put("ticketId", ticket.get("id"));
-        res.put("message", "Support ticket created successfully. Reference ID: " + ticket.get("id"));
+        res.put("ticketId", id);
+        res.put("message", "Support ticket created successfully. Reference ID: " + id);
         res.put("status", "OPEN");
         return res;
     }
@@ -77,4 +106,3 @@ public class SupportService {
         );
     }
 }
-

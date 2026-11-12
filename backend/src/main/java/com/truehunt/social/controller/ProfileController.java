@@ -5,6 +5,8 @@ import com.truehunt.social.service.PostService;
 import com.truehunt.social.service.ProfileService;
 import com.truehunt.social.service.ProfileViewService;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -32,7 +34,14 @@ public class ProfileController {
         if (userId != null && !userId.isBlank()) {
             return userId.trim();
         }
-        return userEmail;
+        if (userEmail != null && !userEmail.isBlank()) {
+            return userEmail.trim();
+        }
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.isAuthenticated() && !"anonymousUser".equals(auth.getPrincipal())) {
+            return auth.getName();
+        }
+        return null;
     }
 
     @GetMapping("/me/viewers")
@@ -91,9 +100,10 @@ public class ProfileController {
     @PostMapping("/experience")
     public ResponseEntity<ApiResponse<ExperienceDto>> addExperience(
             @RequestBody ExperienceDto exp,
-            @RequestHeader(value = "X-User-Email", required = false) String userEmail
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId
     ) {
-        ExperienceDto created = profileService.addExperience(exp, userEmail);
+        ExperienceDto created = profileService.addExperience(exp, resolveUserIdentifier(userEmail, userId));
         return ResponseEntity.ok(ApiResponse.success(created));
     }
 
@@ -101,18 +111,20 @@ public class ProfileController {
     public ResponseEntity<ApiResponse<ExperienceDto>> updateExperience(
             @PathVariable String id,
             @RequestBody ExperienceDto exp,
-            @RequestHeader(value = "X-User-Email", required = false) String userEmail
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId
     ) {
-        ExperienceDto updated = profileService.updateExperience(id, exp, userEmail);
+        ExperienceDto updated = profileService.updateExperience(id, exp, resolveUserIdentifier(userEmail, userId));
         return ResponseEntity.ok(ApiResponse.success(updated));
     }
 
     @DeleteMapping("/experience/{id}")
     public ResponseEntity<ApiResponse<Map<String, Object>>> deleteExperience(
             @PathVariable String id,
-            @RequestHeader(value = "X-User-Email", required = false) String userEmail
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId
     ) {
-        Map<String, Object> res = profileService.deleteExperience(id, userEmail);
+        Map<String, Object> res = profileService.deleteExperience(id, resolveUserIdentifier(userEmail, userId));
         return ResponseEntity.ok(ApiResponse.success(res));
     }
 
@@ -120,9 +132,10 @@ public class ProfileController {
     @PostMapping("/education")
     public ResponseEntity<ApiResponse<EducationDto>> addEducation(
             @RequestBody EducationDto edu,
-            @RequestHeader(value = "X-User-Email", required = false) String userEmail
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId
     ) {
-        EducationDto created = profileService.addEducation(edu, userEmail);
+        EducationDto created = profileService.addEducation(edu, resolveUserIdentifier(userEmail, userId));
         return ResponseEntity.ok(ApiResponse.success(created));
     }
 
@@ -130,18 +143,20 @@ public class ProfileController {
     public ResponseEntity<ApiResponse<EducationDto>> updateEducation(
             @PathVariable String id,
             @RequestBody EducationDto edu,
-            @RequestHeader(value = "X-User-Email", required = false) String userEmail
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId
     ) {
-        EducationDto updated = profileService.updateEducation(id, edu, userEmail);
+        EducationDto updated = profileService.updateEducation(id, edu, resolveUserIdentifier(userEmail, userId));
         return ResponseEntity.ok(ApiResponse.success(updated));
     }
 
     @DeleteMapping("/education/{id}")
     public ResponseEntity<ApiResponse<Map<String, Object>>> deleteEducation(
             @PathVariable String id,
-            @RequestHeader(value = "X-User-Email", required = false) String userEmail
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId
     ) {
-        Map<String, Object> res = profileService.deleteEducation(id, userEmail);
+        Map<String, Object> res = profileService.deleteEducation(id, resolveUserIdentifier(userEmail, userId));
         return ResponseEntity.ok(ApiResponse.success(res));
     }
 
@@ -149,9 +164,10 @@ public class ProfileController {
     @PostMapping("/project")
     public ResponseEntity<ApiResponse<ProjectDto>> addProject(
             @RequestBody ProjectDto project,
-            @RequestHeader(value = "X-User-Email", required = false) String userEmail
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId
     ) {
-        ProjectDto created = profileService.addProject(project, userEmail);
+        ProjectDto created = profileService.addProject(project, resolveUserIdentifier(userEmail, userId));
         return ResponseEntity.ok(ApiResponse.success(created));
     }
 
@@ -159,18 +175,20 @@ public class ProfileController {
     public ResponseEntity<ApiResponse<ProjectDto>> updateProject(
             @PathVariable String id,
             @RequestBody ProjectDto project,
-            @RequestHeader(value = "X-User-Email", required = false) String userEmail
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId
     ) {
-        ProjectDto updated = profileService.updateProject(id, project, userEmail);
+        ProjectDto updated = profileService.updateProject(id, project, resolveUserIdentifier(userEmail, userId));
         return ResponseEntity.ok(ApiResponse.success(updated));
     }
 
     @DeleteMapping("/project/{id}")
     public ResponseEntity<ApiResponse<Map<String, Object>>> deleteProject(
             @PathVariable String id,
-            @RequestHeader(value = "X-User-Email", required = false) String userEmail
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId
     ) {
-        Map<String, Object> res = profileService.deleteProject(id, userEmail);
+        Map<String, Object> res = profileService.deleteProject(id, resolveUserIdentifier(userEmail, userId));
         return ResponseEntity.ok(ApiResponse.success(res));
     }
 
@@ -178,18 +196,20 @@ public class ProfileController {
     @PostMapping("/skills")
     public ResponseEntity<ApiResponse<ProfileDto>> addSkill(
             @RequestBody SkillRequest req,
-            @RequestHeader(value = "X-User-Email", required = false) String userEmail
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId
     ) {
-        ProfileDto updated = profileService.addSkill(req.getSkill(), userEmail);
+        ProfileDto updated = profileService.addSkill(req.getSkill(), resolveUserIdentifier(userEmail, userId));
         return ResponseEntity.ok(ApiResponse.success(updated));
     }
 
     @DeleteMapping("/skills/{skill}")
     public ResponseEntity<ApiResponse<ProfileDto>> deleteSkill(
             @PathVariable String skill,
-            @RequestHeader(value = "X-User-Email", required = false) String userEmail
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId
     ) {
-        ProfileDto updated = profileService.deleteSkill(skill, userEmail);
+        ProfileDto updated = profileService.deleteSkill(skill, resolveUserIdentifier(userEmail, userId));
         return ResponseEntity.ok(ApiResponse.success(updated));
     }
 
@@ -197,26 +217,30 @@ public class ProfileController {
     @GetMapping("/{id}/posts")
     public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getProfilePosts(
             @PathVariable String id,
-            @RequestHeader(value = "X-User-Email", required = false) String userEmail
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId
     ) {
-        List<Map<String, Object>> posts = postService.getPostsByAuthorId(id, userEmail);
+        List<Map<String, Object>> posts = postService.getPostsByAuthorId(id, resolveUserIdentifier(userEmail, userId));
         return ResponseEntity.ok(ApiResponse.success(posts));
     }
 
     @PostMapping("/posts")
     public ResponseEntity<ApiResponse<Map<String, Object>>> createProfilePost(
             @RequestBody CreatePostRequest postReq,
-            @RequestHeader(value = "X-User-Email", required = false) String userEmail
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId
     ) {
-        Map<String, Object> post = postService.createPost(postReq, userEmail);
+        Map<String, Object> post = postService.createPost(postReq, resolveUserIdentifier(userEmail, userId));
         return ResponseEntity.ok(ApiResponse.success(post));
     }
 
     @GetMapping("/suggestions")
     public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getSuggestions(
-            @RequestParam(required = false, defaultValue = "") String currentId
+            @RequestParam(required = false) String currentId,
+            @RequestParam(required = false) String userId
     ) {
-        List<Map<String, Object>> suggestions = profileService.getSuggestions(currentId);
+        String targetId = (currentId != null && !currentId.isBlank()) ? currentId : (userId != null ? userId : "");
+        List<Map<String, Object>> suggestions = profileService.getSuggestions(targetId);
         return ResponseEntity.ok(ApiResponse.success(suggestions));
     }
 

@@ -1,10 +1,18 @@
 package com.truehunt.social.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.truehunt.social.dto.JobApplicationRequest;
 import com.truehunt.social.dto.JobDto;
 import com.truehunt.social.exception.ResourceNotFoundException;
+import com.truehunt.social.model.JobApplicationEntity;
+import com.truehunt.social.model.JobEntity;
+import com.truehunt.social.repository.JobApplicationRepository;
+import com.truehunt.social.repository.JobRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
@@ -12,10 +20,20 @@ import java.util.stream.Collectors;
 @Service
 public class JobService {
 
+    private static final ObjectMapper MAPPER = new ObjectMapper();
     private final Map<String, JobDto> jobsMap = new ConcurrentHashMap<>();
     private final List<Map<String, Object>> applications = Collections.synchronizedList(new ArrayList<>());
+    private final JobRepository jobRepository;
+    private final JobApplicationRepository jobApplicationRepository;
 
     public JobService() {
+        this(null, null);
+    }
+
+    @Autowired
+    public JobService(JobRepository jobRepository, JobApplicationRepository jobApplicationRepository) {
+        this.jobRepository = jobRepository;
+        this.jobApplicationRepository = jobApplicationRepository;
         initDefaultJobs();
     }
 
@@ -33,31 +51,62 @@ public class JobService {
         if (s == null && params != null) s = params.get("query");
         final String search = s;
 
-        return jobsMap.values().stream()
-                .filter(j -> craft == null || craft.equalsIgnoreCase("all") || j.getRoleCategory().equalsIgnoreCase(craft))
-                .filter(j -> location == null || location.isBlank() || j.getLocation().toLowerCase().contains(location.toLowerCase()))
+        return getAllJobsList().stream()
+                .filter(j -> craft == null || craft.isBlank() || craft.equalsIgnoreCase("all")
+                        || (j.getRoleCategory() != null && j.getRoleCategory().equalsIgnoreCase(craft)))
+                .filter(j -> location == null || location.isBlank()
+                        || (j.getLocation() != null && j.getLocation().toLowerCase().contains(location.toLowerCase())))
                 .filter(j -> search == null || search.isBlank() || matchesSearch(j, search))
                 .collect(Collectors.toList());
     }
 
     public JobDto getById(String id) {
+        if (jobRepository != null) {
+            Optional<JobEntity> entity = jobRepository.findById(id);
+            if (entity.isPresent()) {
+                return toDto(entity.get());
+            }
+        }
         JobDto job = jobsMap.get(id);
         if (job != null) {
             return job;
         }
-        return jobsMap.values().stream()
+        return getAllJobsList().stream()
                 .findFirst()
                 .orElseThrow(() -> new ResourceNotFoundException("Job", "id", id));
     }
 
     public Map<String, Object> apply(String jobId, JobApplicationRequest app) {
-        JobDto job = jobsMap.get(jobId);
+        JobDto job = null;
+        if (jobRepository != null) {
+            job = jobRepository.findById(jobId).map(this::toDto).orElse(null);
+        }
+        if (job == null) {
+            job = jobsMap.get(jobId);
+        }
         if (job != null) {
-            job.setApplicationsCount(job.getApplicationsCount() + 1);
+            job.setApplicationsCount((job.getApplicationsCount() != null ? job.getApplicationsCount() : 0) + 1);
+            saveJob(job);
+        }
+
+        String appId = "app-" + UUID.randomUUID().toString().substring(0, 8);
+        if (jobApplicationRepository != null) {
+            JobApplicationEntity entity = new JobApplicationEntity();
+            entity.setId(appId);
+            entity.setJobId(jobId);
+            entity.setJobTitle(job != null && job.getTitle() != null ? job.getTitle() : app.getJobTitle());
+            entity.setApplicantName(app.getApplicantName());
+            entity.setApplicantEmail(app.getApplicantEmail());
+            entity.setPhone(app.getApplicantPhone());
+            entity.setPortfolioLink(app.getPortfolioLink());
+            entity.setPitchNote(app.getPitchNote());
+            entity.setStatus("SUBMITTED");
+            entity.setSubmittedAt(LocalDateTime.now());
+            jobApplicationRepository.save(entity);
         }
 
         Map<String, Object> record = new HashMap<>();
-        record.put("id", "app-" + UUID.randomUUID().toString().substring(0, 8));
+        record.put("id", appId);
         record.put("jobId", jobId);
         record.put("applicantName", app.getApplicantName());
         record.put("applicantEmail", app.getApplicantEmail());
@@ -66,7 +115,8 @@ public class JobService {
         applications.add(record);
 
         Map<String, Object> response = new HashMap<>();
-        response.put("applicationId", record.get("id"));
+        response.put("applicationId", appId);
+        response.put("jobId", jobId);
         response.put("message", "Application submitted successfully.");
         response.put("status", "SUBMITTED");
         return response;
@@ -82,8 +132,83 @@ public class JobService {
         if (job.getPostedDate() == null) {
             job.setPostedDate("Just now");
         }
-        jobsMap.put(job.getId(), job);
-        return job;
+        return saveJob(job);
+    }
+
+    private List<JobDto> getAllJobsList() {
+        if (jobRepository != null) {
+            return jobRepository.findAll().stream().map(this::toDto).collect(Collectors.toList());
+        }
+        return new ArrayList<>(jobsMap.values());
+    }
+
+    private JobDto saveJob(JobDto dto) {
+        jobsMap.put(dto.getId(), dto);
+        if (jobRepository != null) {
+            return toDto(jobRepository.save(toEntity(dto)));
+        }
+        return dto;
+    }
+
+    private JobEntity toEntity(JobDto dto) {
+        JobEntity e = new JobEntity();
+        e.setId(dto.getId());
+        e.setTitle(dto.getTitle());
+        e.setRoleCategory(dto.getRoleCategory());
+        e.setProductionCompany(dto.getProductionCompany());
+        e.setLocation(dto.getLocation());
+        e.setType(dto.getType());
+        e.setBudgetOrPay(dto.getBudgetOrPay());
+        e.setPostedDate(dto.getPostedDate());
+        e.setDeadline(dto.getDeadline());
+        e.setDescription(dto.getDescription());
+        e.setRequirementsJson(writeStringList(dto.getRequirements()));
+        e.setDepartment(dto.getDepartment());
+        e.setApplicationsCount(dto.getApplicationsCount() != null ? dto.getApplicationsCount() : 0);
+        e.setSkillsJson(writeStringList(dto.getSkills()));
+        e.setVerified(dto.getVerified());
+        e.setExperience(dto.getExperience());
+        return e;
+    }
+
+    private JobDto toDto(JobEntity e) {
+        JobDto dto = new JobDto();
+        dto.setId(e.getId());
+        dto.setTitle(e.getTitle());
+        dto.setRoleCategory(e.getRoleCategory());
+        dto.setProductionCompany(e.getProductionCompany());
+        dto.setLocation(e.getLocation());
+        dto.setType(e.getType());
+        dto.setBudgetOrPay(e.getBudgetOrPay());
+        dto.setPostedDate(e.getPostedDate());
+        dto.setDeadline(e.getDeadline());
+        dto.setDescription(e.getDescription());
+        dto.setRequirements(readStringList(e.getRequirementsJson()));
+        dto.setDepartment(e.getDepartment());
+        dto.setApplicationsCount(e.getApplicationsCount());
+        dto.setSkills(readStringList(e.getSkillsJson()));
+        dto.setVerified(e.getVerified());
+        dto.setExperience(e.getExperience());
+        return dto;
+    }
+
+    private String writeStringList(List<String> list) {
+        try {
+            return MAPPER.writeValueAsString(list != null ? list : List.of());
+        } catch (Exception ex) {
+            return "[]";
+        }
+    }
+
+    private List<String> readStringList(String json) {
+        if (json == null || json.isBlank()) {
+            return new ArrayList<>();
+        }
+        try {
+            return MAPPER.readValue(json, new TypeReference<>() {});
+        } catch (Exception ex) {
+            return new ArrayList<>();
+        }
     }
 
     private boolean matchesSearch(JobDto j, String term) {
@@ -95,6 +220,10 @@ public class JobService {
     }
 
     private void initDefaultJobs() {
+        if (jobRepository != null && jobRepository.count() > 0) {
+            return;
+        }
+
         JobDto j1 = new JobDto();
         j1.setId("job-1");
         j1.setTitle("Lead Female Actor — Pan-India Commercial Feature Film");
@@ -116,7 +245,7 @@ public class JobService {
         j1.setSkills(List.of("Telugu Dialogue Delivery", "Method Acting", "Emotional Range"));
         j1.setVerified(true);
         j1.setExperience("2+ Years");
-        jobsMap.put(j1.getId(), j1);
+        saveJob(j1);
 
         JobDto j2 = new JobDto();
         j2.setId("job-2");
@@ -139,7 +268,7 @@ public class JobService {
         j2.setSkills(List.of("Floor Management", "Movie Magic Scheduling", "Stunt Unit Coordination"));
         j2.setVerified(true);
         j2.setExperience("4+ Years");
-        jobsMap.put(j2.getId(), j2);
+        saveJob(j2);
 
         JobDto j3 = new JobDto();
         j3.setId("job-3");
@@ -162,7 +291,7 @@ public class JobService {
         j3.setSkills(List.of("DMX/CRMX Programming", "Astera Rigs", "ARRI SkyPanel", "High-Speed Lighting"));
         j3.setVerified(true);
         j3.setExperience("5+ Years");
-        jobsMap.put(j3.getId(), j3);
+        saveJob(j3);
 
         JobDto j4 = new JobDto();
         j4.setId("job-4");
@@ -185,7 +314,6 @@ public class JobService {
         j4.setSkills(List.of("Screenplay Formatting", "Comedy Writing", "Writers Room Collaboration"));
         j4.setVerified(true);
         j4.setExperience("1+ Years");
-        jobsMap.put(j4.getId(), j4);
+        saveJob(j4);
     }
 }
-

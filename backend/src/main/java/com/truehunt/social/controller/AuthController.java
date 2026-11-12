@@ -44,9 +44,18 @@ public class AuthController {
 
     @GetMapping("/me")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getMe(
-            @RequestHeader(value = "X-User-Email", required = false) String userEmail
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId,
+            org.springframework.security.core.Authentication authentication
     ) {
-        Map<String, Object> user = authService.getCurrentUser(userEmail);
+        String identifier = (userEmail != null && !userEmail.isBlank()) ? userEmail : userId;
+        if ((identifier == null || identifier.isBlank())
+                && authentication != null
+                && authentication.isAuthenticated()
+                && !"anonymousUser".equals(authentication.getPrincipal())) {
+            identifier = authentication.getName();
+        }
+        Map<String, Object> user = authService.getCurrentUser(identifier);
         return ResponseEntity.ok(ApiResponse.success(user));
     }
 
