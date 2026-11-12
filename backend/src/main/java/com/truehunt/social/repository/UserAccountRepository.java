@@ -36,6 +36,7 @@ public interface UserAccountRepository extends JpaRepository<UserAccountEntity, 
 
     List<UserAccountEntity> findAllByEmail(String email);
     List<UserAccountEntity> findAllByPhoneNumber(String phoneNumber);
+    List<UserAccountEntity> findAllByRoleIgnoreCase(String role);
 
     boolean existsByPublicUserId(String publicUserId);
     boolean existsByEmail(String email);

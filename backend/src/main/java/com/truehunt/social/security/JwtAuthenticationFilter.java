@@ -36,8 +36,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 email = tokenProvider.getEmailFromToken(token);
             }
 
-            // Fallback to X-User-Email header supported by frontend
-            if (!StringUtils.hasText(email)) {
+            // Admin routes must rely on a validated JWT, never a caller-controlled identity header.
+            if (!StringUtils.hasText(email) && !request.getRequestURI().startsWith("/api/admin/")) {
                 String headerEmail = request.getHeader("X-User-Email");
                 if (StringUtils.hasText(headerEmail)) {
                     email = headerEmail.trim();

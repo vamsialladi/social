@@ -53,6 +53,7 @@ public class ProfileService {
 
     public List<Map<String, Object>> getPublicDirectory() {
         return profileRepository.findAll().stream()
+                .filter(profile -> !isAdminProfile(profile))
                 .filter(profile -> profile.getName() != null && !profile.getName().isBlank())
                 .map(profile -> {
                     Map<String, Object> directoryProfile = new HashMap<>();
@@ -139,6 +140,10 @@ public class ProfileService {
     }
 
     public ProfileDto getProfileById(String id, String userEmail) {
+        if (isAdminAccount(findAccountByEmail(id).or(() -> findAccountByPublicUserId(id)))) {
+            throw new ResourceNotFoundException("Profile", "id", id);
+        }
+
         Optional<ProfileEntity> opt = profileRepository.findByUserId(id);
         if (opt.isEmpty()) {
             opt = findAccountByPublicUserId(id)
@@ -316,7 +321,7 @@ public class ProfileService {
 
     @Transactional
     public ProfileDto updateMyProfile(ProfileUpdateRequest req, String userEmail) {
-        ProfileEntity profile = findCurrentProfile(userEmail);
+        ProfileEntity profile = findEditableProfile(userEmail);
         String userIdentifier = resolveUserEmail(userEmail);
         Optional<UserAccountEntity> accountOpt = findAccountByEmail(userIdentifier)
                 .or(() -> findAccountByPublicUserId(userIdentifier));
@@ -515,7 +520,7 @@ public class ProfileService {
     // Experience CRUD
     @Transactional
     public ExperienceDto addExperience(ExperienceDto exp, String userEmail) {
-        ProfileEntity profile = findCurrentProfile(userEmail);
+        ProfileEntity profile = findEditableProfile(userEmail);
         if (exp.getId() == null || exp.getId().isBlank()) {
             exp.setId("exp-" + UUID.randomUUID().toString().substring(0, 8));
         }
@@ -552,7 +557,7 @@ public class ProfileService {
 
     @Transactional
     public ExperienceDto updateExperience(String id, ExperienceDto exp, String userEmail) {
-        ProfileEntity profile = findCurrentProfile(userEmail);
+        ProfileEntity profile = findEditableProfile(userEmail);
         List<Map<String, Object>> experiences = new ArrayList<>(profile.getExperiences());
         boolean found = false;
         for (int i = 0; i < experiences.size(); i++) {
@@ -598,7 +603,7 @@ public class ProfileService {
 
     @Transactional
     public Map<String, Object> deleteExperience(String id, String userEmail) {
-        ProfileEntity profile = findCurrentProfile(userEmail);
+        ProfileEntity profile = findEditableProfile(userEmail);
         List<Map<String, Object>> filtered = profile.getExperiences().stream()
                 .filter(item -> !Objects.equals(item.get("id"), id))
                 .collect(Collectors.toList());
@@ -615,7 +620,7 @@ public class ProfileService {
     // Education CRUD
     @Transactional
     public EducationDto addEducation(EducationDto edu, String userEmail) {
-        ProfileEntity profile = findCurrentProfile(userEmail);
+        ProfileEntity profile = findEditableProfile(userEmail);
         if (edu.getId() == null || edu.getId().isBlank()) {
             edu.setId("edu-" + UUID.randomUUID().toString().substring(0, 8));
         }
@@ -642,7 +647,7 @@ public class ProfileService {
 
     @Transactional
     public EducationDto updateEducation(String id, EducationDto edu, String userEmail) {
-        ProfileEntity profile = findCurrentProfile(userEmail);
+        ProfileEntity profile = findEditableProfile(userEmail);
         List<Map<String, Object>> educations = new ArrayList<>(profile.getEducations());
         boolean found = false;
         for (int i = 0; i < educations.size(); i++) {
@@ -674,7 +679,7 @@ public class ProfileService {
 
     @Transactional
     public Map<String, Object> deleteEducation(String id, String userEmail) {
-        ProfileEntity profile = findCurrentProfile(userEmail);
+        ProfileEntity profile = findEditableProfile(userEmail);
         List<Map<String, Object>> filtered = profile.getEducations().stream()
                 .filter(item -> !Objects.equals(item.get("id"), id))
                 .collect(Collectors.toList());
@@ -691,7 +696,7 @@ public class ProfileService {
     // Project CRUD
     @Transactional
     public ProjectDto addProject(ProjectDto project, String userEmail) {
-        ProfileEntity profile = findCurrentProfile(userEmail);
+        ProfileEntity profile = findEditableProfile(userEmail);
         if (project.getId() == null || project.getId().isBlank()) {
             project.setId("proj-" + UUID.randomUUID().toString().substring(0, 8));
         }
@@ -716,7 +721,7 @@ public class ProfileService {
 
     @Transactional
     public ProjectDto updateProject(String id, ProjectDto project, String userEmail) {
-        ProfileEntity profile = findCurrentProfile(userEmail);
+        ProfileEntity profile = findEditableProfile(userEmail);
         List<Map<String, Object>> projects = new ArrayList<>(profile.getProjects());
         boolean found = false;
         for (int i = 0; i < projects.size(); i++) {
@@ -747,7 +752,7 @@ public class ProfileService {
 
     @Transactional
     public Map<String, Object> deleteProject(String id, String userEmail) {
-        ProfileEntity profile = findCurrentProfile(userEmail);
+        ProfileEntity profile = findEditableProfile(userEmail);
         List<Map<String, Object>> filtered = profile.getProjects().stream()
                 .filter(item -> !Objects.equals(item.get("id"), id))
                 .collect(Collectors.toList());
@@ -764,7 +769,7 @@ public class ProfileService {
     // Skills
     @Transactional
     public ProfileDto addSkill(String skill, String userEmail) {
-        ProfileEntity profile = findCurrentProfile(userEmail);
+        ProfileEntity profile = findEditableProfile(userEmail);
         List<String> skills = new ArrayList<>(profile.getTalents());
         if (!skills.contains(skill)) {
             skills.add(skill);
@@ -777,7 +782,7 @@ public class ProfileService {
 
     @Transactional
     public ProfileDto deleteSkill(String skill, String userEmail) {
-        ProfileEntity profile = findCurrentProfile(userEmail);
+        ProfileEntity profile = findEditableProfile(userEmail);
         List<String> skills = profile.getTalents().stream()
                 .filter(s -> !s.equalsIgnoreCase(skill))
                 .collect(Collectors.toList());
@@ -805,6 +810,19 @@ public class ProfileService {
     public ProfileEntity findCurrentProfile(String userEmail) {
         String clean = resolveUserEmail(userEmail);
         if (clean != null && !clean.isBlank()) {
+            Optional<UserAccountEntity> accountOpt = findAccountByEmail(clean)
+                    .or(() -> findAccountByPublicUserId(clean));
+            if (isAdminAccount(accountOpt)) {
+                UserAccountEntity account = accountOpt.orElseThrow();
+                ProfileEntity adminProfile = new ProfileEntity();
+                adminProfile.setUserId(account.getPublicUserId() == null
+                        ? String.valueOf(account.getId())
+                        : account.getPublicUserId());
+                adminProfile.setName(account.getName());
+                adminProfile.setEmail(account.getEmail());
+                return adminProfile;
+            }
+
             // First try direct profile match by userId or email
             Optional<ProfileEntity> directProfile = profileRepository.findByUserId(clean)
                     .or(() -> profileRepository.findByEmail(clean));
@@ -813,8 +831,6 @@ public class ProfileService {
             }
 
             // Then try UserAccount by email, publicUserId, or ID
-            Optional<UserAccountEntity> accountOpt = findAccountByEmail(clean)
-                    .or(() -> findAccountByPublicUserId(clean));
             if (accountOpt.isPresent()) {
                 UserAccountEntity account = accountOpt.get();
                 String publicUserId = account.getPublicUserId();
@@ -867,6 +883,27 @@ public class ProfileService {
         fallback.setName("Cinema Professional");
         fallback.setEmail("pro@truehunt.in");
         return profileRepository.save(fallback);
+    }
+
+    private ProfileEntity findEditableProfile(String userEmail) {
+        String identifier = resolveUserEmail(userEmail);
+        Optional<UserAccountEntity> account = findAccountByEmail(identifier)
+                .or(() -> findAccountByPublicUserId(identifier));
+        if (isAdminAccount(account)) {
+            throw new BadRequestException("Administrator accounts do not have a public social profile.");
+        }
+        return findCurrentProfile(userEmail);
+    }
+
+    private boolean isAdminProfile(ProfileEntity profile) {
+        if (profile == null) return false;
+        Optional<UserAccountEntity> account = findAccountByEmail(profile.getEmail())
+                .or(() -> findAccountByPublicUserId(profile.getUserId()));
+        return isAdminAccount(account);
+    }
+
+    private boolean isAdminAccount(Optional<UserAccountEntity> account) {
+        return account.map(user -> "ADMIN".equalsIgnoreCase(user.getRole())).orElse(false);
     }
 
     private String resolveUserEmail(String userEmail) {

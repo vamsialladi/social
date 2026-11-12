@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowUpRight, Eye, MessageCircle, ThumbsUp, UsersRound, X } from 'lucide-react'
+import { ArrowUpRight, BriefcaseBusiness, Eye, MessageCircle, Search, ThumbsUp, UsersRound, X } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import './Home.css'
 import Article from './Article.jsx'
 import OpportunitiesPage from './OpportunitiesPage.jsx'
+import ProfileBanner from './ProfileBanner.jsx'
 import api from '../../api'
+import { hasVisitedFilmMaker, markFilmMakerVisited } from '../../services/filmMakerAccess'
 
 function ProfileAvatarPlaceholder() {
   return (
@@ -19,6 +21,11 @@ function ProfileAvatarPlaceholder() {
 function getDismissedPostsStorageKey(userId) {
   const accountId = String(userId || 'guest').trim().toLowerCase()
   return `truehunt-not-interested-posts:${encodeURIComponent(accountId)}`
+}
+
+function getDismissedInvestorListingsStorageKey(userId) {
+  const accountId = String(userId || 'guest').trim().toLowerCase()
+  return `truehunt-not-interested-investors:${encodeURIComponent(accountId)}`
 }
 
 function readDismissedPostIds(storageKey) {
@@ -126,6 +133,7 @@ function Home({
   profileDetails,
   profilePreview,
   currentUserId,
+  accountEmail,
   onOwnPostCreated,
   activeNavigation,
   setActiveNavigation,
@@ -139,13 +147,26 @@ function Home({
   const [dismissedPostIds, setDismissedPostIds] = useState(() => (
     readDismissedPostIds(getDismissedPostsStorageKey(currentUserId))
   ))
+  const [dismissedInvestorListingIds, setDismissedInvestorListingIds] = useState(() => (
+    readDismissedPostIds(getDismissedInvestorListingsStorageKey(currentUserId))
+  ))
   const [profileDirectory, setProfileDirectory] = useState([])
   const [connectedProfiles, setConnectedProfiles] = useState([])
   const [profileViewers, setProfileViewers] = useState([])
+  const [investorListings, setInvestorListings] = useState([])
+  const [isInvestorSearchOpen, setIsInvestorSearchOpen] = useState(false)
+  const [isLoadingInvestorListings, setIsLoadingInvestorListings] = useState(false)
+  const [investorListingsError, setInvestorListingsError] = useState('')
   const [connectionsError, setConnectionsError] = useState('')
   const [profileViewersError, setProfileViewersError] = useState('')
   const [isConnectionsOpen, setIsConnectionsOpen] = useState(false)
   const [isProfileViewersOpen, setIsProfileViewersOpen] = useState(false)
+  const [applyingOpportunity, setApplyingOpportunity] = useState(null)
+  const [applicationName, setApplicationName] = useState('')
+  const [applicationExperience, setApplicationExperience] = useState('')
+  const [isSubmittingApplication, setIsSubmittingApplication] = useState(false)
+  const [pendingApplicationPostIds, setPendingApplicationPostIds] = useState([])
+  const [applicationError, setApplicationError] = useState('')
   const [isWritingArticle, setIsWritingArticle] = useState(false)
   const [isOpportunityWizardOpen, setIsOpportunityWizardOpen] = useState(false)
   const [editingOpportunity, setEditingOpportunity] = useState(null)
@@ -159,6 +180,7 @@ function Home({
 
   const name = profileDetails.name.trim() || 'Your name'
   const dismissedPostsStorageKey = getDismissedPostsStorageKey(currentUserId)
+  const dismissedInvestorListingsStorageKey = getDismissedInvestorListingsStorageKey(currentUserId)
   const languages = [
     ...profileDetails.languages.filter((language) => language !== 'Other'),
     ...(profileDetails.otherLanguage ? [profileDetails.otherLanguage] : []),
@@ -171,6 +193,10 @@ function Home({
   useEffect(() => {
     setDismissedPostIds(readDismissedPostIds(dismissedPostsStorageKey))
   }, [dismissedPostsStorageKey])
+
+  useEffect(() => {
+    setDismissedInvestorListingIds(readDismissedPostIds(dismissedInvestorListingsStorageKey))
+  }, [dismissedInvestorListingsStorageKey])
 
   useEffect(() => {
     function handleSocialPostUpdated(event) {
@@ -307,8 +333,10 @@ function Home({
     }
 
     loadProfileViewers()
+    const refreshInterval = window.setInterval(loadProfileViewers, 30000)
     return () => {
       isCurrent = false
+      window.clearInterval(refreshInterval)
     }
   }, [activeNavigation, currentUserId])
 
@@ -512,6 +540,147 @@ function Home({
   const [expandedCommentPostIds, setExpandedCommentPostIds] = useState([])
   const [pendingLikePostIds, setPendingLikePostIds] = useState([])
   const [likeErrors, setLikeErrors] = useState({})
+  const [isInvestorRequestOpen, setIsInvestorRequestOpen] = useState(false)
+  const [investorRequest, setInvestorRequest] = useState({
+    name: '',
+    userId: '',
+    budget: '',
+    role: 'Investor',
+    description: '',
+    consentAccepted: false,
+  })
+  const [filmMakerVisited, setFilmMakerVisited] = useState(() => hasVisitedFilmMaker(accountEmail))
+  const [investorRequestStatus, setInvestorRequestStatus] = useState('')
+  const [investorRequestError, setInvestorRequestError] = useState('')
+  const [isSubmittingInvestorRequest, setIsSubmittingInvestorRequest] = useState(false)
+
+  useEffect(() => {
+    let isCurrent = true
+    api.getInvestorAccessStatus()
+      .then((result) => {
+        if (isCurrent) setInvestorRequestStatus(result.status || 'NONE')
+      })
+      .catch((error) => {
+        console.error('Could not load investor access status:', error)
+      })
+    return () => {
+      isCurrent = false
+    }
+  }, [])
+
+  useEffect(() => {
+    function handleInvestorProfileDeleted(event) {
+      const { feedPostId, investorListingId } = event.detail || {}
+      if (feedPostId) {
+        setPosts((current) => current.filter((post) => String(post.id) !== String(feedPostId)))
+      }
+      if (investorListingId) {
+        setInvestorListings((current) => current.filter((listing) => String(listing.id) !== String(investorListingId)))
+      }
+      setInvestorRequest({
+        name: profileDetails.name || '',
+        userId: profileDetails.userId || currentUserId || '',
+        budget: '',
+        role: 'Investor',
+        description: '',
+        consentAccepted: false,
+      })
+      setInvestorRequestStatus('NONE')
+      setInvestorRequestError('')
+      setIsInvestorSearchOpen(false)
+      setActiveNavigation('home')
+      setIsInvestorRequestOpen(true)
+    }
+
+    window.addEventListener('truehunt-investor-profile-deleted', handleInvestorProfileDeleted)
+    return () => window.removeEventListener('truehunt-investor-profile-deleted', handleInvestorProfileDeleted)
+  }, [currentUserId, profileDetails.name, profileDetails.userId, setActiveNavigation])
+
+  useEffect(() => {
+    function handleSocialNavigationChanged() {
+      setIsInvestorSearchOpen(false)
+    }
+
+    window.addEventListener('truehunt-social-navigation-changed', handleSocialNavigationChanged)
+    return () => window.removeEventListener('truehunt-social-navigation-changed', handleSocialNavigationChanged)
+  }, [])
+
+  function openInvestorRequest() {
+    setInvestorRequest({
+      name: profileDetails.name || '',
+      userId: profileDetails.userId || currentUserId || '',
+      budget: '',
+      role: 'Investor',
+      description: '',
+      consentAccepted: false,
+    })
+    setInvestorRequestError('')
+    setIsInvestorRequestOpen(true)
+    api.getInvestorAccessStatus()
+      .then((result) => {
+        setInvestorRequestStatus(result.status || 'NONE')
+        if (result.status === 'PUBLISHED') {
+          setInvestorRequest((current) => ({
+            ...current,
+            name: result.name || current.name,
+            budget: result.budget || '',
+            role: result.role || 'Investor',
+            description: result.description || '',
+          }))
+        }
+      })
+      .catch((error) => {
+        console.error('Could not load investor access status:', error)
+        setInvestorRequestError('Could not verify your current request status. Please try again.')
+      })
+  }
+
+  async function openInvestorSearch() {
+    setIsInvestorSearchOpen(true)
+    setIsLoadingInvestorListings(true)
+    setInvestorListingsError('')
+    try {
+      const listings = await api.getInvestorListings()
+      if (!Array.isArray(listings)) {
+        throw new Error('Investor search returned an invalid response.')
+      }
+      setInvestorListings(listings)
+    } catch (error) {
+      console.error('Could not load investor listings:', error)
+      setInvestorListingsError(error instanceof Error
+        ? error.message
+        : 'Could not load investor listings. Please try again.')
+    } finally {
+      setIsLoadingInvestorListings(false)
+    }
+  }
+
+  async function submitInvestorRequest(event) {
+    event.preventDefault()
+    setInvestorRequestError('')
+    setIsSubmittingInvestorRequest(true)
+    try {
+      const result = await api.submitInvestorAccessRequest(investorRequest)
+      setInvestorRequestStatus(result.status || 'PUBLISHED')
+      if (result.feedPost) {
+        setPosts((current) => [
+          result.feedPost,
+          ...current.filter((post) => String(post.id) !== String(result.feedPost.id)),
+        ])
+        onOwnPostCreated?.(result.feedPost)
+      }
+      setIsInvestorRequestOpen(false)
+      setIsInvestorSearchOpen(false)
+      setActiveNavigation('home')
+    } catch (error) {
+      console.error('Could not submit investor access request:', error)
+      setInvestorRequestError(error instanceof Error
+        ? error.message
+        : 'Could not submit your request. Please try again.')
+    } finally {
+      setIsSubmittingInvestorRequest(false)
+    }
+  }
 
   async function handleLike(post) {
     const postId = String(post.id)
@@ -558,11 +727,48 @@ function Home({
   }
 
   async function handleApply(postId) {
+    const updated = await api.applyToOpportunity(postId)
+    setPosts((current) => current.map((post) => (
+      String(post.id) === String(postId) ? { ...post, ...updated } : post
+    )))
+  }
+
+  async function handleCancelApplication(post) {
+    if (!window.confirm('Do you want to cancel your application?')) return
+
+    const postId = String(post.id)
+    setPendingApplicationPostIds((current) => [...current, postId])
     try {
-      const updated = await api.applyToOpportunity(postId)
-      setPosts((current) => current.map((p) => (String(p.id) === String(postId) ? { ...p, ...updated } : p)))
-    } catch (err) {
-      console.warn('Apply error:', err)
+      const updated = await api.cancelOpportunityApplication(postId)
+      setPosts((current) => current.map((item) => (
+        String(item.id) === postId ? { ...item, ...updated } : item
+      )))
+    } catch (error) {
+      console.error('Failed to cancel opportunity application:', error)
+      window.alert(error instanceof Error
+        ? error.message
+        : 'Could not cancel your application. Please try again.')
+    } finally {
+      setPendingApplicationPostIds((current) => current.filter((id) => id !== postId))
+    }
+  }
+
+  async function submitOpportunityApplication(event) {
+    event.preventDefault()
+    if (!applyingOpportunity || isSubmittingApplication) return
+
+    setApplicationError('')
+    setIsSubmittingApplication(true)
+    try {
+      await handleApply(applyingOpportunity.id)
+      setApplyingOpportunity(null)
+    } catch (error) {
+      console.error('Failed to apply for opportunity:', error)
+      setApplicationError(error instanceof Error
+        ? error.message
+        : 'Could not submit your application. Please try again.')
+    } finally {
+      setIsSubmittingApplication(false)
     }
   }
 
@@ -605,6 +811,18 @@ function Home({
     }
   }
 
+  async function handleDeleteInvestorListing(listing) {
+    if (!window.confirm('Delete your investor profile and its home-feed post permanently?')) return
+    try {
+      await api.deleteInvestorListing(listing.id)
+    } catch (error) {
+      console.error('Investor profile delete error:', error)
+      window.alert(error instanceof Error
+        ? error.message
+        : 'Could not delete your investor profile. Please try again.')
+    }
+  }
+
   function handleNotInterested(postId) {
     const postIdString = String(postId)
     const dismissedIds = new Set(readDismissedPostIds(dismissedPostsStorageKey))
@@ -616,6 +834,18 @@ function Home({
     }
     setDismissedPostIds([...dismissedIds])
     setPosts((current) => current.filter((post) => String(post.id) !== postIdString))
+  }
+
+  function handleNotInterestedInvestorListing(listingId) {
+    const listingIdString = String(listingId)
+    const dismissedIds = new Set(readDismissedPostIds(dismissedInvestorListingsStorageKey))
+    dismissedIds.add(listingIdString)
+    try {
+      localStorage.setItem(dismissedInvestorListingsStorageKey, JSON.stringify([...dismissedIds]))
+    } catch (error) {
+      console.warn('Could not save dismissed investor listing:', error)
+    }
+    setDismissedInvestorListingIds([...dismissedIds])
   }
 
   function isOwnPost(post) {
@@ -770,6 +1000,24 @@ function Home({
       ? post.type === 'opportunity'
       : post.type !== 'opportunity')
   ))
+  const visibleInvestorListings = investorListings.filter(
+    (listing) => !dismissedInvestorListingIds.includes(String(listing.id)),
+  )
+  const selectedOpportunityPost = activeNavigation === 'opportunities'
+    ? visiblePosts.find((post) => String(post.id) === String(selectedOpportunity?.id))
+    : null
+  const selectedOpportunityDetails = selectedOpportunityPost?.opportunityDetails
+    && typeof selectedOpportunityPost.opportunityDetails === 'object'
+    ? selectedOpportunityPost.opportunityDetails
+    : {}
+  const selectedOpportunityKnownFields = new Set(
+    opportunityDetailGroups.flatMap((group) => group.fields),
+  )
+  const selectedOpportunityAdditionalDetails = Object.entries(selectedOpportunityDetails)
+    .filter(([field]) => !selectedOpportunityKnownFields.has(field))
+  const selectedOpportunityMedia = selectedOpportunityPost
+    ? getPostPreviewMedia(selectedOpportunityPost)
+    : null
   const allMyPosts = [
     ...posts.filter(isOwnPost),
     ...(Array.isArray(profileDetails.posts) ? profileDetails.posts : []),
@@ -796,11 +1044,11 @@ function Home({
   return (
     <>
       <section
-        className="home-page"
+        className={`home-page${activeNavigation === 'opportunities' ? ' is-opportunities' : ''}`}
         hidden={hidden || isWritingArticle}
         aria-label={activeNavigation === 'opportunities' ? 'Opportunities' : 'Home feed'}
       >
-      <div className="home-layout">
+      <div className={`home-layout${activeNavigation === 'opportunities' ? ' is-opportunities' : ''}`}>
         <aside className="home-sidebar" aria-label="Your profile summary">
           <section
             className="home-card home-profile-card"
@@ -815,7 +1063,9 @@ function Home({
               }
             }}
           >
-            <div className="home-profile-cover" />
+            <div className="home-profile-cover">
+              <ProfileBanner variant="card" />
+            </div>
             <div className="home-profile-content">
               <div className={`home-avatar home-profile-avatar${profilePreview ? '' : ' is-placeholder'}`}>
                 {profilePreview
@@ -893,6 +1143,21 @@ function Home({
               </span>
               <span className="home-connections-count">{profileViewers.length}</span>
             </button>
+            {activeNavigation === 'opportunities' && (
+              <button
+                className="home-profile-viewers-card home-investor-search-button"
+                type="button"
+                onClick={openInvestorSearch}
+                aria-pressed={isInvestorSearchOpen}
+              >
+                <span className="home-connections-icon"><Search size={20} aria-hidden="true" /></span>
+                <span className="home-connections-copy">
+                  <strong>Investor search</strong>
+                  <small>Explore published investor profiles</small>
+                </span>
+                <span className="home-connections-count">{investorListings.length}</span>
+              </button>
+            )}
           </div>
           {connectionsError && <p className="home-connections-error" role="alert">{connectionsError}</p>}
           {profileViewersError && <p className="home-connections-error" role="alert">{profileViewersError}</p>}
@@ -951,6 +1216,66 @@ function Home({
         </aside>
 
         <div className="home-feed-column">
+          {isInvestorSearchOpen ? (
+            <section className="home-investor-search-view">
+              <header className="home-investor-search-header">
+                <div>
+                  <h1>Investor Search</h1>
+                  <p>Explore profiles shared by the TrueHunt community.</p>
+                </div>
+                <button type="button" onClick={() => setIsInvestorSearchOpen(false)}>
+                  Back to opportunities
+                </button>
+              </header>
+              {isLoadingInvestorListings ? (
+                <p className="home-investor-search-message" role="status">Loading investor profiles…</p>
+              ) : investorListingsError ? (
+                <div className="home-investor-search-message" role="alert">
+                  <p>{investorListingsError}</p>
+                  <button type="button" onClick={openInvestorSearch}>Try again</button>
+                </div>
+              ) : visibleInvestorListings.length ? (
+                <div className="home-investor-listings">
+                  {visibleInvestorListings.map((listing) => (
+                    <article className="home-card home-investor-listing" key={listing.id}>
+                      <header>
+                        <div>
+                          <h2>{listing.name}</h2>
+                          <span>{listing.role}</span>
+                        </div>
+                        {listing.budget && <strong>{listing.budget}</strong>}
+                      </header>
+                      <p>{listing.description}</p>
+                      {listing.isMine && (
+                        <button
+                          className="home-investor-listing-delete"
+                          type="button"
+                          onClick={() => void handleDeleteInvestorListing(listing)}
+                        >
+                          Delete my investor post
+                        </button>
+                      )}
+                      {!listing.isMine && (
+                        <button
+                          className="home-investor-listing-dismiss"
+                          type="button"
+                          onClick={() => handleNotInterestedInvestorListing(listing.id)}
+                        >
+                          Not interested
+                        </button>
+                      )}
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <section className="home-card home-empty-feed">
+                  <h2>No investor profiles yet</h2>
+                  <p>Investor profiles will appear here after they are published.</p>
+                </section>
+              )}
+            </section>
+          ) : (
+          <>
           {activeNavigation === 'home' && (
           <section className="home-card home-composer" aria-label="Create a post">
             <div className="home-composer-top">
@@ -1072,21 +1397,14 @@ function Home({
                 : 'Share an update, photo, or video to create your first post.'}</p>
             </section>
           ) : (
-            <div className="home-post-list">
+            <div className={`home-opportunity-browser${activeNavigation === 'opportunities' ? ' is-active' : ''}${selectedOpportunityPost ? ' has-selection' : ''}`}>
+            <div className={`home-post-list${activeNavigation === 'opportunities' ? ' home-opportunity-results' : ''}`}>
               {visiblePosts.map((post) => {
                 const authorAvatar = getPostAuthorAvatar(post)
                 const authorName = post.authorName || name
                 const postId = String(post.id)
                 const postMedia = getPostPreviewMedia(post)
-                const postOpportunityDetails = post.opportunityDetails
-                  && typeof post.opportunityDetails === 'object'
-                  ? post.opportunityDetails
-                  : {}
-                const knownOpportunityFields = new Set(
-                  opportunityDetailGroups.flatMap((group) => group.fields),
-                )
-                const additionalOpportunityDetails = Object.entries(postOpportunityDetails)
-                  .filter(([field]) => !knownOpportunityFields.has(field))
+                const isOwnOpportunity = post.type === 'opportunity' && isOwnPost(post)
                 const isOpportunityExpanded = String(selectedOpportunity?.id) === postId
                 const postComments = Array.isArray(post.comments) ? post.comments : []
                 const areCommentsExpanded = expandedCommentPostIds.includes(postId)
@@ -1094,7 +1412,7 @@ function Home({
                 const remainingCommentCount = postComments.length - commentsToShow.length
                 return (
                 <article
-                  className={`home-card home-post${focusedPostId === String(post.id) ? ' is-focused' : ''}`}
+                  className={`home-card home-post${focusedPostId === String(post.id) ? ' is-focused' : ''}${isOpportunityExpanded ? ' is-selected' : ''}`}
                   id={`home-post-${encodeURIComponent(String(post.id))}`}
                   key={post.id}
                 >
@@ -1139,9 +1457,6 @@ function Home({
                         {postMedia && !postMedia.isVideo && (
                           <img className="home-post-media" src={postMedia.url} alt="Opportunity attachment" />
                         )}
-                        <span className="home-post-opportunity-view">
-                          {isOpportunityExpanded ? 'Hide opportunity details' : 'View opportunity details'}
-                        </span>
                       </button>
                       {postMedia?.isVideo && (
                         <video className="home-post-media" src={postMedia.url} controls />
@@ -1158,50 +1473,12 @@ function Home({
                         )}
                     </>
                   )}
-                  {post.type === 'opportunity' && isOpportunityExpanded && (
-                    <section className="home-opportunity-inline-details" aria-label="Opportunity details">
-                      {post.createdAt && <time className="home-opportunity-modal-time">{post.createdAt}</time>}
-                      {post.content && (
-                        <p className="home-opportunity-modal-description">{post.content}</p>
-                      )}
-                      {postMedia && (
-                        postMedia.isVideo
-                          ? <video className="home-opportunity-modal-media" src={postMedia.url} controls />
-                          : <img className="home-opportunity-modal-media" src={postMedia.url} alt="Opportunity attachment" />
-                      )}
-                      {opportunityDetailGroups.map((group) => (
-                        <section className="home-opportunity-modal-section" key={group.title}>
-                          <h3>{group.title}</h3>
-                          <dl className="home-opportunity-modal-facts">
-                            {group.fields.map((field) => (
-                              <div key={field}>
-                                <dt>{formatOpportunityFieldLabel(field)}</dt>
-                                <dd>{formatOpportunityFieldValue(postOpportunityDetails[field])}</dd>
-                              </div>
-                            ))}
-                          </dl>
-                        </section>
-                      ))}
-                      {additionalOpportunityDetails.length > 0 && (
-                        <section className="home-opportunity-modal-section">
-                          <h3>Additional details</h3>
-                          <dl className="home-opportunity-modal-facts">
-                            {additionalOpportunityDetails.map(([field, value]) => (
-                              <div key={field}>
-                                <dt>{formatOpportunityFieldLabel(field)}</dt>
-                                <dd>{formatOpportunityFieldValue(value)}</dd>
-                              </div>
-                            ))}
-                          </dl>
-                        </section>
-                      )}
-                    </section>
-                  )}
                   {post.type === 'article' && <span className="home-post-type">Article</span>}
-                  {post.type === 'opportunity' && <span className="home-post-type">Opportunity</span>}
 
                   {/* Post interactive action buttons wired to backend APIs */}
                   <div className="home-post-action-bar" style={{ display: 'flex', gap: '8px', marginTop: '12px', borderTop: '1px solid var(--color-border, #eee)', paddingTop: '8px', flexWrap: 'wrap' }}>
+                    {!isOwnOpportunity && (
+                      <>
                     <button
                       type="button"
                       onClick={() => handleLike(post)}
@@ -1240,17 +1517,27 @@ function Home({
                       💬 Comments ({post.commentsCount ?? post.comments?.length ?? 0})
                     </button>
 
-                    {post.type === 'opportunity' && !isOwnPost(post) && (
+                    {post.type === 'opportunity' && (
                       <button
                         type="button"
-                        onClick={() => handleApply(post.id)}
+                        onClick={() => {
+                          if (post.applied) {
+                            void handleCancelApplication(post)
+                            return
+                          }
+                          setApplicationError('')
+                          setApplicationName(profileDetails.name.trim())
+                          setApplicationExperience(profileDetails.experience || '')
+                          setApplyingOpportunity(post)
+                        }}
+                        disabled={pendingApplicationPostIds.includes(String(post.id))}
                         style={{
                           background: post.applied ? '#e6f4ea' : '#1a73e8',
                           color: post.applied ? '#137333' : '#fff',
                           border: 'none',
                           padding: '6px 16px',
                           borderRadius: '20px',
-                          cursor: 'pointer',
+                          cursor: pendingApplicationPostIds.includes(String(post.id)) ? 'wait' : 'pointer',
                           fontWeight: '600',
                           fontSize: '13px'
                         }}
@@ -1258,8 +1545,10 @@ function Home({
                         {post.applied ? '✓ Applied' : '⚡ Apply Now'}
                       </button>
                     )}
+                      </>
+                    )}
 
-                    {post.type === 'opportunity' && isOwnPost(post) ? (
+                    {isOwnOpportunity ? (
                       <div className="home-opportunity-owner-actions">
                       <button
                         type="button"
@@ -1367,6 +1656,78 @@ function Home({
                 )
               })}
             </div>
+            {selectedOpportunityPost && (
+              <section className="home-opportunity-detail home-card" aria-label="Opportunity details">
+                <header className="home-opportunity-detail-header">
+                  <span className="home-opportunity-detail-icon">
+                    <BriefcaseBusiness size={20} aria-hidden="true" />
+                  </span>
+                  <div>
+                    <strong>{selectedOpportunityPost.authorName || name}</strong>
+                    <span>
+                      Opportunity
+                      {selectedOpportunityPost.createdAt ? ` · ${selectedOpportunityPost.createdAt}` : ''}
+                    </span>
+                  </div>
+                  <button
+                    className="home-opportunity-detail-close"
+                    type="button"
+                    aria-label="Close opportunity details"
+                    onClick={() => setSelectedOpportunity(null)}
+                  >
+                    <X size={18} aria-hidden="true" />
+                  </button>
+                </header>
+                <h1>{selectedOpportunityPost.title || selectedOpportunityDetails.projectName || 'Opportunity'}</h1>
+                <p className="home-opportunity-detail-meta">
+                  {[
+                    selectedOpportunityDetails.projectType,
+                    selectedOpportunityDetails.actingRole,
+                    selectedOpportunityDetails.locationPreference,
+                  ].filter(Boolean).join(' · ') || 'Opportunity details'}
+                </p>
+                {selectedOpportunityPost.content && (
+                  <section className="home-opportunity-detail-section">
+                    <h2>About this opportunity</h2>
+                    <p className="home-opportunity-description">{selectedOpportunityPost.content}</p>
+                  </section>
+                )}
+                {selectedOpportunityMedia?.isVideo
+                  ? <video className="home-opportunity-modal-media" src={selectedOpportunityMedia.url} controls />
+                  : selectedOpportunityMedia && (
+                    <img className="home-opportunity-modal-media" src={selectedOpportunityMedia.url} alt="Opportunity attachment" />
+                  )}
+                {opportunityDetailGroups.map((group) => (
+                  <section className="home-opportunity-detail-section" key={group.title}>
+                    <h2>{group.title}</h2>
+                    <dl className="home-opportunity-facts">
+                      {group.fields.map((field) => (
+                        <div key={field}>
+                          <dt>{formatOpportunityFieldLabel(field)}</dt>
+                          <dd>{formatOpportunityFieldValue(selectedOpportunityDetails[field])}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </section>
+                ))}
+                {selectedOpportunityAdditionalDetails.length > 0 && (
+                  <section className="home-opportunity-detail-section">
+                    <h2>Additional details</h2>
+                    <dl className="home-opportunity-facts">
+                      {selectedOpportunityAdditionalDetails.map(([field, value]) => (
+                        <div key={field}>
+                          <dt>{formatOpportunityFieldLabel(field)}</dt>
+                          <dd>{formatOpportunityFieldValue(value)}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </section>
+                )}
+              </section>
+            )}
+            </div>
+          )}
+          </>
           )}
         </div>
 
@@ -1392,32 +1753,45 @@ function Home({
           </section>
           <section className="home-card home-sidebar-stats home-discovery-card" aria-labelledby="home-discovery-heading">
             <h2 className="home-discovery-heading" id="home-discovery-heading">Explore</h2>
-            <Link className="home-explore-promo home-explore-promo-film" to="/entertainments">
+            <Link
+              className="home-explore-promo home-explore-promo-film"
+              to={filmMakerVisited ? '/protect-producer' : '/entertainments'}
+              onClick={() => {
+                if (!filmMakerVisited) {
+                  markFilmMakerVisited(accountEmail)
+                  setFilmMakerVisited(true)
+                }
+              }}
+            >
               <span className="home-explore-promo-art">
                 <img src="/assets/explore-filmmakers.png" alt="" />
               </span>
               <span className="home-explore-promo-copy">
-                <strong>Are you a filmmakers</strong>
-                <small>Bring your story to the screen</small>
+                <strong>{filmMakerVisited ? 'Manage Film' : 'Are you a filmmaker?'}</strong>
+                <small>{filmMakerVisited ? 'Manage your film projects' : 'Bring your story to the screen'}</small>
                 <ArrowUpRight size={16} aria-hidden="true" />
               </span>
             </Link>
-            <Link className="home-explore-promo home-explore-promo-invest" to="/lcm-app">
+            <button
+              className="home-explore-promo home-explore-promo-invest home-explore-promo-button"
+              type="button"
+              onClick={openInvestorRequest}
+            >
               <span className="home-explore-promo-art">
                 <img src="/assets/explore-investors.png" alt="" />
               </span>
               <span className="home-explore-promo-copy">
-                <strong>Are you an investors</strong>
+                <strong>Are you an investor and earner ?</strong>
                 <small>Discover creative opportunities</small>
                 <ArrowUpRight size={16} aria-hidden="true" />
               </span>
-            </Link>
+            </button>
             <a className="home-explore-promo home-explore-promo-distribute" href="/distributions">
               <span className="home-explore-promo-art">
                 <img src="/assets/explore-distribution.png" alt="" />
               </span>
               <span className="home-explore-promo-copy">
-                <strong>Are you a distributors</strong>
+                <strong>Are you a distributor ?</strong>
                 <small>Get stories in front of audiences</small>
                 <ArrowUpRight size={16} aria-hidden="true" />
               </span>
@@ -1496,6 +1870,85 @@ function Home({
         </section>
       </div>
     )}
+    {applyingOpportunity && (
+      <div
+        className="home-connections-backdrop"
+        onMouseDown={(event) => {
+          if (event.target === event.currentTarget && !isSubmittingApplication) {
+            setApplyingOpportunity(null)
+          }
+        }}
+      >
+        <section
+          className="home-connections-dialog home-application-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="home-application-title"
+        >
+          <header className="home-connections-dialog-header">
+            <div>
+              <h2 id="home-application-title">Apply for opportunity</h2>
+              <p>{applyingOpportunity.title || 'Review your profile information'}</p>
+            </div>
+            <button
+              className="home-connections-close"
+              type="button"
+              aria-label="Close application form"
+              onClick={() => setApplyingOpportunity(null)}
+              disabled={isSubmittingApplication}
+            >
+              <X size={20} aria-hidden="true" />
+            </button>
+          </header>
+          <form
+            className="home-application-form"
+            id="home-application-form"
+            onSubmit={submitOpportunityApplication}
+          >
+            <p className="home-application-note">Review and edit your details before submitting.</p>
+            <label className="home-application-field">
+              <span>Name</span>
+              <input
+                type="text"
+                value={applicationName}
+                onChange={(event) => setApplicationName(event.target.value)}
+                placeholder="Add your name to your profile"
+                disabled={isSubmittingApplication}
+              />
+            </label>
+            <label className="home-application-field">
+              <span>Experience</span>
+              <input
+                type="text"
+                value={applicationExperience}
+                onChange={(event) => setApplicationExperience(event.target.value)}
+                placeholder="Add your experience to your profile"
+                disabled={isSubmittingApplication}
+              />
+            </label>
+            {applicationError && <p className="home-application-error" role="alert">{applicationError}</p>}
+          </form>
+          <div className="home-application-actions">
+            <button
+              className="home-application-cancel"
+              type="button"
+              onClick={() => setApplyingOpportunity(null)}
+              disabled={isSubmittingApplication}
+            >
+              Cancel
+            </button>
+            <button
+              className="home-application-submit"
+              type="submit"
+              form="home-application-form"
+              disabled={isSubmittingApplication}
+            >
+              {isSubmittingApplication ? 'Submitting…' : 'Submit application'}
+            </button>
+          </div>
+        </section>
+      </div>
+    )}
     {isProfileViewersOpen && (
       <div
         className="home-connections-backdrop"
@@ -1565,6 +2018,130 @@ function Home({
               <p>No profile viewers yet.</p>
             </div>
           )}
+        </section>
+      </div>
+    )}
+    {isInvestorRequestOpen && (
+      <div
+        className="home-connections-backdrop"
+        onMouseDown={(event) => {
+          if (event.target === event.currentTarget && !isSubmittingInvestorRequest) {
+            setIsInvestorRequestOpen(false)
+          }
+        }}
+      >
+        <section
+          className="home-connections-dialog home-investor-request-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="home-investor-request-title"
+        >
+          <header className="home-connections-dialog-header">
+            <div>
+              <h2 id="home-investor-request-title">Request investor access</h2>
+              <p>Publish your profile to Investor Search and the home feed.</p>
+            </div>
+            <button
+              className="home-connections-close"
+              type="button"
+              aria-label="Close investor request"
+              onClick={() => setIsInvestorRequestOpen(false)}
+              disabled={isSubmittingInvestorRequest}
+            >
+              <X size={20} aria-hidden="true" />
+            </button>
+          </header>
+          <form className="home-investor-request-form" onSubmit={submitInvestorRequest}>
+            <fieldset className="home-investor-role-field">
+              <legend>I am a</legend>
+              <div className="home-investor-role-options">
+                {['Producer', 'Investor', 'Crowd funder'].map((role) => (
+                  <label key={role}>
+                    <input
+                      type="radio"
+                      name="investor-request-role"
+                      value={role}
+                      checked={investorRequest.role === role}
+                      onChange={(event) => setInvestorRequest((current) => ({ ...current, role: event.target.value }))}
+                      required
+                      disabled={isSubmittingInvestorRequest || investorRequestStatus === 'PUBLISHED'}
+                    />
+                    <span>{role}</span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+            <label className="home-application-field">
+              <span>Name</span>
+              <input
+                type="text"
+                value={investorRequest.name}
+                onChange={(event) => setInvestorRequest((current) => ({ ...current, name: event.target.value }))}
+                maxLength={120}
+                required
+                disabled={isSubmittingInvestorRequest || investorRequestStatus === 'PUBLISHED'}
+              />
+            </label>
+            <label className="home-application-field">
+              <span>Investment budget</span>
+              <input
+                type="text"
+                value={investorRequest.budget}
+                onChange={(event) => setInvestorRequest((current) => ({ ...current, budget: event.target.value }))}
+                placeholder="For example, ₹10,00,000"
+                maxLength={100}
+                required
+                disabled={isSubmittingInvestorRequest || investorRequestStatus === 'PUBLISHED'}
+              />
+            </label>
+            <label className="home-application-field">
+              <span>Description</span>
+              <textarea
+                value={investorRequest.description}
+                onChange={(event) => setInvestorRequest((current) => ({ ...current, description: event.target.value }))}
+                placeholder="Tell creators what you are looking to support."
+                maxLength={1000}
+                rows={4}
+                required
+                disabled={isSubmittingInvestorRequest || investorRequestStatus === 'PUBLISHED'}
+              />
+            </label>
+            <label className="home-investor-consent">
+              <input
+                type="checkbox"
+                checked={investorRequest.consentAccepted}
+                onChange={(event) => setInvestorRequest((current) => ({ ...current, consentAccepted: event.target.checked }))}
+                required
+                disabled={isSubmittingInvestorRequest || investorRequestStatus === 'PUBLISHED'}
+              />
+              <span>I confirm these details are correct and agree to publish my name, role, description, and budget on TrueHunt. Contact details are not requested or published.</span>
+            </label>
+            {investorRequestStatus === 'PUBLISHED' && (
+              <p className="home-investor-request-status" role="status">
+                Your profile is published in Investor Search and the home feed.
+              </p>
+            )}
+            {investorRequestError && <p className="home-application-error" role="alert">{investorRequestError}</p>}
+            <div className="home-investor-request-actions">
+              <button
+                className="home-application-cancel"
+                type="button"
+                onClick={() => setIsInvestorRequestOpen(false)}
+                disabled={isSubmittingInvestorRequest}
+              >
+                Close
+              </button>
+              <button
+                className="home-application-submit"
+                type="submit"
+                disabled={isSubmittingInvestorRequest || investorRequestStatus === 'PUBLISHED'}
+              >
+                {isSubmittingInvestorRequest
+                  ? 'Publishing…'
+                  : investorRequestStatus === 'PUBLISHED' ? 'Published' : 'Publish profile'}
+              </button>
+            </div>
+          </form>
         </section>
       </div>
     )}

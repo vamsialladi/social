@@ -147,13 +147,19 @@ public class ConnectionService {
     private void updateAllRelationshipsBetween(Set<String> user1Ids, Set<String> user2Ids, Boolean connected, String status, String senderUserId, List<UserProfileRelationshipEntity> allRels) {
         Set<String> lower1 = user1Ids.stream().map(s -> s.toLowerCase(Locale.ROOT)).collect(Collectors.toSet());
         Set<String> lower2 = user2Ids.stream().map(s -> s.toLowerCase(Locale.ROOT)).collect(Collectors.toSet());
+        String canonicalUser1Id = user1Ids.iterator().next();
+        String canonicalUser2Id = user2Ids.iterator().next();
         boolean foundAny = false;
         java.time.LocalDateTime now = java.time.LocalDateTime.now();
         for (UserProfileRelationshipEntity rel : allRels) {
             if (rel == null) continue;
             String owner = rel.getOwnerUserId() != null ? rel.getOwnerUserId().trim().toLowerCase(Locale.ROOT) : "";
             String target = rel.getTargetProfileId() != null ? rel.getTargetProfileId().trim().toLowerCase(Locale.ROOT) : "";
-            if ((lower1.contains(owner) && lower2.contains(target)) || (lower2.contains(owner) && lower1.contains(target))) {
+            boolean user1IsOwner = lower1.contains(owner) && lower2.contains(target);
+            boolean user2IsOwner = lower2.contains(owner) && lower1.contains(target);
+            if (user1IsOwner || user2IsOwner) {
+                rel.setOwnerUserId(user1IsOwner ? canonicalUser1Id : canonicalUser2Id);
+                rel.setTargetProfileId(user1IsOwner ? canonicalUser2Id : canonicalUser1Id);
                 if (connected != null) rel.setConnected(connected);
                 rel.setStatus(status);
                 rel.setSenderUserId(senderUserId);
@@ -593,7 +599,7 @@ public class ConnectionService {
     }
 
     private Set<String> getOwnerUserIdentifiers(String userEmail) {
-        Set<String> ids = new HashSet<>();
+        Set<String> ids = new LinkedHashSet<>();
         if (userEmail != null && !userEmail.isBlank()) {
             ids.addAll(resolveAllUserIdentifiers(userEmail));
         }
@@ -669,25 +675,40 @@ public class ConnectionService {
         String cleanId = profileId != null ? profileId.trim() : "";
         String upperId = cleanId.toUpperCase(Locale.ROOT);
         String lowerId = cleanId.toLowerCase(Locale.ROOT);
+        String canonicalId = cleanId;
 
         Optional<ProfileEntity> profile = profileRepository.findByUserId(cleanId)
                 .or(() -> profileRepository.findByUserId(upperId))
                 .or(() -> profileRepository.findByUserId(lowerId));
         if (profile.isEmpty()) {
-            profile = userAccountRepository.findByPublicUserId(cleanId)
-                    .or(() -> userAccountRepository.findByPublicUserId(upperId))
-                    .or(() -> userAccountRepository.findByPublicUserId(lowerId))
-                    .flatMap(acc -> profileRepository.findByUserId(acc.getPublicUserId()))
-                    .or(() -> userAccountRepository.findByEmail(cleanId)
-                            .or(() -> userAccountRepository.findByEmail(lowerId))
-                            .flatMap(acc -> profileRepository.findByEmail(acc.getEmail())));
+            profile = findUserAccountByIdentifier(cleanId)
+                    .flatMap(account -> profileRepository.findByUserId(account.getPublicUserId())
+                            .or(() -> profileRepository.findByEmail(account.getEmail())));
         }
 
         if (profile.isPresent()) {
             ProfileEntity entity = profile.get();
-            String name = entity.getName() == null || entity.getName().isBlank()
-                    ? "TrueHunt Member"
-                    : entity.getName();
+            Optional<UserAccountEntity> linkedAccount = findUserAccountByIdentifier(entity.getEmail())
+                    .or(() -> findUserAccountByIdentifier(entity.getUserId()))
+                    .or(() -> findUserAccountByIdentifier(cleanId));
+            canonicalId = linkedAccount
+                    .map(UserAccountEntity::getPublicUserId)
+                    .filter(id -> id != null && !id.isBlank())
+                    .orElse(entity.getUserId() == null || entity.getUserId().isBlank()
+                            ? cleanId
+                            : entity.getUserId());
+            String name = entity.getName();
+            if (isGenericProfileName(name)) {
+                name = linkedAccount
+                        .map(UserAccountEntity::getName)
+                        .filter(accountName -> accountName != null
+                                && !accountName.isBlank()
+                                && !isGenericProfileName(accountName))
+                        .orElse(name);
+            }
+            if (isGenericProfileName(name)) {
+                name = "TrueHunt Member";
+            }
             dto.put("name", name);
             dto.put("role", entity.getHeadline() != null ? entity.getHeadline() : (entity.getPrimaryCraft() != null ? entity.getPrimaryCraft() : "Cinema Professional"));
             dto.put("location", entity.getAddress() != null ? entity.getAddress() : "");
@@ -696,13 +717,12 @@ public class ConnectionService {
             dto.put("initials", getInitials(name));
         } else {
             // Check UserAccountEntity if registered user without full profile
-            Optional<UserAccountEntity> account = userAccountRepository.findByPublicUserId(cleanId)
-                    .or(() -> userAccountRepository.findByPublicUserId(upperId))
-                    .or(() -> userAccountRepository.findByPublicUserId(lowerId))
-                    .or(() -> userAccountRepository.findByEmail(cleanId))
-                    .or(() -> userAccountRepository.findByEmail(lowerId));
+            Optional<UserAccountEntity> account = findUserAccountByIdentifier(cleanId);
             if (account.isPresent()) {
                 UserAccountEntity acc = account.get();
+                if (acc.getPublicUserId() != null && !acc.getPublicUserId().isBlank()) {
+                    canonicalId = acc.getPublicUserId();
+                }
                 String accName = acc.getName() != null && !acc.getName().isBlank() ? acc.getName() : "TrueHunt Member";
                 dto.put("name", accName);
                 dto.put("role", acc.getRole() != null ? acc.getRole() : (acc.getCraft() != null ? acc.getCraft() : "Cinema Professional"));
@@ -743,8 +763,8 @@ public class ConnectionService {
                 }
             }
         }
-        dto.put("id", cleanId);
-        dto.put("userId", cleanId);
+        dto.put("id", canonicalId);
+        dto.put("userId", canonicalId);
         dto.put("isConnected", connected);
         dto.put("connected", connected);
         dto.put("isFollowing", following);
@@ -762,14 +782,9 @@ public class ConnectionService {
                 .or(() -> profileRepository.findByUserId(upperId))
                 .or(() -> profileRepository.findByUserId(lowerId))
                 .map(ProfileEntity::getName)
-                .filter(name -> name != null && !name.isBlank())
-                .or(() -> userAccountRepository.findByPublicUserId(cleanId)
-                        .or(() -> userAccountRepository.findByPublicUserId(upperId))
-                        .or(() -> userAccountRepository.findByPublicUserId(lowerId))
-                        .or(() -> userAccountRepository.findByEmail(cleanId))
-                        .or(() -> userAccountRepository.findByEmail(lowerId))
-                        .map(UserAccountEntity::getName))
-                .filter(name -> name != null && !name.isBlank())
+                .filter(name -> name != null && !name.isBlank() && !isGenericProfileName(name))
+                .or(() -> findUserAccountByIdentifier(cleanId).map(UserAccountEntity::getName))
+                .filter(name -> name != null && !name.isBlank() && !isGenericProfileName(name))
                 .or(() -> networkProfileRepository.findById(cleanId).map(NetworkProfileEntity::getName))
                 .filter(name -> name != null && !name.isBlank())
                 .or(() -> {
@@ -796,6 +811,35 @@ public class ConnectionService {
         if (parts.length == 1)
             return parts[0].substring(0, Math.min(2, parts[0].length())).toUpperCase();
         return ("" + parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+    }
+
+    private Optional<UserAccountEntity> findUserAccountByIdentifier(String identifier) {
+        if (identifier == null || identifier.isBlank()) {
+            return Optional.empty();
+        }
+
+        String cleanId = identifier.trim();
+        Optional<UserAccountEntity> account = userAccountRepository.findByPublicUserId(cleanId)
+                .or(() -> userAccountRepository.findByEmail(cleanId));
+        if (account.isPresent()) {
+            return account;
+        }
+
+        try {
+            return userAccountRepository.findById(Long.parseLong(cleanId));
+        } catch (NumberFormatException ignored) {
+            return Optional.empty();
+        }
+    }
+
+    private boolean isGenericProfileName(String name) {
+        if (name == null || name.isBlank()) {
+            return true;
+        }
+        String normalizedName = name.trim().toLowerCase(Locale.ROOT);
+        return "truehunt member".equals(normalizedName)
+                || "cinema professional".equals(normalizedName)
+                || "member".equals(normalizedName);
     }
 
     @Transactional

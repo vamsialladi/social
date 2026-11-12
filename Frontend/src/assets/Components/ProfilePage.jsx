@@ -5,6 +5,7 @@ import api from '../../api'
 import { useAuth } from '../../context/AuthContext'
 import OpportunitiesPage from './OpportunitiesPage.jsx'
 import { EXPERIENCE_OPTIONS, REGISTRATION_CRAFTS, SUB_CRAFTS_BY_PRIMARY_CRAFT } from '../../services/mockData'
+import ProfileBanner from './ProfileBanner.jsx'
 
 export const emptyProfileDetails = {
   userId: '',
@@ -1905,21 +1906,7 @@ function ProfilePage({
     <div className="profile-page-content">
         <section className="artist-profile" id="artist-profile" aria-labelledby="preview-title">
           <div className="artist-cover has-default-banner">
-            <video
-              className="artist-cover-video"
-              autoPlay
-              muted
-              loop
-              playsInline
-              preload="metadata"
-              aria-hidden="true"
-            >
-              <source src="/assets/profile-banner.mp4" type="video/mp4" />
-            </video>
-            <div className="artist-cover-brand" aria-label="TrueHunt">
-              <img className="artist-cover-emblem" src="/assets/profile-banner-emblem.png" alt="" aria-hidden="true" />
-              <span className="artist-cover-wordmark">TrueHunt</span>
-            </div>
+            <ProfileBanner variant="profile" />
           </div>
           <div className="artist-identity">
             <div className="profile-avatar-column">

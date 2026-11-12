@@ -3,20 +3,28 @@ import { api as socialApi } from '../../api'
 import { api as directoryApi } from '../../services/api'
 import {
   Activity,
+  Check,
   FileText,
   LayoutDashboard,
   LogOut,
   Search,
   ShieldCheck,
+  Trash2,
   UsersRound,
+  X,
 } from 'lucide-react'
 import './AdminPage.css'
 
 const adminSections = [
   { id: 'overview', label: 'Overview', Icon: LayoutDashboard },
+  { id: 'investors', label: 'Investor requests', Icon: ShieldCheck },
   { id: 'members', label: 'Members', Icon: UsersRound },
   { id: 'posts', label: 'Posts', Icon: FileText },
 ]
+
+const demoAdminCredentials = import.meta.env.DEV
+  ? { email: 'truehunt@gmail.com', password: 'truehunt@2026' }
+  : null
 
 function getDisplayName(profile) {
   return String(profile?.name || profile?.authorName || 'Unnamed member')
@@ -41,16 +49,21 @@ function formatDate(value) {
 
 export default function AdminPage() {
   const [adminUser, setAdminUser] = useState(null)
-  const [email, setEmail] = useState('truehunt@gmail.com')
-  const [password, setPassword] = useState('truehunt@2026')
+  const [email, setEmail] = useState(demoAdminCredentials?.email || '')
+  const [password, setPassword] = useState(demoAdminCredentials?.password || '')
   const [loginError, setLoginError] = useState('')
   const [isSigningIn, setIsSigningIn] = useState(false)
   const [activeSection, setActiveSection] = useState('overview')
   const [profiles, setProfiles] = useState([])
   const [posts, setPosts] = useState([])
+  const [investorRequests, setInvestorRequests] = useState([])
   const [search, setSearch] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [loadError, setLoadError] = useState('')
+  const [actionError, setActionError] = useState('')
+  const [deletingAccountId, setDeletingAccountId] = useState(null)
+  const [deletingPostId, setDeletingPostId] = useState(null)
+  const [reviewingInvestorRequestId, setReviewingInvestorRequestId] = useState(null)
 
   useEffect(() => {
     if (!adminUser) return undefined
@@ -60,16 +73,18 @@ export default function AdminPage() {
       setIsLoading(true)
       setLoadError('')
       try {
-        const [profileData, postData] = await Promise.all([
-          socialApi.getProfileDirectory(),
+        const [accountData, postData, investorRequestData] = await Promise.all([
+          socialApi.getAdminAccounts(),
           socialApi.getPosts(),
+          socialApi.getAdminInvestorRequests(),
         ])
-        if (!Array.isArray(profileData) || !Array.isArray(postData)) {
+        if (!Array.isArray(accountData) || !Array.isArray(postData) || !Array.isArray(investorRequestData)) {
           throw new Error('The admin dashboard received an invalid response.')
         }
         if (isCurrent) {
-          setProfiles(profileData)
+          setProfiles(accountData)
           setPosts(postData)
+          setInvestorRequests(investorRequestData)
         }
       } catch (error) {
         console.error('Could not load admin dashboard data:', error)
@@ -84,6 +99,67 @@ export default function AdminPage() {
       isCurrent = false
     }
   }, [adminUser])
+
+  async function handleDeleteAccount(account) {
+    if (!account?.id || !account.email) {
+      setActionError('This account is missing the information required for deletion.')
+      return
+    }
+    if (account.email.toLowerCase() === String(adminUser?.email || '').toLowerCase()) return
+    if (!window.confirm(`Permanently delete ${account.name || account.email}'s account, profile, and posts?`)) return
+
+    setActionError('')
+    setDeletingAccountId(account.id)
+    try {
+      await socialApi.deleteAdminAccount(account.id)
+      setProfiles((current) => current.filter((entry) => entry.id !== account.id))
+    } catch (error) {
+      console.error('Could not delete member account:', error)
+      setActionError(error.message || 'Could not delete this account. Please try again.')
+    } finally {
+      setDeletingAccountId(null)
+    }
+  }
+
+  async function handleDeletePost(post) {
+    if (post?.id == null) {
+      setActionError('This post is missing the information required for deletion.')
+      return
+    }
+    if (!window.confirm('Permanently delete this post?')) return
+
+    setActionError('')
+    setDeletingPostId(post.id)
+    try {
+      await socialApi.deleteAdminPost(post.id)
+      setPosts((current) => current.filter((entry) => String(entry.id) !== String(post.id)))
+    } catch (error) {
+      console.error('Could not delete post:', error)
+      setActionError(error.message || 'Could not delete this post. Please try again.')
+    } finally {
+      setDeletingPostId(null)
+    }
+  }
+
+  async function handleInvestorRequestReview(request, decision) {
+    if (request?.id == null || reviewingInvestorRequestId != null) return
+
+    setActionError('')
+    setReviewingInvestorRequestId(request.id)
+    try {
+      const updatedRequest = decision === 'approve'
+        ? await socialApi.approveAdminInvestorRequest(request.id)
+        : await socialApi.rejectAdminInvestorRequest(request.id)
+      setInvestorRequests((current) => current.map((entry) => (
+        String(entry.id) === String(updatedRequest.id) ? updatedRequest : entry
+      )))
+    } catch (error) {
+      console.error(`Could not ${decision} investor access request:`, error)
+      setActionError(error.message || `Could not ${decision} this investor access request. Please try again.`)
+    } finally {
+      setReviewingInvestorRequestId(null)
+    }
+  }
 
   const filteredProfiles = useMemo(() => {
     const query = search.trim().toLowerCase()
@@ -105,6 +181,21 @@ export default function AdminPage() {
       || String(post.authorName || '').toLowerCase().includes(query)
     ))
   }, [posts, search])
+
+  const filteredInvestorRequests = useMemo(() => {
+    const query = search.trim().toLowerCase()
+    if (!query) return investorRequests
+    return investorRequests.filter((request) => [
+      request.name,
+      request.userId,
+      request.email,
+      request.mobileNumber,
+      request.budget,
+      request.role,
+      request.description,
+      request.status,
+    ].some((value) => String(value || '').toLowerCase().includes(query)))
+  }, [investorRequests, search])
 
   async function handleSignIn(event) {
     event.preventDefault()
@@ -175,6 +266,13 @@ export default function AdminPage() {
               value={password}
               onChange={(event) => setPassword(event.target.value)}
             />
+            {demoAdminCredentials && (
+              <div className="admin-demo-credentials">
+                <strong>Demo credentials (development only)</strong>
+                <span>Email: {demoAdminCredentials.email}</span>
+                <span>Password: {demoAdminCredentials.password}</span>
+              </div>
+            )}
             {loginError && <p className="admin-error" role="alert">{loginError}</p>}
             <button type="submit" disabled={isSigningIn}>
               {isSigningIn ? 'Signing in…' : 'Sign in'}
@@ -246,6 +344,7 @@ export default function AdminPage() {
               <button type="button" onClick={() => setAdminUser({ ...adminUser })}>Retry</button>
             </div>
           )}
+          {actionError && <p className="admin-error admin-action-error" role="alert">{actionError}</p>}
           {isLoading && <p className="admin-loading" role="status">Loading platform data…</p>}
 
           {activeSection === 'overview' && (
@@ -255,12 +354,12 @@ export default function AdminPage() {
                   <h2>Social platform overview</h2>
                   <p>Review member profiles and recent community posts.</p>
                 </div>
-                <span><Activity size={17} aria-hidden="true" /> Read-only view</span>
+                <span><Activity size={17} aria-hidden="true" /> Management enabled</span>
               </div>
               <div className="admin-stats-grid">
                 <article className="admin-stat-card">
                   <span className="admin-stat-icon is-violet"><UsersRound size={19} aria-hidden="true" /></span>
-                  <p>Total members</p><strong>{profiles.length}</strong><small>Profiles in the directory</small>
+                  <p>Total members</p><strong>{profiles.length}</strong><small>Registered accounts</small>
                 </article>
                 <article className="admin-stat-card">
                   <span className="admin-stat-icon is-coral"><FileText size={19} aria-hidden="true" /></span>
@@ -269,6 +368,12 @@ export default function AdminPage() {
                 <article className="admin-stat-card">
                   <span className="admin-stat-icon is-green"><Activity size={19} aria-hidden="true" /></span>
                   <p>Account status</p><strong className="admin-status-value">Active</strong><small>Signed in as an administrator</small>
+                </article>
+                <article className="admin-stat-card">
+                  <span className="admin-stat-icon is-violet"><ShieldCheck size={19} aria-hidden="true" /></span>
+                  <p>Pending investor requests</p>
+                  <strong>{investorRequests.filter((request) => request.status === 'PENDING').length}</strong>
+                  <small>Waiting for review</small>
                 </article>
               </div>
               <div className="admin-content-grid">
@@ -312,7 +417,7 @@ export default function AdminPage() {
           {activeSection === 'members' && (
             <section className="admin-panel admin-directory-panel">
               <header className="admin-panel-header">
-                <div><h2>Member directory</h2><p>{filteredProfiles.length} profiles</p></div>
+                <div><h2>Member accounts</h2><p>{filteredProfiles.length} accounts</p></div>
                 <label className="admin-search">
                   <Search size={16} aria-hidden="true" />
                   <input aria-label="Search members" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search members" />
@@ -320,22 +425,97 @@ export default function AdminPage() {
               </header>
               <div className="admin-table-wrap">
                 <table className="admin-table">
-                  <thead><tr><th>Member</th><th>Email</th><th>Craft / headline</th><th>Status</th></tr></thead>
+                  <thead><tr><th>Member</th><th>Email</th><th>Craft / headline</th><th>Role</th><th>Actions</th></tr></thead>
                   <tbody>
                     {filteredProfiles.map((profile, index) => {
                       const name = getDisplayName(profile)
+                      const isCurrentAdmin = String(profile.email || '').toLowerCase()
+                        === String(adminUser.email || '').toLowerCase()
                       return (
-                        <tr key={profile.userId || profile.id || profile.email || `${name}-${index}`}>
+                        <tr key={profile.id || profile.userId || profile.email || `${name}-${index}`}>
                           <td><span className="admin-table-person"><span className="admin-avatar">{getInitials(name)}</span><strong>{name}</strong></span></td>
                           <td>{profile.email || '—'}</td>
-                          <td>{profile.headline || profile.primaryCraft || profile.role || '—'}</td>
-                          <td><span className="admin-pill">{profile.status || profile.accountStatus || 'Member'}</span></td>
+                          <td>{profile.primaryCraft || profile.role || '—'}</td>
+                          <td><span className="admin-pill">{profile.role || 'Member'}</span></td>
+                          <td>
+                            {isCurrentAdmin ? <span className="admin-current-account">Current admin</span> : (
+                              <button
+                                type="button"
+                                className="admin-delete-button"
+                                onClick={() => handleDeleteAccount(profile)}
+                                disabled={deletingAccountId === profile.id}
+                                aria-label={`Delete ${name}'s account`}
+                              >
+                                <Trash2 size={14} aria-hidden="true" />
+                                {deletingAccountId === profile.id ? 'Deleting…' : 'Delete'}
+                              </button>
+                            )}
+                          </td>
                         </tr>
                       )
                     })}
                   </tbody>
                 </table>
                 {!filteredProfiles.length && <p className="admin-empty">No matching members.</p>}
+              </div>
+            </section>
+          )}
+
+          {activeSection === 'investors' && (
+            <section className="admin-panel admin-directory-panel">
+              <header className="admin-panel-header">
+                <div><h2>Investor access requests</h2><p>{filteredInvestorRequests.length} requests</p></div>
+                <label className="admin-search">
+                  <Search size={16} aria-hidden="true" />
+                  <input aria-label="Search investor requests" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search requests" />
+                </label>
+              </header>
+              <div className="admin-table-wrap">
+                <table className="admin-table">
+                  <thead><tr><th>Applicant</th><th>Role</th><th>Description</th><th>User ID</th><th>Mobile</th><th>Budget</th><th>Submitted</th><th>Status / actions</th></tr></thead>
+                  <tbody>
+                    {filteredInvestorRequests.map((request) => (
+                      <tr key={request.id}>
+                        <td>
+                          <strong>{request.name || 'Unnamed applicant'}</strong>
+                          <br />
+                          <small>{request.email || '—'}</small>
+                        </td>
+                        <td>{request.role || '—'}</td>
+                        <td>{request.description || '—'}</td>
+                        <td>{request.userId || '—'}</td>
+                        <td>{request.mobileNumber || '—'}</td>
+                        <td>{request.budget || '—'}</td>
+                        <td>{formatDate(request.createdAt)}</td>
+                        <td>
+                          {request.status === 'PENDING' ? (
+                            <span className="admin-investor-actions">
+                              <button
+                                type="button"
+                                className="admin-investor-review-button is-approve"
+                                onClick={() => handleInvestorRequestReview(request, 'approve')}
+                                disabled={reviewingInvestorRequestId != null}
+                              >
+                                <Check size={14} aria-hidden="true" />
+                                {reviewingInvestorRequestId === request.id ? 'Saving…' : 'Approve'}
+                              </button>
+                              <button
+                                type="button"
+                                className="admin-investor-review-button is-reject"
+                                onClick={() => handleInvestorRequestReview(request, 'reject')}
+                                disabled={reviewingInvestorRequestId != null}
+                              >
+                                <X size={14} aria-hidden="true" />
+                                Reject
+                              </button>
+                            </span>
+                          ) : <span className="admin-pill">{request.status}</span>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {!filteredInvestorRequests.length && <p className="admin-empty">No investor access requests found.</p>}
               </div>
             </section>
           )}
@@ -352,7 +532,19 @@ export default function AdminPage() {
               <div className="admin-post-list admin-all-posts">
                 {filteredPosts.map((post, index) => (
                   <article className="admin-post-row" key={post.id || `${post.authorName}-${index}`}>
-                    <strong>{post.authorName || 'Community member'}</strong>
+                    <div className="admin-post-row-heading">
+                      <strong>{post.authorName || 'Community member'}</strong>
+                      <button
+                        type="button"
+                        className="admin-delete-button"
+                        onClick={() => handleDeletePost(post)}
+                        disabled={deletingPostId === post.id}
+                        aria-label={`Delete post by ${post.authorName || 'community member'}`}
+                      >
+                        <Trash2 size={14} aria-hidden="true" />
+                        {deletingPostId === post.id ? 'Deleting…' : 'Delete'}
+                      </button>
+                    </div>
                     <p>{getPostText(post)}</p>
                     <small>{formatDate(post.createdAt || post.timestamp || post.date)}</small>
                   </article>
@@ -361,7 +553,7 @@ export default function AdminPage() {
               </div>
             </section>
           )}
-          <p className="admin-footer-note">This dashboard is read-only. User and post management actions require administrator endpoints on the server.</p>
+          <p className="admin-footer-note">Account and post deletions are permanent. Investor access requests require administrator review.</p>
         </div>
       </section>
     </main>

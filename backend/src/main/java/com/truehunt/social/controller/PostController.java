@@ -3,9 +3,11 @@ package com.truehunt.social.controller;
 import com.truehunt.social.dto.ApiResponse;
 import com.truehunt.social.dto.CommentRequest;
 import com.truehunt.social.dto.CreatePostRequest;
+import com.truehunt.social.service.InvestorAccessService;
 import com.truehunt.social.service.PostService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -16,9 +18,11 @@ import java.util.Map;
 public class PostController {
 
     private final PostService postService;
+    private final InvestorAccessService investorAccessService;
 
-    public PostController(PostService postService) {
+    public PostController(PostService postService, InvestorAccessService investorAccessService) {
         this.postService = postService;
+        this.investorAccessService = investorAccessService;
     }
 
     @GetMapping("/posts")
@@ -62,12 +66,19 @@ public class PostController {
     }
 
     @DeleteMapping("/posts/{id}")
-    public ResponseEntity<ApiResponse<Map<String, String>>> deletePost(
+    @Transactional
+    public ResponseEntity<ApiResponse<Map<String, Object>>> deletePost(
             @PathVariable String id,
             @RequestHeader(value = "X-User-Email", required = false) String userEmail
     ) {
         postService.deletePost(id, userEmail);
-        return ResponseEntity.ok(ApiResponse.success(Map.of("message", "Post deleted successfully", "id", id)));
+        boolean investorProfileDeleted = investorAccessService
+                .deletePublishedListingForDeletedPost(id, userEmail);
+        return ResponseEntity.ok(ApiResponse.success(Map.of(
+                "message", "Post deleted successfully",
+                "id", id,
+                "investorProfileDeleted", investorProfileDeleted
+        )));
     }
 
     @PutMapping("/posts/{id}")
@@ -110,7 +121,26 @@ public class PostController {
     }
 
     @PostMapping("/posts/{id}/apply")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> applyToOpportunity(@PathVariable String id) {
-        return ResponseEntity.ok(ApiResponse.success(postService.applyToOpportunity(id)));
+    public ResponseEntity<ApiResponse<Map<String, Object>>> applyToOpportunity(
+            @PathVariable String id,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId
+    ) {
+        String applicantIdentity = (userEmail != null && !userEmail.isBlank()) ? userEmail : userId;
+        return ResponseEntity.ok(ApiResponse.success(
+                postService.applyToOpportunity(id, applicantIdentity)
+        ));
+    }
+
+    @DeleteMapping("/posts/{id}/apply")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> cancelOpportunityApplication(
+            @PathVariable String id,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId
+    ) {
+        String applicantIdentity = (userEmail != null && !userEmail.isBlank()) ? userEmail : userId;
+        return ResponseEntity.ok(ApiResponse.success(
+                postService.cancelOpportunityApplication(id, applicantIdentity)
+        ));
     }
 }

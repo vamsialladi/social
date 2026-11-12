@@ -2,9 +2,11 @@ package com.truehunt.social.service;
 
 import com.truehunt.social.dto.CreatePostRequest;
 import com.truehunt.social.exception.BadRequestException;
+import com.truehunt.social.model.OpportunityApplicationEntity;
 import com.truehunt.social.model.PostEntity;
 import com.truehunt.social.model.ProfileEntity;
 import com.truehunt.social.repository.NotificationRepository;
+import com.truehunt.social.repository.OpportunityApplicationRepository;
 import com.truehunt.social.repository.PostRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -25,6 +27,7 @@ import static org.mockito.Mockito.never;
 class PostServiceOpportunityModerationTest {
 
     private PostRepository postRepository;
+    private OpportunityApplicationRepository opportunityApplicationRepository;
     private ProfileService profileService;
     private PostService postService;
     private ProfileEntity ownerProfile;
@@ -32,9 +35,11 @@ class PostServiceOpportunityModerationTest {
     @BeforeEach
     void setUp() {
         postRepository = mock(PostRepository.class);
+        opportunityApplicationRepository = mock(OpportunityApplicationRepository.class);
         profileService = mock(ProfileService.class);
         postService = new PostService(
                 postRepository,
+                opportunityApplicationRepository,
                 mock(NotificationRepository.class),
                 profileService
         );
@@ -106,6 +111,60 @@ class PostServiceOpportunityModerationTest {
                 BadRequestException.class,
                 () -> postService.createPost(request, "owner@example.com")
         );
+    }
+
+    @Test
+    void appliesOncePerApplicantAndReturnsPersonalAppliedState() {
+        PostEntity opportunity = new PostEntity();
+        opportunity.setId(42L);
+        opportunity.setType("opportunity");
+        opportunity.setApplicationsCount(3);
+        when(postRepository.findById(42L)).thenReturn(Optional.of(opportunity));
+        when(opportunityApplicationRepository.existsByPostIdAndApplicantIdentity(42L, "applicant@example.com"))
+                .thenReturn(false);
+        when(opportunityApplicationRepository.save(any(OpportunityApplicationEntity.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        Map<String, Object> response = postService.applyToOpportunity("42", " APPLICANT@example.com ");
+
+        assertEquals(true, response.get("applied"));
+        assertEquals(4, response.get("applicationsCount"));
+        verify(opportunityApplicationRepository).save(any(OpportunityApplicationEntity.class));
+    }
+
+    @Test
+    void cancelsOnlyTheMatchingApplicantsApplication() {
+        PostEntity opportunity = new PostEntity();
+        opportunity.setId(42L);
+        opportunity.setType("opportunity");
+        opportunity.setApplicationsCount(3);
+        OpportunityApplicationEntity application =
+                new OpportunityApplicationEntity(42L, "applicant@example.com");
+        when(postRepository.findById(42L)).thenReturn(Optional.of(opportunity));
+        when(opportunityApplicationRepository.findByPostIdAndApplicantIdentity(42L, "applicant@example.com"))
+                .thenReturn(Optional.of(application));
+
+        Map<String, Object> response = postService.cancelOpportunityApplication("42", "APPLICANT@example.com");
+
+        assertEquals(false, response.get("applied"));
+        assertEquals(2, response.get("applicationsCount"));
+        verify(opportunityApplicationRepository).delete(application);
+    }
+
+    @Test
+    void opportunityDtoUsesTheCurrentApplicantsApplicationRecord() {
+        PostEntity opportunity = new PostEntity();
+        opportunity.setId(42L);
+        opportunity.setType("opportunity");
+        opportunity.setApplied(true);
+        when(postRepository.findAllByTypeIgnoreCaseOrderByCreatedAtDesc("opportunity"))
+                .thenReturn(List.of(opportunity));
+        when(opportunityApplicationRepository.existsByPostIdAndApplicantIdentity(42L, "applicant@example.com"))
+                .thenReturn(false);
+
+        List<Map<String, Object>> opportunities = postService.getOpportunities("applicant@example.com");
+
+        assertEquals(false, opportunities.get(0).get("applied"));
     }
 
     @Test

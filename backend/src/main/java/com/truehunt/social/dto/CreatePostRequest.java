@@ -12,6 +12,7 @@ public class CreatePostRequest {
     private String mediaType;
     private Map<String, Object> media;
     private Map<String, Object> opportunityDetails;
+    private Long investorProfileId;
 
     public CreatePostRequest() {}
 
@@ -69,6 +70,14 @@ public class CreatePostRequest {
 
     public void setOpportunityDetails(Map<String, Object> opportunityDetails) {
         this.opportunityDetails = opportunityDetails;
+    }
+
+    public Long getInvestorProfileId() {
+        return investorProfileId;
+    }
+
+    public void setInvestorProfileId(Long investorProfileId) {
+        this.investorProfileId = investorProfileId;
     }
 }
 

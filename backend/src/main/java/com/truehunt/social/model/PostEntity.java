@@ -20,7 +20,8 @@ public class PostEntity {
     private String authorId;
     private String authorName;
 
-    @Column(length = 2048)
+    @Lob
+    @Column(name = "author_avatar", columnDefinition = "CLOB")
     private String authorAvatar;
 
     private String authorHeadline;
@@ -44,6 +45,8 @@ public class PostEntity {
     @Lob
     @Column(columnDefinition = "TEXT")
     private String opportunityDetailsJson;
+
+    private Long investorProfileId;
 
     private int likesCount = 0;
     private int commentsCount = 0;
@@ -77,6 +80,9 @@ public class PostEntity {
 
     public String getAuthorHeadline() { return authorHeadline; }
     public void setAuthorHeadline(String authorHeadline) { this.authorHeadline = authorHeadline; }
+
+    public Long getInvestorProfileId() { return investorProfileId; }
+    public void setInvestorProfileId(Long investorProfileId) { this.investorProfileId = investorProfileId; }
 
     public String getType() { return type; }
     public void setType(String type) { this.type = type; }
@@ -284,6 +290,7 @@ public class PostEntity {
         dto.put("mediaUrl", mediaUrl != null ? mediaUrl : (mediaObj != null ? mediaObj.get("url") : null));
         dto.put("mediaType", mediaType != null ? mediaType : (mediaObj != null ? mediaObj.get("type") : null));
         dto.put("opportunityDetails", getOpportunityDetails());
+        dto.put("investorProfileId", investorProfileId);
         dto.put("likesCount", likesCount);
         dto.put("commentsCount", commentsCount);
         dto.put("applicationsCount", applicationsCount);

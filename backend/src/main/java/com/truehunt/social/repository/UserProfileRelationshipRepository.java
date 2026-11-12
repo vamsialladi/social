@@ -4,6 +4,7 @@ import com.truehunt.social.model.UserProfileRelationshipEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -32,5 +33,10 @@ public interface UserProfileRelationshipRepository extends JpaRepository<UserPro
     List<UserProfileRelationshipEntity> findAllByOwnerUserIdOrTargetProfileId(
             String ownerUserId,
             String targetProfileId
+    );
+
+    void deleteAllByOwnerUserIdInOrTargetProfileIdIn(
+            Collection<String> ownerUserIds,
+            Collection<String> targetProfileIds
     );
 }

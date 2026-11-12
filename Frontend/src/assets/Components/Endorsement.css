@@ -41,8 +41,10 @@
 }
 
 .notifications-profile-cover {
+  position: relative;
+  overflow: hidden;
   height: 56px;
-  background: linear-gradient(110deg, #94adbf 0 42%, #c3d2dc 42% 100%);
+  background: #101927;
 }
 
 .notifications-profile-content {

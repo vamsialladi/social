@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import api from '../../api'
 import { api as directoryApi } from '../../services/api'
+import ProfileBanner from './ProfileBanner.jsx'
 import {
   ArrowLeft,
   CalendarDays,
@@ -45,7 +46,7 @@ function getNormalizedProfileName(profile) {
   return String(profile.name || '').trim().replace(/\s+/g, ' ').toLowerCase()
 }
 
-function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], isActive = true }) {
+function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], isActive = true, isAdmin = false }) {
   const [activeTab, setActiveTab] = useState('grow')
   const [activeSection, setActiveSection] = useState('grow')
   const [profiles, setProfiles] = useState([])
@@ -84,6 +85,16 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
   }
 
   async function loadNetworkData() {
+    if (isAdmin) {
+      setProfiles([])
+      setConnectedProfiles([])
+      setFollowedProfiles([])
+      setPendingProfiles([])
+      setInvitations([])
+      setLoadingProfiles(false)
+      return
+    }
+
     const normalizedCurrentUserIdentifiers = new Set(JSON.parse(currentUserIdentityKey || '[]'))
     try {
       const [registeredProfiles, talentProfiles, serverConnected, suggestionsData, invitationsData] = await Promise.all([
@@ -112,18 +123,19 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
         const normalizedName = getNormalizedProfileName(profile)
         const isGenericName = ['truehunt member', 'cinema professional', 'member', ''].includes(normalizedName)
         const existingIndex = directory.findIndex((existingProfile) => {
-          const hasMatchingKey = getProfileIdentityKeys(existingProfile).some((key) => identityKeys.has(key))
+          const existingIdentityKeys = getProfileIdentityKeys(existingProfile)
+          const hasMatchingKey = existingIdentityKeys.some((key) => identityKeys.has(key))
           if (hasMatchingKey) return true
-          if (!isGenericName) {
-            return getNormalizedProfileName(existingProfile) === normalizedName
-          }
-          return false
+          if (identityKeys.size > 0 && existingIdentityKeys.length > 0) return false
+          return !isGenericName && getNormalizedProfileName(existingProfile) === normalizedName
         })
 
         if (existingIndex === -1) {
           directory.push(profile)
         } else {
           const existingProfile = directory[existingIndex]
+          const existingNameIsGeneric = ['truehunt member', 'cinema professional', 'member', '']
+            .includes(getNormalizedProfileName(existingProfile))
           const profileImageUrl = profile.profileImageUrl
             || profile.avatar
             || existingProfile.profileImageUrl
@@ -132,6 +144,7 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
           directory[existingIndex] = {
             ...existingProfile,
             ...profile,
+            name: isGenericName && !existingNameIsGeneric ? existingProfile.name : profile.name,
             profileImageUrl,
             avatar: profileImageUrl,
           }
@@ -264,10 +277,21 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
       window.removeEventListener('focus', handleFocus)
       document.removeEventListener('visibilitychange', handleVisibility)
     }
-  }, [currentUserIdentityKey, isActive])
+  }, [currentUserIdentityKey, isActive, isAdmin])
+
+  useEffect(() => {
+    function showNetworkHome() {
+      setActiveTab('grow')
+      setActiveSection('grow')
+    }
+
+    window.addEventListener('truehunt-network-navigate', showNetworkHome)
+    return () => window.removeEventListener('truehunt-network-navigate', showNetworkHome)
+  }, [])
 
   useEffect(() => {
     function handleConnectionChanged(event) {
+      if (isAdmin) return
       loadNetworkData()
       const { connected, pending, profile, senderProfile, receiverProfile, senderId, receiverId } = event.detail || {}
       const targetProfile = profile || senderProfile || receiverProfile
@@ -332,6 +356,7 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
     }
 
     function handleFollowChanged(event) {
+      if (isAdmin) return
       const { following, profile } = event.detail || {}
       const profileId = String(
         profile?.userId || profile?.id || profile?.user_id || profile?._id || '',
@@ -380,7 +405,7 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
       window.removeEventListener('truehunt-connection-changed', handleConnectionChanged)
       window.removeEventListener('truehunt-follow-changed', handleFollowChanged)
     }
-  }, [])
+  }, [isAdmin])
 
   async function handleAcceptInvitation(profileId, invitation) {
     if (processingInvitationId) return
@@ -394,9 +419,13 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
         connected: true,
         pending: false,
       })
-      const profileData = invitation?.profile
-        || profiles.find((item) => getProfileKey(item) === profileKey)
-        || { id: profileId, userId: profileId, name: invitation?.name || 'TrueHunt Member' }
+      const profileData = profiles.find((item) => getProfileKey(item) === profileKey)
+        || {
+          ...(invitation?.profile || {}),
+          id: invitation?.profileId || invitation?.profile?.id || profileId,
+          userId: invitation?.profile?.userId || invitation?.profileId || profileId,
+          name: invitation?.name || invitation?.profile?.name || 'TrueHunt Member',
+        }
 
       setProfiles((current) => {
         const exists = current.some((item) => getProfileKey(item) === profileKey)
@@ -431,6 +460,9 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
       await api.rejectConnectionRequest(profileId)
       setInvitations((current) => current.filter((inv) => getProfileKey(inv.profileId) !== profileKey))
       setPendingProfiles((current) => current.filter((id) => id !== profileKey))
+      window.dispatchEvent(new CustomEvent('truehunt-connection-changed', {
+        detail: { connected: false, pending: false, profileId },
+      }))
     } catch (err) {
       console.error('Reject invitation error:', err)
       setConnectionError('Could not ignore this invitation. Please try again.')
@@ -560,15 +592,7 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
             <img src={profile.coverImageUrl} alt="" aria-hidden="true" />
           )}
           {!profile.coverImageUrl && (
-            <>
-              <video autoPlay muted loop playsInline preload="metadata" aria-hidden="true">
-                <source src="/assets/profile-banner.mp4" type="video/mp4" />
-              </video>
-              <span className="network-profile-cover-brand" aria-hidden="true">
-                <img src="/assets/profile-banner-emblem.png" alt="" />
-                <span>TrueHunt</span>
-              </span>
-            </>
+            <ProfileBanner variant="card" />
           )}
         </div>
         <div className="network-profile-avatar-wrap">
@@ -640,6 +664,18 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
           )}
         </div>
       </article>
+    )
+  }
+
+  if (isAdmin) {
+    return (
+      <main className="network-page" id="network" aria-label="My network">
+        <section className="network-catch-up">
+          <div className="network-catch-up-icon"><UsersRound size={24} aria-hidden="true" /></div>
+          <h2>Network is unavailable for admin accounts</h2>
+          <p>Administrator profiles do not display member connections or suggestions.</p>
+        </section>
+      </main>
     )
   }
 

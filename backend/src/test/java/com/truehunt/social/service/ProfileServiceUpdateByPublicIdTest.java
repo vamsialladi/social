@@ -19,6 +19,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class ProfileServiceUpdateByPublicIdTest {
@@ -28,12 +30,13 @@ class ProfileServiceUpdateByPublicIdTest {
     private ProfileEntity profile;
     private UserAccountEntity account;
     private ProfileRepository profileRepository;
+    private UserAccountRepository userAccountRepository;
     private ProfileService profileService;
 
     @BeforeEach
     void setUp() {
         profileRepository = mock(ProfileRepository.class);
-        UserAccountRepository userAccountRepository = mock(UserAccountRepository.class);
+        userAccountRepository = mock(UserAccountRepository.class);
         UserProfileRelationshipRepository relationshipRepository = mock(UserProfileRelationshipRepository.class);
         profile = new ProfileEntity();
         profile.setUserId(PUBLIC_ID);
@@ -88,5 +91,23 @@ class ProfileServiceUpdateByPublicIdTest {
 
         assertEquals(PUBLIC_ID, resolved.getUserId());
         assertEquals("alex@example.com", resolved.getEmail());
+    }
+
+    @Test
+    void doesNotPersistASocialProfileForAdminAccount() {
+        UserAccountEntity admin = new UserAccountEntity();
+        admin.setId(7L);
+        admin.setPublicUserId("THADMIN1");
+        admin.setEmail("admin@example.com");
+        admin.setName("Platform Admin");
+        admin.setRole("ADMIN");
+        when(userAccountRepository.findByEmail("admin@example.com")).thenReturn(Optional.of(admin));
+        when(profileRepository.findByUserId("admin@example.com")).thenReturn(Optional.empty());
+
+        ProfileEntity resolved = profileService.findCurrentProfile("admin@example.com");
+
+        assertEquals("THADMIN1", resolved.getUserId());
+        assertEquals("admin@example.com", resolved.getEmail());
+        verify(profileRepository, never()).save(any(ProfileEntity.class));
     }
 }

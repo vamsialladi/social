@@ -2,6 +2,7 @@ package com.truehunt.social.service;
 
 import com.truehunt.social.dto.AuthResponse;
 import com.truehunt.social.dto.RegisterRequest;
+import com.truehunt.social.exception.ConflictException;
 import com.truehunt.social.model.ProfileEntity;
 import com.truehunt.social.model.UserAccountEntity;
 import com.truehunt.social.repository.ProfileRepository;
@@ -15,8 +16,11 @@ import java.util.Optional;
 import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class AuthServicePublicUserIdTest {
@@ -65,6 +69,18 @@ class AuthServicePublicUserIdTest {
         AuthResponse response = authService.register(request);
 
         assertTrue(Pattern.matches("thscAM\\d{5}", response.getUserId()));
+    }
+
+    @Test
+    void doesNotAllowRegistrationToConvertAnAdminAccountIntoASocialAccount() {
+        UserAccountEntity admin = new UserAccountEntity();
+        admin.setEmail("alex@example.com");
+        admin.setRole("ADMIN");
+        when(userAccountRepository.findByEmail("alex@example.com")).thenReturn(Optional.of(admin));
+
+        assertThrows(ConflictException.class, () -> authService.register(registration("TALENT")));
+        verify(userAccountRepository, never()).save(any(UserAccountEntity.class));
+        verify(profileRepository, never()).save(any(ProfileEntity.class));
     }
 
     private RegisterRequest registration(String role) {

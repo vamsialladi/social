@@ -15,6 +15,7 @@ import ConnectionsPage from './ConnectionsPage'
 import Settings from './Settings'
 import { useAuth } from '../../context/AuthContext'
 import { websocketService } from '../../services/websocket'
+import { hasVisitedFilmMaker, markFilmMakerVisited } from '../../services/filmMakerAccess'
 
 function getProfileIdentityKeys(profile) {
   return [
@@ -301,6 +302,18 @@ function NavigationIcon({ name }) {
     endorsement: <path d="M21 19v1H3v-1l2-2v-6c0-3.1 2.03-5.83 5-6.71V4a2 2 0 0 1 2-2a2 2 0 0 1 2 2v.29c2.97.88 5 3.61 5 6.71v6zm-7 2a2 2 0 0 1-2 2a2 2 0 0 1-2-2" />,
     opportunities: <><rect x="3" y="7" width="18" height="13" rx="2" /><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 12h18M10 12v2h4v-2" /></>,
     business: <><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></>,
+    commercial: <>
+      <circle cx="9.5" cy="12" r="9.25" />
+      <circle cx="9.5" cy="12" r="8.2" />
+      <circle cx="9.5" cy="12" r="1.15" />
+      <circle cx="9.5" cy="6.5" r="2.4" />
+      <circle cx="14.8" cy="9.8" r="2.4" />
+      <circle cx="12.8" cy="16.7" r="2.4" />
+      <circle cx="6.1" cy="16.1" r="2.4" />
+      <circle cx="4.3" cy="10.1" r="2.4" />
+      <path d="M17.2 17.3c1.8-2.7 3.4-5.3 6.3-7.3v5.1c-2.6.1-4.8 1.8-7 3.8l-3.1 2.8" />
+      <path d="m18.7 15.1.9 3.2m2.1-5.3.4 3.4" />
+    </>,
   }
 
   return (
@@ -331,15 +344,21 @@ function ProfileAvatarPlaceholder() {
 function Navigation({
   activeNavigation,
   setActiveNavigation,
+  unreadMessageCount,
+  unreadEndorsementCount,
+  networkRequestCount,
   isProfileMenuOpen,
   setIsProfileMenuOpen,
   profilePreview,
   profileDetails,
   onCandidateSelected,
+  onOpenMessageInbox,
   onShowMyProfile,
   onShowMyPostsAndActivities,
   isBusinessExploreOpen,
   setIsBusinessExploreOpen,
+  filmMakerVisited,
+  onFilmMakerAccess,
 }) {
   const profileMenuRef = useRef(null)
   const businessMenuRef = useRef(null)
@@ -368,6 +387,9 @@ function Navigation({
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
 
   function selectNavigation(navigation) {
+    if (navigation === 'network') {
+      window.dispatchEvent(new Event('truehunt-network-navigate'))
+    }
     setActiveNavigation(navigation)
     setIsMobileMenuOpen(false)
     setIsProfileMenuOpen(false)
@@ -1156,30 +1178,58 @@ function Navigation({
           <a
             className={`linkedin-nav-item${activeNavigation === 'network' ? ' is-active' : ''}`}
             href="/social/network"
+            aria-label={networkRequestCount > 0
+              ? `My Network, ${networkRequestCount} incoming requests`
+              : 'My Network'}
             onClick={(event) => {
               event.preventDefault()
               selectNavigation('network')
             }}
           >
-            <NavigationIcon name="network" /><small>My Network</small>
+            <NavigationIcon name="network" />
+            {networkRequestCount > 0 && (
+              <span className="linkedin-message-badge" aria-hidden="true">
+                {networkRequestCount > 99 ? '99+' : networkRequestCount}
+              </span>
+            )}
+            <small>My Network</small>
           </a>
           <a
             className={`linkedin-nav-item${activeNavigation === 'messaging' ? ' is-active' : ''}`}
             href="/social/messaging"
+            aria-label={unreadMessageCount > 0
+              ? `Messaging, ${unreadMessageCount} unread conversations`
+              : 'Messaging'}
             onClick={(event) => {
               event.preventDefault()
               selectNavigation('messaging')
+              onOpenMessageInbox?.()
             }}
           >
-            <NavigationIcon name="messaging" /><small>Messaging</small>
+            <NavigationIcon name="messaging" />
+            {unreadMessageCount > 0 && (
+              <span className="linkedin-message-badge" aria-hidden="true">
+                {unreadMessageCount > 99 ? '99+' : unreadMessageCount}
+              </span>
+            )}
+            <small>Messaging</small>
           </a>
           <button
             className={`linkedin-nav-item${activeNavigation === 'endorsement' ? ' is-active' : ''}`}
             type="button"
             onClick={() => selectNavigation('endorsement')}
             aria-current={activeNavigation === 'endorsement' ? 'page' : undefined}
+            aria-label={unreadEndorsementCount > 0 && activeNavigation !== 'endorsement'
+              ? `Endorsement, ${unreadEndorsementCount} unread notifications`
+              : 'Endorsement'}
           >
-            <NavigationIcon name="endorsement" /><small>Endorsement</small>
+            <NavigationIcon name="endorsement" />
+            {activeNavigation !== 'endorsement' && unreadEndorsementCount > 0 && (
+              <span className="linkedin-message-badge" aria-hidden="true">
+                {unreadEndorsementCount > 99 ? '99+' : unreadEndorsementCount}
+              </span>
+            )}
+            <small>Endorsement</small>
           </button>
           <button
             className={`linkedin-nav-item${activeNavigation === 'opportunities' ? ' is-active' : ''}`}
@@ -1288,11 +1338,11 @@ function Navigation({
                 <div className="business-explore-dropdown-heading">Explore</div>
                 <Link
                   className="profile-dropdown-item business-explore-dropdown-link"
-                  to="/entertainments"
+                  to={filmMakerVisited ? '/protect-producer' : '/entertainments'}
                   role="menuitem"
-                  onClick={() => setIsBusinessExploreOpen(false)}
+                  onClick={onFilmMakerAccess}
                 >
-                  Are you a Film Maker <span aria-hidden="true">↗</span>
+                  {filmMakerVisited ? 'Manage Film' : 'Are you a Film Maker?'} <span aria-hidden="true">↗</span>
                 </Link>
                 <div className="profile-dropdown-divider" />
                 <Link
@@ -1301,7 +1351,7 @@ function Navigation({
                   role="menuitem"
                   onClick={() => setIsBusinessExploreOpen(false)}
                 >
-                  Invest and Earn <span aria-hidden="true">↗</span>
+                  Are you an Investor and Earner? <span aria-hidden="true">↗</span>
                 </Link>
                 <div className="profile-dropdown-divider" />
                 <a
@@ -1319,7 +1369,7 @@ function Navigation({
                   role="menuitem"
                   onClick={() => setIsBusinessExploreOpen(false)}
                 >
-                  advertisement <span aria-hidden="true">↗</span>
+                  Are you interested in advertisement? <span aria-hidden="true">↗</span>
                 </Link>
               </div>
             )}
@@ -1332,7 +1382,7 @@ function Navigation({
               setIsMobileMenuOpen(false)
             }}
           >
-            <NavigationIcon name="business" /><small>Commercial</small>
+            <NavigationIcon name="commercial" /><small>Commercial</small>
           </Link>
         </div>
       </div>
@@ -1350,8 +1400,13 @@ export default function SocialApp() {
       ? 'profile'
       : getNavigationFromLocation(location.pathname)
   ))
+  const [unreadMessageCount, setUnreadMessageCount] = useState(0)
+  const [messageInboxRequest, setMessageInboxRequest] = useState(0)
+  const [unreadEndorsementCount, setUnreadEndorsementCount] = useState(0)
+  const [networkRequestCount, setNetworkRequestCount] = useState(0)
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false)
   const [isBusinessExploreOpen, setIsBusinessExploreOpen] = useState(false)
+  const [filmMakerVisited, setFilmMakerVisited] = useState(() => hasVisitedFilmMaker(user?.email))
   const [viewingCandidateProfile, setViewingCandidateProfile] = useState(() => {
     const candidateProfile = location.state?.connectTalent
     if (!candidateProfile?.name) return null
@@ -1405,12 +1460,75 @@ export default function SocialApp() {
     const hash = navigationHashes[navigation]
     if (!hash) return
 
+    window.dispatchEvent(new CustomEvent('truehunt-social-navigation-changed'))
     const nextUrl = `/social/${hash}`
     if (window.location.hash !== `/${hash}`) {
       window.history.pushState({ navigation }, '', nextUrl)
     }
     setActiveNavigationState(navigation)
   }
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      return undefined
+    }
+
+    let isCurrent = true
+    async function refreshNavigationCounts() {
+      const results = await Promise.allSettled([
+        activeNavigation === 'endorsement' ? Promise.resolve(null) : api.getNotifications(),
+        api.getInvitations(),
+      ])
+      if (!isCurrent) return
+
+      const [notificationsResult, invitationsResult] = results
+      if (notificationsResult.status === 'fulfilled') {
+        const notifications = notificationsResult.value
+        if (Array.isArray(notifications)) {
+          setUnreadEndorsementCount(notifications.filter(
+            (notification) => !(notification.read ?? notification.isRead),
+          ).length)
+        }
+      } else {
+        console.warn('Could not refresh endorsement notification count:', notificationsResult.reason)
+      }
+
+      if (invitationsResult.status === 'fulfilled') {
+        setNetworkRequestCount(Array.isArray(invitationsResult.value) ? invitationsResult.value.length : 0)
+      } else {
+        console.warn('Could not refresh network request count:', invitationsResult.reason)
+      }
+    }
+
+    function refreshOnConnectionChange() {
+      refreshNavigationCounts()
+    }
+    function refreshWhenVisible() {
+      if (!document.hidden) refreshNavigationCounts()
+    }
+
+    refreshNavigationCounts()
+    const intervalId = window.setInterval(refreshNavigationCounts, 30_000)
+    window.addEventListener('truehunt-connection-changed', refreshOnConnectionChange)
+    window.addEventListener('focus', refreshWhenVisible)
+    document.addEventListener('visibilitychange', refreshWhenVisible)
+
+    return () => {
+      isCurrent = false
+      window.clearInterval(intervalId)
+      window.removeEventListener('truehunt-connection-changed', refreshOnConnectionChange)
+      window.removeEventListener('focus', refreshWhenVisible)
+      document.removeEventListener('visibilitychange', refreshWhenVisible)
+    }
+  }, [activeNavigation, isAuthenticated, user?.email, user?.id, user?.userId])
+
+  useEffect(() => {
+    if (!isAuthenticated || activeNavigation !== 'endorsement') return
+
+    api.markAllNotificationsAsRead().catch((error) => {
+      console.warn('Could not mark endorsement notifications as read:', error)
+    })
+  }, [activeNavigation, isAuthenticated])
 
   function showMyProfile() {
     setViewingCandidateProfile(null)
@@ -1635,13 +1753,25 @@ export default function SocialApp() {
       <Navigation
         activeNavigation={activeNavigation}
         setActiveNavigation={setActiveNavigation}
+        unreadMessageCount={unreadMessageCount}
+        unreadEndorsementCount={isAuthenticated ? unreadEndorsementCount : 0}
+        networkRequestCount={isAuthenticated ? networkRequestCount : 0}
         isProfileMenuOpen={isProfileMenuOpen}
         setIsProfileMenuOpen={setIsProfileMenuOpen}
         profilePreview={profilePreview}
         profileDetails={profileDetails}
         onCandidateSelected={showCandidateProfile}
+        onOpenMessageInbox={() => setMessageInboxRequest((current) => current + 1)}
         onShowMyProfile={showMyProfile}
         onShowMyPostsAndActivities={showMyPostsAndActivities}
+        filmMakerVisited={filmMakerVisited}
+        onFilmMakerAccess={() => {
+          if (!filmMakerVisited) {
+            markFilmMakerVisited(user?.email)
+            setFilmMakerVisited(true)
+          }
+          setIsBusinessExploreOpen(false)
+        }}
         isBusinessExploreOpen={isBusinessExploreOpen}
         setIsBusinessExploreOpen={setIsBusinessExploreOpen}
       />
@@ -1650,6 +1780,7 @@ export default function SocialApp() {
         profileDetails={profileDetails}
         profilePreview={profilePreview}
         currentUserId={profileDetails.userId || profileDetails.id || user?.userId || user?.id || user?.email || 'me'}
+        accountEmail={user?.email || ''}
         onOwnPostCreated={persistOwnPost}
         activeNavigation={activeNavigation}
         setActiveNavigation={setActiveNavigation}
@@ -1661,6 +1792,7 @@ export default function SocialApp() {
       <div hidden={activeNavigation !== 'network'}>
         <NetworkPage
           isActive={activeNavigation === 'network'}
+          isAdmin={String(user?.role || '').toUpperCase() === 'ADMIN'}
           currentUserIdentifiers={[
             user?.userId,
             user?.id,
@@ -1681,6 +1813,9 @@ export default function SocialApp() {
           conversationToOpen={location.state?.openConversation}
           openConversationRef={openConversationRef}
           onProfileSelect={showCandidateProfile}
+          onUnreadCountChange={setUnreadMessageCount}
+          isActive={activeNavigation === 'messaging'}
+          resetToInboxRequest={messageInboxRequest}
         />
       </div>
       <div hidden={activeNavigation !== 'endorsement'}>

@@ -5,9 +5,11 @@ import com.truehunt.social.exception.BadRequestException;
 import com.truehunt.social.exception.ResourceNotFoundException;
 import com.truehunt.social.exception.UnauthorizedException;
 import com.truehunt.social.model.NotificationEntity;
+import com.truehunt.social.model.OpportunityApplicationEntity;
 import com.truehunt.social.model.PostEntity;
 import com.truehunt.social.model.ProfileEntity;
 import com.truehunt.social.repository.NotificationRepository;
+import com.truehunt.social.repository.OpportunityApplicationRepository;
 import com.truehunt.social.repository.PostRepository;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -22,15 +24,18 @@ import java.util.stream.Collectors;
 public class PostService {
 
     private final PostRepository postRepository;
+    private final OpportunityApplicationRepository opportunityApplicationRepository;
     private final NotificationRepository notificationRepository;
     private final ProfileService profileService;
 
     public PostService(
             PostRepository postRepository,
+            OpportunityApplicationRepository opportunityApplicationRepository,
             NotificationRepository notificationRepository,
             ProfileService profileService
     ) {
         this.postRepository = postRepository;
+        this.opportunityApplicationRepository = opportunityApplicationRepository;
         this.notificationRepository = notificationRepository;
         this.profileService = profileService;
     }
@@ -41,7 +46,7 @@ public class PostService {
                 : postRepository.findAllByOrderByCreatedAtDesc();
 
         return list.stream()
-                .map(post -> post.toDto(userIdentity))
+                .map(post -> toUserAwareDto(post, userIdentity))
                 .collect(Collectors.toList());
     }
 
@@ -53,13 +58,13 @@ public class PostService {
             list = postRepository.findAllByAuthorIdOrderByCreatedAtDesc("me");
         }
         return list.stream()
-                .map(post -> post.toDto(userIdentity))
+                .map(post -> toUserAwareDto(post, userIdentity))
                 .collect(Collectors.toList());
     }
 
     public List<Map<String, Object>> getOpportunities(String userIdentity) {
         return postRepository.findAllByTypeIgnoreCaseOrderByCreatedAtDesc("opportunity").stream()
-                .map(post -> post.toDto(userIdentity))
+                .map(post -> toUserAwareDto(post, userIdentity))
                 .collect(Collectors.toList());
     }
 
@@ -71,7 +76,7 @@ public class PostService {
             throw new ResourceNotFoundException("Post", "id", id);
         }
         return postRepository.findById(numericId)
-                .map(post -> post.toDto(userIdentity))
+                .map(post -> toUserAwareDto(post, userIdentity))
                 .orElseThrow(() -> new ResourceNotFoundException("Post", "id", id));
     }
 
@@ -109,6 +114,7 @@ public class PostService {
             post.setMediaType(req.getMediaType());
         }
         post.setCreatedAt(LocalDateTime.now());
+        post.setInvestorProfileId(req.getInvestorProfileId());
 
         if (req.getOpportunityDetails() != null) {
             post.setOpportunityDetails(req.getOpportunityDetails());
@@ -140,6 +146,16 @@ public class PostService {
             throw new UnauthorizedException("You can only delete posts that you created.");
         }
         postRepository.delete(post);
+    }
+
+    @Transactional
+    public boolean deletePostIfPresent(String id, String userEmail) {
+        Long numericId = parseLongId(id);
+        if (numericId == null || !postRepository.existsById(numericId)) {
+            return false;
+        }
+        deletePost(id, userEmail);
+        return true;
     }
 
     @Transactional
@@ -176,7 +192,7 @@ public class PostService {
         post.setTitle(req.getTitle());
         post.setContent(req.getContent());
         post.setOpportunityDetails(req.getOpportunityDetails());
-        return postRepository.save(post).toDto(userEmail);
+        return toUserAwareDto(postRepository.save(post), userEmail);
     }
 
     @Transactional
@@ -227,7 +243,7 @@ public class PostService {
             post.setMediaType(req.getMediaType());
         }
 
-        return postRepository.save(post).toDto(userEmail);
+        return toUserAwareDto(postRepository.save(post), userEmail);
     }
 
     @Transactional
@@ -292,7 +308,7 @@ public class PostService {
         post.addComment(authorName, text);
         postRepository.save(post);
 
-        Map<String, Object> res = post.toDto(email);
+        Map<String, Object> res = toUserAwareDto(post, email);
         res.put("id", id);
         res.put("postId", id);
         res.put("commentsCount", post.getCommentsCount());
@@ -301,7 +317,8 @@ public class PostService {
     }
 
     @Transactional
-    public Map<String, Object> applyToOpportunity(String id) {
+    public Map<String, Object> applyToOpportunity(String id, String applicantIdentity) {
+        String identity = normalizeApplicantIdentity(applicantIdentity);
         Long numericId = parseLongId(id);
         if (numericId == null) {
             throw new ResourceNotFoundException("Opportunity", "id", id);
@@ -310,23 +327,80 @@ public class PostService {
         PostEntity post = postRepository.findById(numericId)
                 .orElseThrow(() -> new ResourceNotFoundException("Opportunity", "id", id));
 
-        post.toggleApply();
+        if (opportunityApplicationRepository.existsByPostIdAndApplicantIdentity(numericId, identity)) {
+            return applicationResponse(id, post, true, "You have already applied for this opportunity.");
+        }
+
+        opportunityApplicationRepository.save(new OpportunityApplicationEntity(numericId, identity));
+        post.setApplicationsCount(post.getApplicationsCount() + 1);
         postRepository.save(post);
 
         notificationRepository.save(new NotificationEntity(
-                "me",
+                identity,
                 "Opportunity Application Sent",
                 "Your application for \"" + (post.getTitle() != null ? post.getTitle() : "Casting Call") + "\" has been received.",
                 "opportunity"
         ));
 
-        Map<String, Object> res = new HashMap<>();
-        res.put("id", id);
-        res.put("postId", id);
-        res.put("applied", post.isApplied());
-        res.put("applicationsCount", post.getApplicationsCount());
-        res.put("message", "Application submitted successfully.");
-        return res;
+        return applicationResponse(id, post, true, "Application submitted successfully.");
+    }
+
+    @Transactional
+    public Map<String, Object> cancelOpportunityApplication(String id, String applicantIdentity) {
+        String identity = normalizeApplicantIdentity(applicantIdentity);
+        Long numericId = parseLongId(id);
+        if (numericId == null) {
+            throw new ResourceNotFoundException("Opportunity", "id", id);
+        }
+
+        PostEntity post = postRepository.findById(numericId)
+                .orElseThrow(() -> new ResourceNotFoundException("Opportunity", "id", id));
+        Optional<OpportunityApplicationEntity> application =
+                opportunityApplicationRepository.findByPostIdAndApplicantIdentity(numericId, identity);
+
+        if (application.isPresent()) {
+            opportunityApplicationRepository.delete(application.get());
+            post.setApplicationsCount(Math.max(0, post.getApplicationsCount() - 1));
+            postRepository.save(post);
+        }
+
+        return applicationResponse(id, post, false, "Application cancelled successfully.");
+    }
+
+    private String normalizeApplicantIdentity(String applicantIdentity) {
+        if (applicantIdentity == null || applicantIdentity.isBlank()) {
+            throw new UnauthorizedException("Sign in to apply for this opportunity.");
+        }
+        String identity = applicantIdentity.trim().toLowerCase(Locale.ROOT);
+        if (identity.length() > 255) {
+            throw new BadRequestException("Applicant identity is too long.");
+        }
+        return identity;
+    }
+
+    private Map<String, Object> toUserAwareDto(PostEntity post, String userIdentity) {
+        Map<String, Object> dto = post.toDto(userIdentity);
+        if ("opportunity".equalsIgnoreCase(post.getType())) {
+            String identity = userIdentity == null ? "" : userIdentity.trim().toLowerCase(Locale.ROOT);
+            dto.put("applied", !identity.isEmpty()
+                    && opportunityApplicationRepository.existsByPostIdAndApplicantIdentity(post.getId(), identity));
+        }
+        return dto;
+    }
+
+    private Map<String, Object> applicationResponse(
+            String id,
+            PostEntity post,
+            boolean applied,
+            String message
+    ) {
+        Map<String, Object> response = new HashMap<>();
+        response.put("id", id);
+        response.put("postId", id);
+        response.put("applied", applied);
+        response.put("applicationsCount", post.getApplicationsCount());
+        response.put("message", message);
+        return response;
     }
 
     private Long parseLongId(String id) {

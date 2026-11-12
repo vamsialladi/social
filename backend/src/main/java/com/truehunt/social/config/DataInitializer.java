@@ -31,6 +31,7 @@ public class DataInitializer {
     ) {
         return args -> {
             provisionAdminAccount(userAccountRepository, passwordEncoder, adminEmail, adminPassword);
+            removeAdminProfiles(profileRepository, networkProfileRepository, userAccountRepository);
 
             // 0. Seed Demo Accounts matching frontend SignInPage.jsx and Mock Data
             if (userAccountRepository.findByEmail("aarav.varma@truehunt.in").isEmpty()) {
@@ -313,7 +314,7 @@ public class DataInitializer {
         };
     }
 
-    private void provisionAdminAccount(
+    void provisionAdminAccount(
             UserAccountRepository userAccountRepository,
             PasswordEncoder passwordEncoder,
             String configuredEmail,
@@ -340,10 +341,35 @@ public class DataInitializer {
             return account;
         });
 
-        admin.setEmail("truehunt@gmail.com");
-        admin.setPasswordHash(passwordEncoder.encode("truehunt@2026"));
+        admin.setEmail(email);
+        admin.setPasswordHash(passwordEncoder.encode(password));
         admin.setRole("ADMIN");
         userAccountRepository.save(admin);
+    }
+
+    private void removeAdminProfiles(
+            ProfileRepository profileRepository,
+            NetworkProfileRepository networkProfileRepository,
+            UserAccountRepository userAccountRepository
+    ) {
+        for (UserAccountEntity admin : userAccountRepository.findAllByRoleIgnoreCase("ADMIN")) {
+            Set<String> identifiers = new HashSet<>();
+            Map<Long, ProfileEntity> adminProfiles = new LinkedHashMap<>();
+            if (admin.getEmail() != null && !admin.getEmail().isBlank()) {
+                identifiers.add(admin.getEmail());
+            }
+            if (admin.getPublicUserId() != null && !admin.getPublicUserId().isBlank()) {
+                identifiers.add(admin.getPublicUserId());
+                profileRepository.findAllByUserId(admin.getPublicUserId())
+                        .forEach(profile -> adminProfiles.put(profile.getId(), profile));
+            }
+            if (admin.getEmail() != null && !admin.getEmail().isBlank()) {
+                profileRepository.findAllByEmail(admin.getEmail())
+                        .forEach(profile -> adminProfiles.put(profile.getId(), profile));
+            }
+            profileRepository.deleteAll(adminProfiles.values());
+            networkProfileRepository.deleteAllById(identifiers);
+        }
     }
 
     private void clearLegacyDefaultProfileDetails(

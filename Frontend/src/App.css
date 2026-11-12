@@ -526,6 +526,28 @@
   height: 22px;
 }
 
+.linkedin-message-badge {
+  position: absolute;
+  top: 1px;
+  left: calc(50% + 4px);
+  z-index: 1;
+  display: flex;
+  min-width: 17px;
+  height: 17px;
+  box-sizing: border-box;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  background: #d93025;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  pointer-events: none;
+}
+
 .linkedin-nav-item small {
   font-size: 9px;
 }
@@ -804,6 +826,10 @@
 .cinemans-page.is-dark .linkedin-navbar {
   border-color: #393d45;
   color: #c3c8d0;
+}
+
+.cinemans-page.is-dark .linkedin-message-badge {
+  border-color: #202329;
 }
 
 .cinemans-page.is-dark .linkedin-search,

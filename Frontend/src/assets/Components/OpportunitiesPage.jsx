@@ -156,7 +156,7 @@ export default function OpportunitiesPage({ onClose, onPublish, initialData, isE
 
   function validateStep() {
     if (step === 1 && !form.projectName.trim()) {
-      setError('Enter a project name to continue.')
+      setError('Enter a Cinema name to continue.')
       return false
     }
 

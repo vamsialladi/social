@@ -17,103 +17,6 @@ import './Messages.css'
 import api from '../../api'
 import { websocketService } from '../../services/websocket'
 
-const initialMessages = [
-  {
-    id: 1,
-    name: 'Akshay Chamola',
-    initials: 'AC',
-    color: 'blue',
-    preview: 'Unionpoint is adding a Chapter Support Associate...',
-    date: 'Oct 19',
-    category: 'Jobs',
-    unread: true,
-    sponsored: true,
-    subject: 'Unionpoint is adding a Chapter Support Associate',
-    description: 'Make an impact with a team that is building stronger communities.',
-    thread: [
-      { id: 'akshay-1', content: 'Hi Chandrabose, thanks for your interest in this opportunity.', direction: 'incoming' },
-      { id: 'akshay-2', content: 'Thanks for reaching out. Could you share more details?', direction: 'outgoing' },
-      { id: 'akshay-3', content: 'Absolutely! I would be happy to tell you more.', direction: 'incoming' },
-      { id: 'akshay-4', content: 'Great! I am looking forward to learning more about the role.', direction: 'outgoing' },
-      { id: 'akshay-5', content: 'The Chapter Support Associate role involves supporting our local chapters and helping them grow.', direction: 'incoming' },
-      { id: 'akshay-6', content: 'That sounds interesting. What are the key responsibilities?', direction: 'outgoing' },
-      { id: 'akshay-7', content: 'The key responsibilities include coordinating events, managing communications, and assisting with chapter development.', direction: 'incoming' },
-      { id: 'akshay-8', content: 'Thank you for the information. I am excited about this opportunity.', direction: 'outgoing' },
-      { id: 'akshay-9', content: 'We are excited to have you on board! We will be in touch with the next steps.', direction: 'incoming' },
-    ],
-  },
-  {
-    id: 2,
-    name: 'Priya Sharma',
-    initials: 'PS',
-    color: 'rose',
-    preview: 'Thanks for sharing your profile. Let’s connect soon!',
-    date: 'Oct 11',
-    category: 'Connections',
-    unread: true,
-    sponsored: false,
-    subject: 'Great connecting with you',
-    description: 'Thanks for sharing your profile. Let’s connect soon!',
-    thread: [{ id: 2, content: 'Thanks for sharing your profile. Let’s connect soon!', direction: 'incoming' }],
-  },
-  {
-    id: 3,
-    name: 'Rohan Mehta',
-    initials: 'RM',
-    color: 'green',
-    preview: 'Are you available for a quick chat this week?',
-    date: 'Oct 08',
-    category: 'InMail',
-    unread: false,
-    sponsored: false,
-    subject: 'A quick chat this week?',
-    description: 'Are you available for a quick chat this week?',
-    thread: [{ id: 3, content: 'Are you available for a quick chat this week?', direction: 'incoming' }],
-  },
-  {
-    id: 4,
-    name: 'Meera Kapoor',
-    initials: 'MK',
-    color: 'purple',
-    preview: 'I loved your recent work. Would love to collaborate.',
-    date: 'Oct 03',
-    category: 'Connections',
-    unread: false,
-    sponsored: false,
-    subject: 'Let’s collaborate',
-    description: 'I loved your recent work. Would love to collaborate.',
-    thread: [{ id: 4, content: 'I loved your recent work. Would love to collaborate.', direction: 'incoming' }],
-  },
-  {
-    id: 5,
-    name: 'Aditya Singh',
-    initials: 'AS',
-    color: 'orange',
-    preview: 'Your insights on the recent project were invaluable.',
-    date: 'Sep 29',
-    category: 'Starred',
-    unread: false,
-    sponsored: false,
-    subject: 'Appreciation for your insights',
-    description: 'Your insights on the recent project were invaluable.',
-    thread: [{ id: 5, content: 'Your insights on the recent project were invaluable.', direction: 'incoming' }],
-  },
-  {
-    id: 6,
-    name: 'Ananya Verma',
-    initials: 'AV',
-    color: 'teal',
-    preview: 'Looking forward to our meeting next week.',
-    date: 'Sep 25',
-    category: 'Unread',
-    unread: true,
-    sponsored: false,
-    subject: 'Meeting next week',
-    description: 'Looking forward to our meeting next week.',
-    thread: [{ id: 6, content: 'Looking forward to our meeting next week.', direction: 'incoming' }],
-  },
-]
-
 const categories = ['Opportunities', 'Unread', 'Connections', 'InMail', 'Starred']
 const mailboxOptions = ['Focused', 'Other', 'Archived', 'Spam']
 const emojis = ['😀', '😂', '😍', '😊', '👍', '🎉', '❤️', '🙏']
@@ -223,30 +126,29 @@ function isMessageOutgoing(msg, currentConversation, user) {
   return false
 }
 
-function Messages({ conversationToOpen, openConversationRef, onProfileSelect }) {
+function getUnreadConversationCount(conversations) {
+  return conversations.filter((conversation) => {
+    if (!conversation.unread) return false
+
+    const thread = Array.isArray(conversation.thread) ? conversation.thread : []
+    const latestMessage = thread[thread.length - 1]
+    return !latestMessage || !isMessageOutgoing(latestMessage, conversation)
+  }).length
+}
+
+function Messages({
+  conversationToOpen,
+  openConversationRef,
+  onProfileSelect,
+  onUnreadCountChange,
+  isActive,
+  resetToInboxRequest = 0,
+}) {
   const initialProfileConversation = createProfileConversation(conversationToOpen)
-  const initialExistingConversation = initialProfileConversation && initialMessages.find((message) => (
-    message.id === initialProfileConversation.id
-    || message.name.trim().toLowerCase() === initialProfileConversation.name.toLowerCase()
-  ))
   const [messages, setMessages] = useState(() => (
-    initialProfileConversation && !initialExistingConversation
-      ? [initialProfileConversation, ...initialMessages]
-      : initialProfileConversation
-        ? initialMessages.map((message) => (
-          message.id === initialExistingConversation.id
-            ? {
-              ...message,
-              avatar: initialProfileConversation.avatar || message.avatar,
-              profile: initialProfileConversation.profile,
-            }
-            : message
-        ))
-        : initialMessages
+    initialProfileConversation ? [initialProfileConversation] : []
   ))
-  const [selectedId, setSelectedId] = useState(
-    initialExistingConversation?.id || initialProfileConversation?.id || initialMessages[0].id,
-  )
+  const [selectedId, setSelectedId] = useState(initialProfileConversation?.id || null)
   const [activeCategory, setActiveCategory] = useState('')
   const [mailbox, setMailbox] = useState('Focused')
   const [isMailboxOpen, setIsMailboxOpen] = useState(false)
@@ -268,6 +170,7 @@ function Messages({ conversationToOpen, openConversationRef, onProfileSelect }) 
   const replyInputRef = useRef(null)
   const attachmentInputRef = useRef(null)
   const emojiPickerRef = useRef(null)
+  const previousInboxRequest = useRef(resetToInboxRequest)
 
   const currentUser = useMemo(() => {
     try {
@@ -281,7 +184,7 @@ function Messages({ conversationToOpen, openConversationRef, onProfileSelect }) 
   const loadBackendConversations = useCallback(async (currentMailbox = 'Focused') => {
     try {
       const data = await api.getConversations(currentMailbox)
-      if (Array.isArray(data) && data.length > 0) {
+      if (Array.isArray(data)) {
         setMessages((prev) => {
           const profileConversations = prev.filter((m) => String(m.id).startsWith('profile-'))
           const backendIds = new Set(data.map((d) => String(d.id)))
@@ -294,14 +197,36 @@ function Messages({ conversationToOpen, openConversationRef, onProfileSelect }) 
           return merged
         })
         setSelectedId((current) => {
-          const exists = data.some((d) => String(d.id) === String(current)) || String(current).startsWith('profile-')
-          return exists ? current : (data[0]?.id || current)
+          const matchingConversation = data.find((conversation) => (
+            String(conversation.id) === String(current)
+          ))
+          if (matchingConversation) return matchingConversation.id
+          if (current == null) return null
+          if (String(current).startsWith('profile-')) return current
+          return data[0]?.id || null
         })
+      }
+
+      const allConversations = currentMailbox ? await api.getConversations() : data
+      if (Array.isArray(allConversations)) {
+        onUnreadCountChange?.(getUnreadConversationCount(allConversations))
       }
     } catch (err) {
       console.warn('Could not load conversations from backend:', err)
     }
-  }, [])
+  }, [onUnreadCountChange])
+
+  useEffect(() => {
+    if (previousInboxRequest.current === resetToInboxRequest) return
+
+    previousInboxRequest.current = resetToInboxRequest
+    setSelectedId(null)
+    setIsMobileDetailOpen(false)
+    setIsDesktopChatOpen(false)
+    setActiveCategory('')
+    setSearch('')
+    setIsComposeOpen(false)
+  }, [resetToInboxRequest])
 
   const handleIncomingWebSocketMessage = useCallback((newMsg) => {
     if (!newMsg || !newMsg.content) return
@@ -335,6 +260,9 @@ function Messages({ conversationToOpen, openConversationRef, onProfileSelect }) 
 
     const otherName = isOutgoing ? (newMsg.receiverName || 'Cinema Professional') : (newMsg.senderName || 'Cinema Professional')
     const otherId = isOutgoing ? (newMsg.receiverId || '') : (newMsg.senderId || '')
+    const isSelectedConversationVisible = isActive
+      && String(selectedId) === String(convId)
+      && (window.innerWidth <= 740 ? isMobileDetailOpen : isDesktopChatOpen)
 
     const threadItem = {
       id: msgId,
@@ -411,7 +339,7 @@ function Messages({ conversationToOpen, openConversationRef, onProfileSelect }) 
               thread: [...thread, threadItem],
               preview: content,
               date: 'Just now',
-              unread: !isOutgoing && String(selectedId) !== String(m.id) && String(selectedId) !== String(convId),
+              unread: !isOutgoing && !isSelectedConversationVisible,
             }
           }
           return m
@@ -426,7 +354,7 @@ function Messages({ conversationToOpen, openConversationRef, onProfileSelect }) 
           date: 'Just now',
           category: 'Connections',
           mailbox: 'Focused',
-          unread: !isOutgoing,
+          unread: !isOutgoing && !isSelectedConversationVisible,
           user1Id: newMsg.senderId,
           user1Name: newMsg.senderName,
           user2Id: newMsg.receiverId,
@@ -436,7 +364,23 @@ function Messages({ conversationToOpen, openConversationRef, onProfileSelect }) 
         return [newConv, ...prevMessages]
       }
     })
-  }, [selectedId])
+
+    if (!isOutgoing) {
+      const refreshUnreadCount = isSelectedConversationVisible && /^\d+$/.test(String(convId))
+        ? api.markConversationAsRead(convId).then(() => loadBackendConversations(mailbox))
+        : loadBackendConversations(mailbox)
+      refreshUnreadCount.catch((error) => {
+        console.warn('Could not update unread message count:', error)
+      })
+    }
+  }, [
+    isActive,
+    isDesktopChatOpen,
+    isMobileDetailOpen,
+    loadBackendConversations,
+    mailbox,
+    selectedId,
+  ])
 
   useEffect(() => {
     let storedUser = null
@@ -507,11 +451,14 @@ function Messages({ conversationToOpen, openConversationRef, onProfileSelect }) 
     })
 
     setSelectedId(existingConversation?.id || profileConversation.id)
+    if (existingConversation?.unread) {
+      void markConversationRead(existingConversation.id)
+    }
     setActiveCategory('')
     setSearch('')
     setIsMobileDetailOpen(window.innerWidth <= 740)
     setIsDesktopChatOpen(window.innerWidth > 740)
-  }, [messages])
+  }, [markConversationRead, messages])
 
   useEffect(() => {
     if (!openConversationRef) return undefined
@@ -538,7 +485,7 @@ function Messages({ conversationToOpen, openConversationRef, onProfileSelect }) 
   const visibleMessages = useMemo(() => {
     const query = search.trim().toLowerCase()
 
-    return messages.filter((message) => {
+    const filteredMessages = messages.filter((message) => {
       const matchesSearch = !query
         || `${message.name} ${message.preview} ${message.subject}`.toLowerCase().includes(query)
       const matchesCategory = !activeCategory
@@ -548,9 +495,19 @@ function Messages({ conversationToOpen, openConversationRef, onProfileSelect }) 
 
       return matchesSearch && matchesCategory
     })
+
+    return filteredMessages
+      .map((message, index) => ({ message, index }))
+      .sort((first, second) => (
+        Number(Boolean(second.message.starred)) - Number(Boolean(first.message.starred))
+        || first.index - second.index
+      ))
+      .map(({ message }) => message)
   }, [activeCategory, messages, search])
 
-  const selectedMessage = messages.find((message) => message.id === selectedId)
+  const selectedMessage = messages.find((message) => (
+    String(message.id) === String(selectedId)
+  ))
 
   useEffect(() => {
     const handleResize = () => {
@@ -572,7 +529,30 @@ function Messages({ conversationToOpen, openConversationRef, onProfileSelect }) 
     })
   }
 
+  async function markConversationRead(id) {
+    const selectedMessage = messages.find((message) => String(message.id) === String(id))
+    if (!selectedMessage?.unread) return
+
+    setMessages((currentMessages) => currentMessages.map((message) => (
+      String(message.id) === String(id) ? { ...message, unread: false } : message
+    )))
+
+    if (!/^\d+$/.test(String(id))) return
+
+    try {
+      await api.markConversationAsRead(id)
+      await loadBackendConversations(mailbox)
+    } catch (error) {
+      setMessages((currentMessages) => currentMessages.map((message) => (
+        String(message.id) === String(id) ? { ...message, unread: true } : message
+      )))
+      console.warn('Could not mark conversation as read:', error)
+    }
+  }
+
   function handleSelectMessage(id) {
+    void markConversationRead(id)
+
     if (window.innerWidth <= 740) {
       setSelectedId(id)
       setIsMobileDetailOpen(true)
@@ -583,10 +563,30 @@ function Messages({ conversationToOpen, openConversationRef, onProfileSelect }) 
     setIsDesktopChatOpen(true)
   }
 
-  function toggleStar(id) {
+  async function toggleStar(id) {
+    const conversation = messages.find((message) => String(message.id) === String(id))
+    if (!conversation) return
+
+    const starred = !conversation.starred
     setMessages((currentMessages) => currentMessages.map((message) => (
-      message.id === id ? { ...message, starred: !message.starred } : message
+      String(message.id) === String(id) ? { ...message, starred } : message
     )))
+
+    if (!/^\d+$/.test(String(id))) return
+
+    try {
+      const updatedConversation = await api.starConversation(id)
+      setMessages((currentMessages) => currentMessages.map((message) => (
+        String(message.id) === String(id)
+          ? { ...message, starred: Boolean(updatedConversation.starred) }
+          : message
+      )))
+    } catch (error) {
+      setMessages((currentMessages) => currentMessages.map((message) => (
+        String(message.id) === String(id) ? { ...message, starred: conversation.starred } : message
+      )))
+      console.warn('Could not update pinned conversation:', error)
+    }
   }
 
   async function sendReply(event) {
@@ -876,7 +876,7 @@ function Messages({ conversationToOpen, openConversationRef, onProfileSelect }) 
           <aside className="messages-list" aria-label="Conversation list">
             {visibleMessages.length ? visibleMessages.map((message) => (
               <div
-                className={`message-preview${selectedId === message.id ? ' is-active' : ''}${message.unread ? ' is-unread' : ''}`}
+                className={`message-preview${String(selectedId) === String(message.id) ? ' is-active' : ''}${message.unread ? ' is-unread' : ''}`}
                 key={message.id}
               >
                 <button
@@ -903,13 +903,17 @@ function Messages({ conversationToOpen, openConversationRef, onProfileSelect }) 
                 >
                   <span className="message-preview-heading">
                     <strong>{message.name}</strong>
+                    {message.unread && <span className="message-unread-badge">New</span>}
+                    {message.starred && <Star className="message-preview-star" size={14} aria-label="Pinned" />}
                     <time>{message.date}</time>
                   </span>
                   <span className="message-preview-text">{message.preview}</span>
                 </button>
               </div>
             )) : (
-              <p className="messages-empty">No messages match your filters.</p>
+              <p className="messages-empty">
+                {messages.length ? 'No messages match your filters.' : 'No messages yet.'}
+              </p>
             )}
           </aside>
 
@@ -960,7 +964,8 @@ function Messages({ conversationToOpen, openConversationRef, onProfileSelect }) 
                     <button
                       className={`messages-icon-button star-button${selectedMessage.starred ? ' is-starred' : ''}`}
                       type="button"
-                      aria-label={selectedMessage.starred ? 'Remove star' : 'Star conversation'}
+                      aria-label={selectedMessage.starred ? 'Unpin conversation' : 'Pin conversation'}
+                      title={selectedMessage.starred ? 'Unpin conversation' : 'Pin conversation'}
                       aria-pressed={Boolean(selectedMessage.starred)}
                       onClick={() => toggleStar(selectedMessage.id)}
                     >

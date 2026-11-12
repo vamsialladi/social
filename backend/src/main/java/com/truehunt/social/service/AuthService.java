@@ -119,6 +119,9 @@ public class AuthService {
 
         if (existingOpt.isPresent()) {
             user = existingOpt.get();
+            if ("ADMIN".equalsIgnoreCase(user.getRole())) {
+                throw new ConflictException("This email is reserved for an administrator account.");
+            }
             publicUserId = user.getPublicUserId() != null
                     ? user.getPublicUserId()
                     : generateUniquePublicUserId(name, role);

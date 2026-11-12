@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import './Endorsement.css'
 import api from '../../api'
+import ProfileBanner from './ProfileBanner.jsx'
 
 function Notifications({ profileDetails, profilePreview, onViewProfile, onManageNotifications }) {
   const [endorsements, setEndorsements] = useState([])
@@ -41,7 +42,9 @@ function Notifications({ profileDetails, profilePreview, onViewProfile, onManage
             }
           }}
         >
-          <div className="notifications-profile-cover" />
+          <div className="notifications-profile-cover">
+            <ProfileBanner variant="card" />
+          </div>
           <div className="notifications-profile-content">
             <div className="notifications-avatar" aria-hidden="true">
               {profilePreview

@@ -1,7 +1,5 @@
 package com.truehunt.social.service;
 
-import com.truehunt.social.exception.ResourceNotFoundException;
-import com.truehunt.social.exception.UnauthorizedException;
 import com.truehunt.social.model.ProfileEntity;
 import com.truehunt.social.model.ProfileViewEntity;
 import com.truehunt.social.model.UserAccountEntity;
@@ -39,8 +37,8 @@ public class ProfileViewService {
         if (viewerEmail == null || viewerEmail.isBlank()) {
             return Map.of("recorded", false);
         }
-        UserAccountEntity viewerAccount = userAccountRepository.findByEmail(viewerEmail.trim().toLowerCase(Locale.ROOT)).orElse(null);
-        if (viewerAccount == null) {
+        UserAccountEntity viewerAccount = findAccountByIdentifier(viewerEmail);
+        if (viewerAccount == null || "ADMIN".equalsIgnoreCase(viewerAccount.getRole())) {
             return Map.of("recorded", false);
         }
         ProfileEntity owner = profileRepository.findByUserId(profileId)
@@ -73,12 +71,8 @@ public class ProfileViewService {
 
     @Transactional(readOnly = true)
     public List<Map<String, Object>> getMyViewers(String ownerEmail) {
-        if (ownerEmail == null || ownerEmail.isBlank()) {
-            ownerEmail = "pro@truehunt.in";
-        }
-        String finalEmail = ownerEmail.trim().toLowerCase(Locale.ROOT);
-        UserAccountEntity ownerAccount = userAccountRepository.findByEmail(finalEmail).orElse(null);
-        if (ownerAccount == null) {
+        UserAccountEntity ownerAccount = findAccountByIdentifier(ownerEmail);
+        if (ownerAccount == null || "ADMIN".equalsIgnoreCase(ownerAccount.getRole())) {
             return List.of();
         }
         String ownerUserId = ownerAccount.getPublicUserId();
@@ -87,25 +81,14 @@ public class ProfileViewService {
         }
 
         return profileViewRepository.findAllByOwnerUserIdOrderByViewedAtDesc(ownerUserId).stream()
-                .map(this::viewerSummary)
+                .map(view -> {
+                    UserAccountEntity viewer = userAccountRepository.findByPublicUserId(view.getViewerUserId())
+                            .orElse(null);
+                    return viewer != null && "ADMIN".equalsIgnoreCase(viewer.getRole())
+                            ? null : viewerSummary(view, viewer);
+                })
+                .filter(summary -> summary != null)
                 .toList();
-    }
-
-    private UserAccountEntity requireAccount(String email) {
-        if (email == null || email.isBlank()) {
-            throw new UnauthorizedException("A signed-in account is required to access profile viewers.");
-        }
-        return userAccountRepository.findByEmail(email.trim().toLowerCase(Locale.ROOT))
-                .orElseThrow(() -> new UnauthorizedException("A signed-in account is required to access profile viewers."));
-    }
-
-    private ProfileEntity findProfile(String profileId) {
-        return profileRepository.findByUserId(profileId)
-                .or(() -> userAccountRepository.findByPublicUserId(profileId)
-                        .flatMap(account -> profileRepository.findByUserId(account.getPublicUserId())))
-                .or(() -> userAccountRepository.findByPublicUserId(profileId)
-                        .flatMap(account -> profileRepository.findByEmail(account.getEmail())))
-                .orElseThrow(() -> new ResourceNotFoundException("Profile", "id", profileId));
     }
 
     private String canonicalUserId(ProfileEntity profile) {
@@ -115,9 +98,20 @@ public class ProfileViewService {
                 .orElse(profile.getUserId());
     }
 
-    private Map<String, Object> viewerSummary(ProfileViewEntity view) {
-        ProfileEntity profile = profileRepository.findByUserId(view.getViewerUserId()).orElse(null);
-        UserAccountEntity account = userAccountRepository.findByPublicUserId(view.getViewerUserId()).orElse(null);
+    private UserAccountEntity findAccountByIdentifier(String identifier) {
+        if (identifier == null || identifier.isBlank()) return null;
+        String normalized = identifier.trim();
+        return userAccountRepository.findByEmail(normalized.toLowerCase(Locale.ROOT))
+                .or(() -> userAccountRepository.findByPublicUserId(normalized))
+                .orElse(null);
+    }
+
+    private Map<String, Object> viewerSummary(ProfileViewEntity view, UserAccountEntity account) {
+        ProfileEntity profile = profileRepository.findByUserId(view.getViewerUserId())
+                .or(() -> account == null
+                        ? java.util.Optional.empty()
+                        : profileRepository.findByEmail(account.getEmail()))
+                .orElse(null);
         Map<String, Object> summary = new LinkedHashMap<>();
         summary.put("id", view.getViewerUserId());
         summary.put("userId", view.getViewerUserId());

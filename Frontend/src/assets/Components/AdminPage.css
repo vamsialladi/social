@@ -114,6 +114,24 @@
   opacity: 0.7;
 }
 
+.admin-demo-credentials {
+  display: grid;
+  gap: 4px;
+  margin-top: 6px;
+  padding: 11px 12px;
+  border: 1px solid #e8e4fa;
+  border-radius: 8px;
+  background: #f8f6ff;
+  color: #514777;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.admin-demo-credentials strong {
+  margin-bottom: 2px;
+  color: #392d68;
+}
+
 .admin-login-note {
   margin: 21px 0 0;
   color: #888b96;
@@ -511,6 +529,54 @@
   border-bottom: 1px solid #f0f1f5;
 }
 
+.admin-post-row-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.admin-post-row-heading > strong {
+  overflow: hidden;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-delete-button {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 5px 9px;
+  border: 1px solid #f1c9c4;
+  border-radius: 6px;
+  background: #fff7f6;
+  color: #a63e32;
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.admin-delete-button:hover:not(:disabled) {
+  border-color: #e8a39a;
+  background: #ffefed;
+}
+
+.admin-delete-button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.admin-current-account {
+  color: var(--admin-muted);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
 .admin-post-row p {
   display: -webkit-box;
   overflow: hidden;
@@ -595,6 +661,44 @@
   font-size: 11px;
 }
 
+.admin-investor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.admin-investor-review-button {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 5px 9px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.admin-investor-review-button.is-approve {
+  border-color: #b7dfc3;
+  background: #edf8f0;
+  color: #176b35;
+}
+
+.admin-investor-review-button.is-reject {
+  border-color: #f0c4c0;
+  background: #fff3f2;
+  color: #a52b23;
+}
+
+.admin-investor-review-button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
 .admin-data-error {
   display: flex;
   align-items: center;
@@ -605,6 +709,10 @@
   border: 1px solid #f1c9c4;
   border-radius: 8px;
   background: #fff7f6;
+}
+
+.admin-action-error {
+  padding: 0 2px;
 }
 
 .admin-data-error button {

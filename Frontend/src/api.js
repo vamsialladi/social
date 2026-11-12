@@ -100,7 +100,37 @@ export const api = {
   likePost: (id) => fetchJson(`/posts/${id}/like`, { method: 'POST' }),
   commentOnPost: (id, text) => fetchJson(`/posts/${id}/comments`, { method: 'POST', body: { text } }),
   applyToOpportunity: (id) => fetchJson(`/posts/${id}/apply`, { method: 'POST' }),
-  deletePost: (id) => fetchJson(`/posts/${id}`, { method: 'DELETE' }),
+  cancelOpportunityApplication: (id) => fetchJson(`/posts/${id}/apply`, { method: 'DELETE' }),
+  deletePost: async (id) => {
+    const result = await fetchJson(`/posts/${id}`, { method: 'DELETE' })
+    if (result.investorProfileDeleted && typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('truehunt-investor-profile-deleted', {
+        detail: { feedPostId: String(id) },
+      }))
+    }
+    return result
+  },
+  deleteInvestorListing: async (id) => {
+    const result = await fetchJson(`/investor-access/listings/${encodeURIComponent(id)}`, { method: 'DELETE' })
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('truehunt-investor-profile-deleted', {
+        detail: {
+          investorListingId: String(id),
+          feedPostId: result.feedPostId ? String(result.feedPostId) : '',
+        },
+      }))
+    }
+    return result
+  },
+  getAdminAccounts: () => fetchJson('/admin/accounts'),
+  deleteAdminAccount: (id) => fetchJson(`/admin/accounts/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  deleteAdminPost: (id) => fetchJson(`/admin/posts/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  getAdminInvestorRequests: () => fetchJson('/admin/investor-requests'),
+  approveAdminInvestorRequest: (id) => fetchJson(`/admin/investor-requests/${encodeURIComponent(id)}/approve`, { method: 'POST' }),
+  rejectAdminInvestorRequest: (id) => fetchJson(`/admin/investor-requests/${encodeURIComponent(id)}/reject`, { method: 'POST' }),
+  submitInvestorAccessRequest: (request) => fetchJson('/investor-access/requests', { method: 'POST', body: request }),
+  getInvestorAccessStatus: () => fetchJson('/investor-access/status'),
+  getInvestorListings: () => fetchJson('/investor-access/listings'),
 
   // Network & Connections
   getNetworkSuggestions: () => fetchJson('/connections/suggestions'),

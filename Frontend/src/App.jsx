@@ -64,7 +64,7 @@ export default function App() {
       <NotificationProvider>
         <AuthProvider>
           <Routes>
-            <Route path="/social/admin" element={<AdminPage />} />
+            <Route path="/admin" element={<AdminPage />} />
             <Route path="/" element={<MainLayout />}>
               <Route index element={<HomePage />} />
               <Route path="entertainments" element={<EntertainmentsPage />} />
