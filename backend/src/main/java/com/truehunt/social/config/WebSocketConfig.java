@@ -11,19 +11,17 @@ import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.simp.config.ChannelRegistration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
-import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
+import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.support.ChannelInterceptor;
 import org.springframework.messaging.support.MessageHeaderAccessor;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.util.StringUtils;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
-
-import java.security.Principal;
-import java.util.List;
 
 @Configuration
 @EnableWebSocketMessageBroker
@@ -58,52 +56,82 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void configureClientInboundChannel(ChannelRegistration registration) {
-        registration.interceptors(new ChannelInterceptor() {
+        registration.interceptors(authenticatedMessagingInterceptor());
+    }
+
+    ChannelInterceptor authenticatedMessagingInterceptor() {
+        return new ChannelInterceptor() {
             @Override
             public Message<?> preSend(Message<?> message, MessageChannel channel) {
                 StompHeaderAccessor accessor = MessageHeaderAccessor.getAccessor(message, StompHeaderAccessor.class);
-                if (accessor != null && StompCommand.CONNECT.equals(accessor.getCommand())) {
-                    String userEmail = null;
+                if (accessor == null) {
+                    return message;
+                }
 
+                if (StompCommand.CONNECT.equals(accessor.getCommand())) {
                     String authHeader = accessor.getFirstNativeHeader("Authorization");
-                    if (StringUtils.hasText(authHeader)) {
-                        String token = authHeader.startsWith("Bearer ") ? authHeader.substring(7) : authHeader;
-                        if (jwtTokenProvider.validateToken(token)) {
-                            userEmail = jwtTokenProvider.getEmailFromToken(token);
-                        }
+                    if (!StringUtils.hasText(authHeader)) {
+                        log.warn("[WebSocket] Rejected STOMP connection without a bearer token.");
+                        return null;
                     }
 
+                    String token = authHeader.startsWith("Bearer ") ? authHeader.substring(7) : authHeader;
+                    if (!jwtTokenProvider.validateToken(token)) {
+                        log.warn("[WebSocket] Rejected STOMP connection with an invalid bearer token.");
+                        return null;
+                    }
+
+                    String userEmail = jwtTokenProvider.getEmailFromToken(token);
                     if (!StringUtils.hasText(userEmail)) {
-                        String headerEmail = accessor.getFirstNativeHeader("X-User-Email");
-                        if (!StringUtils.hasText(headerEmail)) {
-                            headerEmail = accessor.getFirstNativeHeader("user");
-                        }
-                        if (StringUtils.hasText(headerEmail)) {
-                            userEmail = headerEmail.trim();
-                        }
+                        log.warn("[WebSocket] Rejected STOMP connection without a token identity.");
+                        return null;
                     }
 
-                    if (!StringUtils.hasText(userEmail) && StringUtils.hasText(accessor.getLogin())) {
-                        userEmail = accessor.getLogin();
+                    try {
+                        UserDetails userDetails = customUserDetailsService.loadUserByUsername(userEmail);
+                        UsernamePasswordAuthenticationToken authentication =
+                                new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
+                        accessor.setUser(authentication);
+                        log.info("[WebSocket] Authenticated STOMP session for principal: {}", authentication.getName());
+                    } catch (Exception e) {
+                        log.warn("[WebSocket] Rejected STOMP connection for unknown principal: {}", userEmail);
+                        return null;
                     }
-
-                    if (StringUtils.hasText(userEmail)) {
-                        try {
-                            UserDetails userDetails = customUserDetailsService.loadUserByUsername(userEmail);
-                            UsernamePasswordAuthenticationToken authentication =
-                                    new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
-                            accessor.setUser(authentication);
-                            log.info("[WebSocket] Authenticated STOMP session for principal: {}", authentication.getName());
-                        } catch (Exception e) {
-                            final String finalUser = userEmail;
-                            Principal principal = () -> finalUser;
-                            accessor.setUser(new UsernamePasswordAuthenticationToken(principal, null, List.of()));
-                            log.info("[WebSocket] Ad-hoc STOMP session for user: {}", userEmail);
-                        }
+                } else if (StompCommand.SUBSCRIBE.equals(accessor.getCommand())) {
+                    Authentication authentication = accessor.getUser() instanceof Authentication
+                            ? (Authentication) accessor.getUser()
+                            : null;
+                    String destination = accessor.getDestination();
+                    if (authentication == null || !authentication.isAuthenticated()
+                            || !isAllowedSubscription(destination)) {
+                        log.warn("[WebSocket] Rejected unauthorized STOMP subscription: {}", destination);
+                        return null;
+                    }
+                } else if (StompCommand.SEND.equals(accessor.getCommand())) {
+                    Authentication authentication = accessor.getUser() instanceof Authentication
+                            ? (Authentication) accessor.getUser()
+                            : null;
+                    String destination = accessor.getDestination();
+                    if (authentication == null || !authentication.isAuthenticated()
+                            || !isAllowedSendDestination(destination)) {
+                        log.warn("[WebSocket] Rejected unauthorized STOMP send: {}", destination);
+                        return null;
                     }
                 }
+
                 return message;
             }
-        });
+
+            private boolean isAllowedSubscription(String destination) {
+                return "/user/queue/messages".equals(destination)
+                        || "/topic/connections".equals(destination)
+                        || (destination != null && destination.matches("/topic/user\\.[^/]+\\.connections"));
+            }
+
+            private boolean isAllowedSendDestination(String destination) {
+                return "/app/chat.send".equals(destination)
+                        || "/app/chat.private".equals(destination);
+            }
+        };
     }
 }

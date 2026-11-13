@@ -3103,6 +3103,7 @@ function ProfilePage({
               <div className="reference-modal-success" role="status">
                 <p>{contactAccessState.message || 'The profile owner approved your request to view their contact details.'}</p>
                 <dl className="reference-contact-details">
+                  {isOwnerView && (
                   <div>
                     <dt>Phone</dt>
                     <dd>
@@ -3111,6 +3112,7 @@ function ProfilePage({
                         : 'Not provided'}
                     </dd>
                   </div>
+                  )}
                   <div>
                     <dt>Email</dt>
                     <dd>

@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import '../../App.css'
 import { api } from '../../api'
@@ -6,7 +6,7 @@ import { api as directoryApi } from '../../services/api'
 import { getProfileStorageKey } from '../../services/profileStorage'
 import { FILM_CRAFTS } from '../../services/mockData'
 import { SUB_CRAFTS_BY_PRIMARY_CRAFT } from '../../services/suggestion'
-import Messages from './Messages'
+import Messages, { getUnreadConversationCount } from './Messages'
 import Home from './Home'
 import NetworkPage from './NetworkPage'
 import Endorsement from './Endorsement'
@@ -351,6 +351,7 @@ function Navigation({
   setIsBusinessExploreOpen,
   filmMakerVisited,
   onFilmMakerAccess,
+  onOpenInvestorRequest,
 }) {
   const profileMenuRef = useRef(null)
   const businessMenuRef = useRef(null)
@@ -1331,25 +1332,28 @@ function Navigation({
                 <Link
                   className="profile-dropdown-item business-explore-dropdown-link"
                   to={filmMakerVisited ? '/protect-producer' : '/entertainments'}
-                  role="menuitem"
+                  role="menuitem" target='_blank'
                   onClick={onFilmMakerAccess}
                 >
                   {filmMakerVisited ? 'Manage Film' : 'Are you a Film Maker?'} <span aria-hidden="true">↗</span>
                 </Link>
                 <div className="profile-dropdown-divider" />
-                <Link
+                <button
                   className="profile-dropdown-item business-explore-dropdown-link"
-                  to="/lcm-app"
+                  type="button"
                   role="menuitem"
-                  onClick={() => setIsBusinessExploreOpen(false)}
+                  onClick={() => {
+                    setIsBusinessExploreOpen(false)
+                    onOpenInvestorRequest()
+                  }}
                 >
-                  Are you an Investor and Earner? <span aria-hidden="true">↗</span>
-                </Link>
+                  Are you an Investor / Producer ?
+                </button>
                 <div className="profile-dropdown-divider" />
                 <a
                   className="profile-dropdown-item business-explore-dropdown-link"
                   href="https://truehunt.in/entertainments"
-                  role="menuitem"
+                  role="menuitem" target='_blank'
                   onClick={() => setIsBusinessExploreOpen(false)}
                 >
                   Assets <span aria-hidden="true">↗</span>
@@ -1358,7 +1362,7 @@ function Navigation({
                 <Link
                   className="profile-dropdown-item business-explore-dropdown-link"
                   to="/entertainments"
-                  role="menuitem"
+                  role="menuitem" target='_blank'
                   onClick={() => setIsBusinessExploreOpen(false)}
                 >
                   Are you interested in advertisement? <span aria-hidden="true">↗</span>
@@ -1398,6 +1402,7 @@ export default function SocialApp() {
   const [networkRequestCount, setNetworkRequestCount] = useState(0)
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false)
   const [isBusinessExploreOpen, setIsBusinessExploreOpen] = useState(false)
+  const [investorRequestOpenSignal, setInvestorRequestOpenSignal] = useState(0)
   const [filmMakerVisited, setFilmMakerVisited] = useState(() => hasVisitedFilmMaker(user?.email))
   const [viewingCandidateProfile, setViewingCandidateProfile] = useState(() => {
     const candidateProfile = location.state?.connectTalent
@@ -1411,6 +1416,43 @@ export default function SocialApp() {
     }
   })
   const openConversationRef = useRef(null)
+
+  const refreshUnreadMessageCount = useCallback(async () => {
+    if (!isAuthenticated) {
+      setUnreadMessageCount(0)
+      return
+    }
+
+    try {
+      const conversations = await api.getConversations()
+      if (Array.isArray(conversations)) {
+        setUnreadMessageCount(getUnreadConversationCount(conversations))
+      }
+    } catch (error) {
+      console.warn('Could not refresh the unread message count:', error)
+    }
+  }, [isAuthenticated])
+
+  useEffect(() => {
+    void refreshUnreadMessageCount()
+
+    const handleMessageReceived = () => {
+      void refreshUnreadMessageCount()
+    }
+    const handleFocus = () => {
+      if (!document.hidden) void refreshUnreadMessageCount()
+    }
+
+    window.addEventListener('truehunt-message-received', handleMessageReceived)
+    window.addEventListener('focus', handleFocus)
+    document.addEventListener('visibilitychange', handleFocus)
+
+    return () => {
+      window.removeEventListener('truehunt-message-received', handleMessageReceived)
+      window.removeEventListener('focus', handleFocus)
+      document.removeEventListener('visibilitychange', handleFocus)
+    }
+  }, [refreshUnreadMessageCount])
   const recordedProfileViewRef = useRef('')
   const [theme, setTheme] = useState('light')
   const [profileDetails, setProfileDetails] = useState(emptyProfileDetails)
@@ -1767,6 +1809,7 @@ export default function SocialApp() {
         onOpenMessageInbox={() => setMessageInboxRequest((current) => current + 1)}
         onShowMyProfile={showMyProfile}
         onShowMyPostsAndActivities={showMyPostsAndActivities}
+        onOpenInvestorRequest={() => setInvestorRequestOpenSignal((signal) => signal + 1)}
         filmMakerVisited={filmMakerVisited}
         onFilmMakerAccess={() => {
           if (!filmMakerVisited) {
@@ -1787,6 +1830,7 @@ export default function SocialApp() {
         onOwnPostCreated={persistOwnPost}
         activeNavigation={activeNavigation}
         setActiveNavigation={setActiveNavigation}
+        investorRequestOpenSignal={investorRequestOpenSignal}
         hidden={!['home', 'opportunities'].includes(activeNavigation)}
         onViewProfile={showMyProfile}
         onViewConnection={showCandidateProfile}
@@ -1929,6 +1973,13 @@ export default function SocialApp() {
           </p>
           {activeNavigation === 'business' && (
             <>
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => setInvestorRequestOpenSignal((signal) => signal + 1)}
+              >
+                Are you an Investor / Producer?
+              </button>
               <button className="secondary-button" type="button" onClick={() => setActiveNavigation('profile')}>
                 Return to profile
               </button>

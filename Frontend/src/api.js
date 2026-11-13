@@ -66,7 +66,7 @@ async function fetchJson(endpoint, options = {}) {
 export const api = {
   // Profiles
   getProfile: () => fetchJson("/profiles/me"),
-  getProfileById: (id) => fetchJson(`/profiles/${id}`),
+  getProfileById: (id) => fetchJson(`/profiles/${encodeURIComponent(id)}`),
   getProfileDirectory: () => fetchJson("/profiles/directory"),
   recordProfileView: (id) =>
     fetchJson(`/profiles/${encodeURIComponent(id)}/views`, { method: "POST" }),

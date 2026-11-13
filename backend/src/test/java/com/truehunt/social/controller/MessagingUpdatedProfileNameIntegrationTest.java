@@ -2,6 +2,8 @@ package com.truehunt.social.controller;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.truehunt.social.model.ProfileEntity;
+import com.truehunt.social.repository.ProfileRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -29,6 +31,9 @@ class MessagingUpdatedProfileNameIntegrationTest {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private ProfileRepository profileRepository;
 
     private String nextIndianPhone(char leadingDigit) {
         long suffix = Math.abs((System.nanoTime() + SEQUENCE.incrementAndGet()) % 1_000_000_000L);
@@ -58,6 +63,43 @@ class MessagingUpdatedProfileNameIntegrationTest {
     }
 
     @Test
+    void registeredProfilesStayVisibleWithNameAndDetailsWhenLegacyProfileUsesEmailAsId() throws Exception {
+        long stamp = System.nanoTime();
+        String email = "profile.directory." + stamp + "@gmail.com";
+        JsonNode user = registerUser("Registered Profile User", email);
+        String token = user.path("token").asText();
+        String publicUserId = user.path("userId").asText();
+
+        ProfileEntity profile = profileRepository.findByEmail(email).orElseThrow();
+        profile.setUserId(email);
+        profile.setPrimaryCraft("Director");
+        profileRepository.save(profile);
+
+        mockMvc.perform(get("/api/profiles/directory"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[?(@.userId == '" + publicUserId + "')].name")
+                        .value(hasItem("Registered Profile User")));
+
+        mockMvc.perform(get("/api/profiles/" + publicUserId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.name").value("Registered Profile User"))
+                .andExpect(jsonPath("$.data.userId").value(publicUserId))
+                .andExpect(jsonPath("$.data.primaryCraft").value("Director"));
+
+        profileRepository.delete(profile);
+        mockMvc.perform(get("/api/profiles/directory"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[?(@.userId == '" + publicUserId + "')].name")
+                        .value(hasItem("Registered Profile User")));
+        mockMvc.perform(get("/api/profiles/" + publicUserId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.name").value("Registered Profile User"))
+                .andExpect(jsonPath("$.data.userId").value(publicUserId));
+    }
+
+    @Test
     void receiverSeesUpdatedSenderNameInConversationsAndMessagesEvenAfterRenameAndStaleClientPayload() throws Exception {
         long stamp = System.nanoTime();
         String senderEmail = "sender." + stamp + "@gmail.com";
@@ -67,6 +109,8 @@ class MessagingUpdatedProfileNameIntegrationTest {
         String senderToken = senderAuth.path("token").asText();
         String senderUserId = senderAuth.path("userId").asText();
         String receiverToken = registerUser("Receiver User", receiverEmail).path("token").asText();
+        String unrelatedUserToken = registerUser("Unrelated User", "unrelated." + stamp + "@gmail.com")
+                .path("token").asText();
 
         // 1. Initial message creates conversation with old name "vamsi alladi"
         String firstMsgBody = """
@@ -89,6 +133,26 @@ class MessagingUpdatedProfileNameIntegrationTest {
 
         long conversationId = objectMapper.readTree(firstMsgResult.getResponse().getContentAsString())
                 .path("data").path("conversationId").asLong();
+
+        mockMvc.perform(get("/api/conversations")
+                        .header("Authorization", "Bearer " + receiverToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[?(@.id == " + conversationId + ")]").exists());
+        mockMvc.perform(get("/api/conversations")
+                        .header("Authorization", "Bearer " + unrelatedUserToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").isEmpty());
+        mockMvc.perform(get("/api/conversations/" + conversationId)
+                        .header("Authorization", "Bearer " + unrelatedUserToken))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/messages/" + conversationId)
+                        .header("Authorization", "Bearer " + unrelatedUserToken))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/conversations/" + conversationId + "/messages")
+                        .header("Authorization", "Bearer " + unrelatedUserToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"This should stay private.\"}"))
+                .andExpect(status().isUnauthorized());
 
         // 2. Sender updates profile name from "vamsi alladi" to "Alladi Vamsi"
         mockMvc.perform(put("/api/profile/me")

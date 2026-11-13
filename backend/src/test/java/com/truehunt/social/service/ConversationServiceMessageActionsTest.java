@@ -136,12 +136,12 @@ class ConversationServiceMessageActionsTest {
         LocalDateTime lastActivity = LocalDateTime.now().minusDays(1);
         conversation.setUpdatedAt(lastActivity);
 
-        conversationService.starConversation(CONVERSATION_ID.toString());
+        conversationService.starConversation(CONVERSATION_ID.toString(), OWNER_EMAIL);
 
         assertTrue(conversation.isStarred());
         assertEquals(lastActivity, conversation.getUpdatedAt());
 
-        conversationService.starConversation(CONVERSATION_ID.toString());
+        conversationService.starConversation(CONVERSATION_ID.toString(), OWNER_EMAIL);
 
         assertFalse(conversation.isStarred());
         assertEquals(lastActivity, conversation.getUpdatedAt());

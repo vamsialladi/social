@@ -87,7 +87,6 @@ public class ContactAccessService {
         response.put("message", requestMessage(request.orElse(null)));
         if (request.isPresent() && ACCEPTED.equalsIgnoreCase(request.get().getStatus())) {
             ProfileDto approvedProfile = profileService.getProfileByIdForContactAccess(ownerId);
-            response.put("phone", approvedProfile.getPhone());
             response.put("professionalPhone", approvedProfile.getProfessionalPhone());
             response.put("email", approvedProfile.getEmail());
         }

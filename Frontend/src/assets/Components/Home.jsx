@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowUpRight, BriefcaseBusiness, Eye, MessageCircle, Search, ThumbsUp, UsersRound, X } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import './Home.css'
@@ -192,6 +192,7 @@ function Home({
   onOwnPostCreated,
   activeNavigation,
   setActiveNavigation,
+  investorRequestOpenSignal,
   hidden,
   onViewProfile,
   onViewConnection,
@@ -730,7 +731,7 @@ function Home({
     return () => window.removeEventListener('truehunt-social-navigation-changed', handleSocialNavigationChanged)
   }, [])
 
-  function openInvestorRequest() {
+  const openInvestorRequest = useCallback(() => {
     setInvestorRequest({
       name: profileDetails.name || '',
       userId: profileDetails.userId || currentUserId || '',
@@ -758,7 +759,11 @@ function Home({
         console.error('Could not load investor access status:', error)
         setInvestorRequestError('Could not verify your current request status. Please try again.')
       })
-  }
+  }, [currentUserId, profileDetails.name, profileDetails.userId])
+
+  useEffect(() => {
+    if (investorRequestOpenSignal) openInvestorRequest()
+  }, [investorRequestOpenSignal, openInvestorRequest])
 
   async function openInvestorSearch() {
     setIsInvestorSearchOpen(true)
@@ -1906,7 +1911,7 @@ function Home({
                 <img src="/assets/explore-investors.png" alt="" />
               </span>
               <span className="home-explore-promo-copy">
-                <strong>Are you an investor and earner ?</strong>
+                <strong>Are you an investor / producer ?</strong>
                 <small>Discover creative opportunities</small>
                 <ArrowUpRight size={16} aria-hidden="true" />
               </span>

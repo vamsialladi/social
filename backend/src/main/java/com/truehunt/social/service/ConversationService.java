@@ -41,35 +41,19 @@ public class ConversationService {
     }
 
     public List<Map<String, Object>> getConversations(String mailbox, String userEmail) {
+        if (userEmail == null || userEmail.isBlank()) {
+            throw new UnauthorizedException("A valid sign-in is required to view conversations.");
+        }
         List<ConversationEntity> list = (mailbox != null && !mailbox.isBlank())
                 ? conversationRepository.findAllByMailboxIgnoreCaseOrderByUpdatedAtDesc(mailbox)
                 : conversationRepository.findAllByOrderByUpdatedAtDesc();
 
-        if (userEmail != null && !userEmail.isBlank()) {
-            final String cleanEmail = userEmail.trim().toLowerCase(Locale.ROOT);
-            final Set<String> callerIdentifiers = resolveCallerIdentifiers(userEmail);
-
-            return list.stream()
-                    .filter(c -> {
-                        String u1 = c.getUser1Id() != null ? c.getUser1Id().trim().toLowerCase(Locale.ROOT) : "";
-                        String u2 = c.getUser2Id() != null ? c.getUser2Id().trim().toLowerCase(Locale.ROOT) : "";
-                        String cName = c.getName() != null ? c.getName().trim().toLowerCase(Locale.ROOT) : "";
-
-                        if (u1.isEmpty() && u2.isEmpty())
-                            return true;
-
-                        boolean matchU1 = callerIdentifiers.contains(u1);
-                        boolean matchU2 = callerIdentifiers.contains(u2);
-                        boolean matchName = !cName.isEmpty() && callerIdentifiers.contains(cName);
-
-                        return matchU1 || matchU2 || matchName;
-                    })
-                    .map(c -> toEnrichedDto(c, cleanEmail, callerIdentifiers))
-                    .collect(Collectors.toList());
-        }
-
+        final String cleanEmail = userEmail.trim().toLowerCase(Locale.ROOT);
+        final Set<String> callerIdentifiers = resolveCallerIdentifiers(userEmail);
         return list.stream()
-                .map(c -> toEnrichedDto(c, null, Collections.emptySet()))
+                .filter(c -> callerIdentifiers.contains(normalizeIdentity(c.getUser1Id()))
+                        || callerIdentifiers.contains(normalizeIdentity(c.getUser2Id())))
+                .map(c -> toEnrichedDto(c, cleanEmail, callerIdentifiers))
                 .collect(Collectors.toList());
     }
 
@@ -79,12 +63,8 @@ public class ConversationService {
 
     public Map<String, Object> getConversation(String id, String userEmail) {
         ConversationEntity entity = findConversationEntity(id);
-        if (userEmail != null && !userEmail.isBlank()) {
-            final String cleanEmail = userEmail.trim().toLowerCase(Locale.ROOT);
-            final Set<String> callerIdentifiers = resolveCallerIdentifiers(userEmail);
-            return toEnrichedDto(entity, cleanEmail, callerIdentifiers);
-        }
-        return toEnrichedDto(entity, userEmail);
+        Set<String> callerIdentifiers = requireConversationParticipant(entity, userEmail);
+        return toEnrichedDto(entity, userEmail, callerIdentifiers);
     }
 
     @Transactional
@@ -98,6 +78,7 @@ public class ConversationService {
             throw new BadRequestException("Message content cannot be empty.");
         }
         ConversationEntity entity = findConversationEntity(id);
+        requireConversationParticipant(entity, userEmail);
 
         com.truehunt.social.dto.ChatMessageDto chatDto = new com.truehunt.social.dto.ChatMessageDto();
         chatDto.setConversationId(entity.getId());
@@ -186,6 +167,9 @@ public class ConversationService {
 
     @Transactional
     public Map<String, Object> createConversation(CreateConversationRequest req, String userEmail) {
+        if (userEmail == null || userEmail.isBlank()) {
+            throw new UnauthorizedException("A valid sign-in is required to start a conversation.");
+        }
         com.truehunt.social.dto.ChatMessageDto chatDto = new com.truehunt.social.dto.ChatMessageDto();
         chatDto.setContent(req.getMessageText() != null ? req.getMessageText().trim() : "Hi");
         chatDto.setReceiverId(req.getRecipient());
@@ -232,6 +216,7 @@ public class ConversationService {
     @Transactional
     public Map<String, Object> markAsRead(String id, String userEmail) {
         ConversationEntity entity = findConversationEntity(id);
+        requireConversationParticipant(entity, userEmail);
         entity.setUnread(false);
         conversationRepository.save(entity);
         return toEnrichedDto(entity, userEmail);
@@ -245,6 +230,7 @@ public class ConversationService {
     @Transactional
     public Map<String, Object> starConversation(String id, String userEmail) {
         ConversationEntity entity = findConversationEntity(id);
+        requireConversationParticipant(entity, userEmail);
         entity.setStarred(!entity.isStarred());
         conversationRepository.save(entity);
         return toEnrichedDto(entity, userEmail);
@@ -258,6 +244,7 @@ public class ConversationService {
     @Transactional
     public Map<String, Object> updateMailbox(String id, String mailbox, String userEmail) {
         ConversationEntity entity = findConversationEntity(id);
+        requireConversationParticipant(entity, userEmail);
         entity.setMailbox(mailbox);
         conversationRepository.save(entity);
         return toEnrichedDto(entity, userEmail);
@@ -265,15 +252,14 @@ public class ConversationService {
 
     @Transactional
     public void deleteConversation(String id) {
-        try {
-            ConversationEntity entity = findConversationEntity(id);
-            conversationRepository.delete(entity);
-        } catch (Exception e) {
-            Long numericId = parseLongId(id);
-            if (numericId != null && conversationRepository.existsById(numericId)) {
-                conversationRepository.deleteById(numericId);
-            }
-        }
+        deleteConversation(id, null);
+    }
+
+    @Transactional
+    public void deleteConversation(String id, String userEmail) {
+        ConversationEntity entity = findConversationEntity(id);
+        requireConversationParticipant(entity, userEmail);
+        conversationRepository.delete(entity);
     }
 
     private ConversationEntity findConversationEntity(String id) {

@@ -2,6 +2,8 @@ package com.truehunt.social.service;
 
 import com.truehunt.social.dto.ChatMessageDto;
 import com.truehunt.social.exception.BadRequestException;
+import com.truehunt.social.exception.ResourceNotFoundException;
+import com.truehunt.social.exception.UnauthorizedException;
 import com.truehunt.social.model.ConversationEntity;
 import com.truehunt.social.model.MessageEntity;
 import com.truehunt.social.model.ProfileEntity;
@@ -51,7 +53,7 @@ public class MessageService {
             throw new BadRequestException("Message content cannot be empty.");
         }
 
-        String senderRawId = resolveIdentity(principal, req.getSenderId());
+        String senderRawId = resolveIdentity(principal);
         Optional<UserAccountEntity> senderOpt = resolveUserAccount(senderRawId);
         String senderEmail = senderOpt.map(UserAccountEntity::getEmail).orElse(senderRawId);
         String senderPublicUserId = senderOpt.map(UserAccountEntity::getPublicUserId).orElse(senderRawId);
@@ -97,6 +99,36 @@ public class MessageService {
         if (conversation == null) {
             conversation = findOrCreateConversation(senderEmail, senderPublicUserId, senderName,
                     receiverEmail, receiverPublicUserId, receiverName);
+        } else {
+            Set<String> senderIdentifiers = new HashSet<>();
+            addIdentityKeys(senderIdentifiers, senderEmail);
+            addIdentityKeys(senderIdentifiers, senderPublicUserId);
+            addIdentityKeys(senderIdentifiers, senderRawId);
+            if (senderOpt.isPresent() && senderOpt.get().getId() != null) {
+                addIdentityKeys(senderIdentifiers, String.valueOf(senderOpt.get().getId()));
+            }
+
+            String user1Id = conversation.getUser1Id();
+            String user2Id = conversation.getUser2Id();
+            boolean senderIsUser1 = user1Id != null && senderIdentifiers.stream()
+                    .anyMatch(identity -> identity.equalsIgnoreCase(user1Id));
+            boolean senderIsUser2 = user2Id != null && senderIdentifiers.stream()
+                    .anyMatch(identity -> identity.equalsIgnoreCase(user2Id));
+            if (!senderIsUser1 && !senderIsUser2) {
+                throw new UnauthorizedException("You cannot send messages in this conversation.");
+            }
+
+            String partnerId = senderIsUser1 ? conversation.getUser2Id() : conversation.getUser1Id();
+            Optional<UserAccountEntity> partnerOpt = resolveUserAccount(partnerId);
+            receiverEmail = partnerOpt.map(UserAccountEntity::getEmail).orElse(partnerId);
+            receiverPublicUserId = partnerOpt.map(UserAccountEntity::getPublicUserId).orElse(partnerId);
+            receiverName = resolveParticipantDisplayName(
+                    partnerOpt,
+                    receiverEmail,
+                    receiverPublicUserId,
+                    partnerId,
+                    senderIsUser1 ? conversation.getUser2Name() : conversation.getUser1Name()
+            );
         }
 
         Long conversationId = conversation.getId();
@@ -165,48 +197,18 @@ public class MessageService {
         outDto.setCreatedAt(LocalDateTime.now().format(DateTimeFormatter.ofPattern("hh:mm a")));
         outDto.setType(req.getType() != null ? req.getType() : "CHAT");
 
-        deliverRealtime(outDto, senderEmail, senderPublicUserId, senderName,
-                receiverEmail, receiverPublicUserId, receiverName, conversationId);
+        deliverRealtime(outDto, senderEmail, receiverEmail, conversationId);
 
         return outDto;
     }
 
-    private void deliverRealtime(ChatMessageDto outDto,
-                                 String senderEmail, String senderPublicId, String senderName,
-                                 String receiverEmail, String receiverPublicId, String receiverName,
-                                 Long conversationId) {
+    private void deliverRealtime(ChatMessageDto outDto, String senderEmail, String receiverEmail, Long conversationId) {
         try {
-            messagingTemplate.convertAndSend("/topic/conversations/" + conversationId, outDto);
-            messagingTemplate.convertAndSend("/topic/messages/" + conversationId, outDto);
-            messagingTemplate.convertAndSend("/topic/messages", outDto);
-            messagingTemplate.convertAndSend("/topic/chat", outDto);
-
-            Set<String> receiverTargets = new LinkedHashSet<>();
-            addIdentityKeys(receiverTargets, receiverEmail);
-            addIdentityKeys(receiverTargets, receiverPublicId);
-            addIdentityKeys(receiverTargets, receiverName);
-
-            for (String target : receiverTargets) {
-                try {
-                    messagingTemplate.convertAndSendToUser(target, "/queue/messages", outDto);
-                } catch (Exception ignored) {}
-                try {
-                    messagingTemplate.convertAndSend("/topic/user." + target + ".messages", outDto);
-                } catch (Exception ignored) {}
-            }
-
-            Set<String> senderTargets = new LinkedHashSet<>();
-            addIdentityKeys(senderTargets, senderEmail);
-            addIdentityKeys(senderTargets, senderPublicId);
-            addIdentityKeys(senderTargets, senderName);
-
-            for (String target : senderTargets) {
-                try {
-                    messagingTemplate.convertAndSendToUser(target, "/queue/messages", outDto);
-                } catch (Exception ignored) {}
-                try {
-                    messagingTemplate.convertAndSend("/topic/user." + target + ".messages", outDto);
-                } catch (Exception ignored) {}
+            Set<String> participants = new LinkedHashSet<>();
+            if (senderEmail != null && !senderEmail.isBlank()) participants.add(senderEmail.trim());
+            if (receiverEmail != null && !receiverEmail.isBlank()) participants.add(receiverEmail.trim());
+            for (String participant : participants) {
+                messagingTemplate.convertAndSendToUser(participant, "/queue/messages", outDto);
             }
 
             log.info("[WebSocket] Real-time message #{} delivered to conversation {} (sender: {}, receiver: {})",
@@ -229,6 +231,22 @@ public class MessageService {
     }
 
     public List<Map<String, Object>> getMessagesForConversation(Long conversationId, String currentUserId) {
+        ConversationEntity conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Conversation", "id", conversationId));
+        Set<String> callerIdentifiers = new HashSet<>();
+        addIdentityKeys(callerIdentifiers, currentUserId);
+        resolveUserAccount(currentUserId).ifPresent(user -> {
+            addIdentityKeys(callerIdentifiers, user.getEmail());
+            addIdentityKeys(callerIdentifiers, user.getPublicUserId());
+            if (user.getId() != null) addIdentityKeys(callerIdentifiers, String.valueOf(user.getId()));
+        });
+        boolean isParticipant = callerIdentifiers.stream().anyMatch(identity ->
+                identity.equalsIgnoreCase(conversation.getUser1Id())
+                        || identity.equalsIgnoreCase(conversation.getUser2Id()));
+        if (!isParticipant) {
+            throw new UnauthorizedException("You cannot view messages in this conversation.");
+        }
+
         String resolvedId = resolveUserAccount(currentUserId)
                 .map(UserAccountEntity::getEmail)
                 .orElse(currentUserId);
@@ -249,13 +267,27 @@ public class MessageService {
     }
 
     public void broadcastConversationChange(Long conversationId, String type, String messageId, String content) {
+        ConversationEntity conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Conversation", "id", conversationId));
         Map<String, Object> event = new LinkedHashMap<>();
         event.put("type", type);
         event.put("conversationId", conversationId);
         if (messageId != null) event.put("id", messageId);
         if (content != null) event.put("content", content);
         if (messageId != null) event.put("edited", true);
-        messagingTemplate.convertAndSend("/topic/conversations/" + conversationId, event);
+        Set<String> participantEmails = new LinkedHashSet<>();
+        for (String participantId : List.of(
+                conversation.getUser1Id() == null ? "" : conversation.getUser1Id(),
+                conversation.getUser2Id() == null ? "" : conversation.getUser2Id()
+        )) {
+            String email = resolveUserAccount(participantId)
+                    .map(UserAccountEntity::getEmail)
+                    .orElse(participantId.contains("@") ? participantId.trim() : "");
+            if (!email.isBlank()) participantEmails.add(email);
+        }
+        for (String participantEmail : participantEmails) {
+            messagingTemplate.convertAndSendToUser(participantEmail, "/queue/messages", event);
+        }
     }
 
     private ConversationEntity findOrCreateConversation(String senderEmail, String senderPublicId, String senderName,
@@ -374,14 +406,11 @@ public class MessageService {
         return Optional.empty();
     }
 
-    private String resolveIdentity(Principal principal, String fallback) {
+    private String resolveIdentity(Principal principal) {
         if (principal != null && principal.getName() != null && !principal.getName().isBlank()) {
             return principal.getName().trim();
         }
-        if (fallback != null && !fallback.isBlank()) {
-            return fallback.trim();
-        }
-        return "pro@truehunt.in";
+        throw new UnauthorizedException("A valid sign-in is required to send messages.");
     }
 
     /**

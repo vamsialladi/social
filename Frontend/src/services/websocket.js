@@ -63,15 +63,7 @@ class WebSocketService {
           this.notifyMessage(msg)
         })
 
-        // 2. Global message streams for instant real-time delivery
-        this.doSubscribe('/topic/messages', (msg) => {
-          this.notifyMessage(msg)
-        })
-        this.doSubscribe('/topic/chat', (msg) => {
-          this.notifyMessage(msg)
-        })
-
-        // 3. Real-time connections topics (instant request & accept notifications)
+        // 2. Real-time connections topics (instant request & accept notifications)
         this.doSubscribe('/topic/connections', (event) => {
           try {
             window.dispatchEvent(new CustomEvent('truehunt-connection-changed', {
@@ -80,12 +72,9 @@ class WebSocketService {
           } catch (e) {}
         })
 
-        // 4. Direct pub-sub topics for user's email, ID, and name for guaranteed realtime dispatch
+        // 3. Direct connection notifications remain public topics; messages use the private queue above.
         if (this.currentEmail) {
           const emailLower = this.currentEmail.toLowerCase()
-          this.doSubscribe(`/topic/user.${emailLower}.messages`, (msg) => {
-            this.notifyMessage(msg)
-          })
           this.doSubscribe(`/topic/user.${emailLower}.connections`, (event) => {
             try {
               window.dispatchEvent(new CustomEvent('truehunt-connection-changed', {
@@ -94,9 +83,6 @@ class WebSocketService {
             } catch (e) {}
           })
           if (emailLower !== this.currentEmail) {
-            this.doSubscribe(`/topic/user.${this.currentEmail}.messages`, (msg) => {
-              this.notifyMessage(msg)
-            })
             this.doSubscribe(`/topic/user.${this.currentEmail}.connections`, (event) => {
               try {
                 window.dispatchEvent(new CustomEvent('truehunt-connection-changed', {
@@ -107,12 +93,6 @@ class WebSocketService {
           }
         }
         if (this.currentUserId) {
-          this.doSubscribe(`/topic/user.${this.currentUserId}.messages`, (msg) => {
-            this.notifyMessage(msg)
-          })
-          this.doSubscribe(`/topic/user.${this.currentUserId.toLowerCase()}.messages`, (msg) => {
-            this.notifyMessage(msg)
-          })
           this.doSubscribe(`/topic/user.${this.currentUserId.toLowerCase()}.connections`, (event) => {
             try {
               window.dispatchEvent(new CustomEvent('truehunt-connection-changed', {
@@ -121,17 +101,7 @@ class WebSocketService {
             } catch (e) {}
           })
         }
-        if (this.currentUserName) {
-          this.doSubscribe(`/topic/user.${this.currentUserName}.messages`, (msg) => {
-            this.notifyMessage(msg)
-          })
-          const nameNoSpaces = this.currentUserName.toLowerCase().replace(/\s+/g, '')
-          this.doSubscribe(`/topic/user.${nameNoSpaces}.messages`, (msg) => {
-            this.notifyMessage(msg)
-          })
-        }
-
-        // 5. Resubscribe any registered destinations
+        // 4. Resubscribe any registered destinations
         for (const [dest, callback] of this.subscriptions.entries()) {
           this.doSubscribe(dest, callback)
         }

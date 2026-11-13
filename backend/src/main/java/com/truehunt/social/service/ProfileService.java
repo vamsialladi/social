@@ -52,79 +52,119 @@ public class ProfileService {
     }
 
     public List<Map<String, Object>> getPublicDirectory() {
-        return profileRepository.findAll().stream()
-                .filter(profile -> !isAdminProfile(profile))
-                .filter(profile -> profile.getName() != null && !profile.getName().isBlank())
-                .map(profile -> {
-                    Map<String, Object> directoryProfile = new HashMap<>();
-                    String publicUserId = findAccountByEmail(profile.getEmail())
-                            .map(UserAccountEntity::getPublicUserId)
-                            .filter(id -> id != null && !id.isBlank())
-                            .orElse(profile.getUserId());
-                    directoryProfile.put("id", publicUserId);
-                    directoryProfile.put("userId", publicUserId);
-                    directoryProfile.put("referId", publicUserId);
-                    directoryProfile.put("name", profile.getName());
-                    directoryProfile.put("category", profile.getPrimaryCraft() != null ? profile.getPrimaryCraft() : "");
-                    directoryProfile.put("primaryCraft", profile.getPrimaryCraft() != null ? profile.getPrimaryCraft() : "");
-                    directoryProfile.put("height", profile.getHeight() != null ? profile.getHeight() : "");
-                    directoryProfile.put("weight", profile.getWeight() != null ? profile.getWeight() : "");
-                    directoryProfile.put("bodyBuild", profile.getBodyBuild() != null ? profile.getBodyBuild() : "");
-                    directoryProfile.put("gender", profile.getGender() != null ? profile.getGender() : "");
-                    directoryProfile.put("facialHair", profile.getFacialHair() != null ? profile.getFacialHair() : "");
-                    directoryProfile.put("skinTone", profile.getSkinTone() != null ? profile.getSkinTone() : "");
-                    directoryProfile.put("experience", profile.getExperience() != null ? profile.getExperience() : "");
-                    directoryProfile.put("avatar", profile.getProfileImageUrl() != null ? profile.getProfileImageUrl() : "");
-                    directoryProfile.put("coverImageUrl", profile.getCoverImageUrl() != null ? profile.getCoverImageUrl() : "");
-                    directoryProfile.put("coverImage", profile.getCoverImageUrl() != null ? profile.getCoverImageUrl() : "");
-                    List<String> skills = new ArrayList<>(profile.getTalents());
-                    profile.getWorkTypes().stream()
-                            .filter(workType -> !skills.contains(workType))
-                            .forEach(skills::add);
-                    directoryProfile.put("skills", skills);
+        Map<String, Map<String, Object>> directory = new LinkedHashMap<>();
+        for (ProfileEntity profile : profileRepository.findAll()) {
+            Optional<UserAccountEntity> account = findAccountByEmail(profile.getEmail())
+                    .or(() -> findAccountByPublicUserId(profile.getUserId()));
+            if (isAdminAccount(account)) continue;
 
-                    String pCraft = profile.getPrimaryCraft() != null && !profile.getPrimaryCraft().isBlank()
-                            ? profile.getPrimaryCraft() : (skills.isEmpty() ? "Cast (Actors)" : skills.get(0));
-                    String sCraft = profile.getSubCraft() != null && !profile.getSubCraft().isBlank()
-                            ? profile.getSubCraft() : (pCraft.toLowerCase().contains("act") ? "Lead Actor" : pCraft);
+            String name = profile.getName();
+            if (name == null || name.isBlank()) {
+                name = account.map(UserAccountEntity::getName).orElse(null);
+            }
+            String publicUserId = account.map(UserAccountEntity::getPublicUserId)
+                    .filter(id -> id != null && !id.isBlank())
+                    .orElse(profile.getUserId());
+            if (name == null || name.isBlank() || publicUserId == null || publicUserId.isBlank()) continue;
 
-                    directoryProfile.put("category", pCraft);
-                    directoryProfile.put("primaryCraft", pCraft);
-                    directoryProfile.put("craft", pCraft);
-                    directoryProfile.put("subCraft", sCraft);
-                    directoryProfile.put("secondaryCrafts", profile.getSecondaryCrafts());
-                    directoryProfile.put("secondarySubCrafts", profile.getSecondarySubCrafts());
+            directory.put(publicUserId.toLowerCase(Locale.ROOT),
+                    toDirectoryProfile(profile, publicUserId, name));
+        }
 
-                    String resolvedRole = profile.getSubCraft() != null && !profile.getSubCraft().isBlank()
-                            ? profile.getSubCraft() : pCraft;
-                    directoryProfile.put("role", resolvedRole);
+        for (UserAccountEntity account : userAccountRepository.findAll()) {
+            if ("ADMIN".equalsIgnoreCase(account.getRole())
+                    || account.getName() == null || account.getName().isBlank()) {
+                continue;
+            }
+            String publicUserId = account.getPublicUserId() != null && !account.getPublicUserId().isBlank()
+                    ? account.getPublicUserId()
+                    : String.valueOf(account.getId());
+            if (directory.containsKey(publicUserId.toLowerCase(Locale.ROOT))) continue;
 
-                    String resolvedHeadline = profile.getHeadline() != null && !profile.getHeadline().isBlank()
-                            ? profile.getHeadline()
-                            : (profile.getSubCraft() != null && !profile.getSubCraft().isBlank()
-                                ? profile.getSubCraft() + " • " + pCraft
-                                : pCraft);
-                    directoryProfile.put("headline", resolvedHeadline);
+            ProfileEntity profile = profileRepository.findByEmail(account.getEmail()).orElseGet(ProfileEntity::new);
+            profile.setUserId(publicUserId);
+            profile.setEmail(account.getEmail());
+            if (profile.getName() == null || profile.getName().isBlank()) profile.setName(account.getName());
+            if ((profile.getPrimaryCraft() == null || profile.getPrimaryCraft().isBlank())
+                    && account.getPrimaryCraft() != null) {
+                profile.setPrimaryCraft(account.getPrimaryCraft());
+            }
+            if ((profile.getSubCraft() == null || profile.getSubCraft().isBlank())
+                    && account.getSubCraft() != null) {
+                profile.setSubCraft(account.getSubCraft());
+            }
+            if ((profile.getExperience() == null || profile.getExperience().isBlank())
+                    && account.getExperience() != null) {
+                profile.setExperience(account.getExperience());
+            }
+            directory.put(publicUserId.toLowerCase(Locale.ROOT),
+                    toDirectoryProfile(profile, publicUserId, account.getName()));
+        }
+        return new ArrayList<>(directory.values());
+    }
 
-                    directoryProfile.put("bio", profile.getHighlights() != null ? profile.getHighlights() : "");
-                    directoryProfile.put("highlights", profile.getHighlights() != null ? profile.getHighlights() : "");
-                    directoryProfile.put("address", profile.getAddress() != null ? profile.getAddress() : "");
-                    directoryProfile.put("languages", profile.getLanguages());
-                    directoryProfile.put("experiences", profile.getExperiences());
+    private Map<String, Object> toDirectoryProfile(ProfileEntity profile, String publicUserId, String name) {
+        Map<String, Object> directoryProfile = new HashMap<>();
+        directoryProfile.put("id", publicUserId);
+        directoryProfile.put("userId", publicUserId);
+        directoryProfile.put("referId", publicUserId);
+        directoryProfile.put("name", name);
+        directoryProfile.put("height", profile.getHeight() != null ? profile.getHeight() : "");
+        directoryProfile.put("weight", profile.getWeight() != null ? profile.getWeight() : "");
+        directoryProfile.put("bodyBuild", profile.getBodyBuild() != null ? profile.getBodyBuild() : "");
+        directoryProfile.put("gender", profile.getGender() != null ? profile.getGender() : "");
+        directoryProfile.put("facialHair", profile.getFacialHair() != null ? profile.getFacialHair() : "");
+        directoryProfile.put("skinTone", profile.getSkinTone() != null ? profile.getSkinTone() : "");
+        directoryProfile.put("experience", profile.getExperience() != null ? profile.getExperience() : "");
+        directoryProfile.put("avatar", profile.getProfileImageUrl() != null ? profile.getProfileImageUrl() : "");
+        directoryProfile.put("coverImageUrl", profile.getCoverImageUrl() != null ? profile.getCoverImageUrl() : "");
+        directoryProfile.put("coverImage", profile.getCoverImageUrl() != null ? profile.getCoverImageUrl() : "");
+        List<String> skills = new ArrayList<>(profile.getTalents());
+        profile.getWorkTypes().stream()
+                .filter(workType -> !skills.contains(workType))
+                .forEach(skills::add);
+        directoryProfile.put("skills", skills);
 
-                    String loc = profile.getAddress() != null && !profile.getAddress().isBlank()
-                            ? profile.getAddress()
-                            : profile.getExperiences().stream()
-                                    .map(experience -> experience.get("location"))
-                                    .filter(Objects::nonNull)
-                                    .map(String::valueOf)
-                                    .filter(location -> !location.isBlank())
-                                    .findFirst()
-                                    .orElse("");
-                    directoryProfile.put("location", loc);
-                    return directoryProfile;
-                })
-                .collect(Collectors.toList());
+        String primaryCraft = profile.getPrimaryCraft() != null && !profile.getPrimaryCraft().isBlank()
+                ? profile.getPrimaryCraft() : (skills.isEmpty() ? "Cast (Actors)" : skills.get(0));
+        String subCraft = profile.getSubCraft() != null && !profile.getSubCraft().isBlank()
+                ? profile.getSubCraft() : (primaryCraft.toLowerCase(Locale.ROOT).contains("act") ? "Lead Actor" : primaryCraft);
+
+        directoryProfile.put("category", primaryCraft);
+        directoryProfile.put("primaryCraft", primaryCraft);
+        directoryProfile.put("craft", primaryCraft);
+        directoryProfile.put("subCraft", subCraft);
+        directoryProfile.put("secondaryCrafts", profile.getSecondaryCrafts());
+        directoryProfile.put("secondarySubCrafts", profile.getSecondarySubCrafts());
+
+        String role = profile.getSubCraft() != null && !profile.getSubCraft().isBlank()
+                ? profile.getSubCraft() : primaryCraft;
+        directoryProfile.put("role", role);
+
+        String headline = profile.getHeadline() != null && !profile.getHeadline().isBlank()
+                ? profile.getHeadline()
+                : (profile.getSubCraft() != null && !profile.getSubCraft().isBlank()
+                    ? profile.getSubCraft() + " • " + primaryCraft
+                    : primaryCraft);
+        directoryProfile.put("headline", headline);
+
+        directoryProfile.put("bio", profile.getHighlights() != null ? profile.getHighlights() : "");
+        directoryProfile.put("highlights", profile.getHighlights() != null ? profile.getHighlights() : "");
+        directoryProfile.put("address", profile.getAddress() != null ? profile.getAddress() : "");
+        directoryProfile.put("languages", profile.getLanguages());
+        directoryProfile.put("experiences", profile.getExperiences());
+
+        String location = profile.getAddress() != null && !profile.getAddress().isBlank()
+                ? profile.getAddress()
+                : profile.getExperiences().stream()
+                        .map(experience -> experience.get("location"))
+                        .filter(Objects::nonNull)
+                        .map(String::valueOf)
+                        .filter(value -> !value.isBlank())
+                        .findFirst()
+                        .orElse("");
+        directoryProfile.put("location", location);
+        return directoryProfile;
     }
 
     @Transactional
@@ -144,15 +184,29 @@ public class ProfileService {
             throw new ResourceNotFoundException("Profile", "id", id);
         }
 
-        Optional<ProfileEntity> opt = profileRepository.findByUserId(id);
-        if (opt.isEmpty()) {
-            opt = findAccountByPublicUserId(id)
-                    .flatMap(account -> profileRepository.findByUserId(account.getPublicUserId()));
-        }
+        Optional<UserAccountEntity> account = findAccountByPublicUserId(id)
+                .or(() -> findAccountByEmail(id));
+        Optional<ProfileEntity> opt = profileRepository.findByUserId(id)
+                .or(() -> account.flatMap(user -> profileRepository.findByUserId(user.getPublicUserId())))
+                .or(() -> account.flatMap(user -> profileRepository.findByEmail(user.getEmail())))
+                .or(() -> profileRepository.findByEmail(id));
 
         ProfileDto dto;
         if (opt.isPresent()) {
             dto = mapEntityToDto(opt.get());
+        } else if (account.isPresent()) {
+            UserAccountEntity user = account.get();
+            ProfileEntity profile = new ProfileEntity();
+            profile.setUserId(user.getPublicUserId());
+            profile.setName(user.getName());
+            profile.setEmail(user.getEmail());
+            profile.setRole(user.getRole());
+            profile.setPrimaryCraft(user.getPrimaryCraft());
+            profile.setSubCraft(user.getSubCraft());
+            profile.setExperience(user.getExperience());
+            profile.setCompany(user.getCompanyName());
+            profile.setAddress(user.getHeadquarters());
+            dto = mapEntityToDto(profile);
         } else {
             TalentService talentService = talentServiceProvider != null ? talentServiceProvider.getIfAvailable() : null;
             if (talentService != null) {
@@ -170,6 +224,27 @@ public class ProfileService {
                 }
             } else {
                 throw new ResourceNotFoundException("Profile", "id", id);
+            }
+        }
+
+        if (account.isPresent()) {
+            UserAccountEntity user = account.get();
+            if (user.getPublicUserId() != null && !user.getPublicUserId().isBlank()) {
+                dto.setId(user.getPublicUserId());
+                dto.setUserId(user.getPublicUserId());
+                dto.setReferId(user.getPublicUserId());
+            }
+            if ((dto.getName() == null || dto.getName().isBlank())
+                    && user.getName() != null && !user.getName().isBlank()) {
+                dto.setName(user.getName());
+            }
+            if ((dto.getPrimaryCraft() == null || dto.getPrimaryCraft().isBlank())
+                    && user.getPrimaryCraft() != null) {
+                dto.setPrimaryCraft(user.getPrimaryCraft());
+            }
+            if ((dto.getSubCraft() == null || dto.getSubCraft().isBlank())
+                    && user.getSubCraft() != null) {
+                dto.setSubCraft(user.getSubCraft());
             }
         }
 

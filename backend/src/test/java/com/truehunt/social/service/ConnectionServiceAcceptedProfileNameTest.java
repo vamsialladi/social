@@ -65,6 +65,49 @@ class ConnectionServiceAcceptedProfileNameTest {
         assertConnection(service.getConnectedProfiles("acceptor@example.com"), "requester-id", "Ravi Kumar");
     }
 
+    @Test
+    void incomingInvitationUsesRegisteredAccountDetailsWhenProfileIsGeneric() {
+        NetworkProfileRepository networkProfiles = mock(NetworkProfileRepository.class);
+        NotificationRepository notifications = mock(NotificationRepository.class);
+        ProfileRepository profiles = mock(ProfileRepository.class);
+        UserAccountRepository accounts = mock(UserAccountRepository.class);
+        UserProfileRelationshipRepository relationships = mock(UserProfileRelationshipRepository.class);
+
+        UserAccountEntity recipient = account(2L, "recipient@example.com", "recipient-id", "Recipient");
+        UserAccountEntity sender = account(1L, "sender@example.com", "sender-id", "Sender Name");
+        sender.setSubCraft("Film Director");
+        sender.setHeadquarters("Toronto");
+        when(accounts.findByEmail("recipient@example.com")).thenReturn(Optional.of(recipient));
+        when(accounts.findByEmail("sender@example.com")).thenReturn(Optional.of(sender));
+
+        ProfileEntity senderProfile = profile("sender-id", "sender@example.com", "Profile");
+        when(profiles.findByUserId("sender-id")).thenReturn(Optional.of(senderProfile));
+        when(profiles.findByEmail("sender@example.com")).thenReturn(Optional.of(senderProfile));
+
+        UserProfileRelationshipEntity invitation = new UserProfileRelationshipEntity();
+        invitation.setOwnerUserId("recipient-id");
+        invitation.setTargetProfileId("sender-id");
+        invitation.setSenderUserId("sender-id");
+        invitation.setStatus("PENDING");
+        when(relationships.findAll()).thenReturn(List.of(invitation));
+
+        ConnectionService service = new ConnectionService(
+                networkProfiles,
+                notifications,
+                profiles,
+                accounts,
+                relationships,
+                null,
+                null);
+
+        List<Map<String, Object>> invitations = service.getInvitations("recipient@example.com");
+
+        assertEquals(1, invitations.size());
+        assertEquals("Sender Name", invitations.get(0).get("name"));
+        assertEquals("Film Director", invitations.get(0).get("role"));
+        assertEquals("Toronto", invitations.get(0).get("location"));
+    }
+
     private static UserAccountEntity account(Long id, String email, String publicUserId, String name) {
         UserAccountEntity account = new UserAccountEntity();
         account.setId(id);

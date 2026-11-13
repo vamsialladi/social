@@ -726,8 +726,24 @@ public class ConnectionService {
                 name = "TrueHunt Member";
             }
             dto.put("name", name);
-            dto.put("role", entity.getHeadline() != null ? entity.getHeadline() : (entity.getPrimaryCraft() != null ? entity.getPrimaryCraft() : "Cinema Professional"));
-            dto.put("location", entity.getAddress() != null ? entity.getAddress() : "");
+            String role = entity.getHeadline();
+            if (isGenericProfileName(role)) role = entity.getSubCraft();
+            if (isGenericProfileName(role)) role = entity.getPrimaryCraft();
+            if (isGenericProfileName(role)) {
+                role = linkedAccount.map(UserAccountEntity::getSubCraft).orElse(null);
+            }
+            if (isGenericProfileName(role)) {
+                role = linkedAccount.map(UserAccountEntity::getPrimaryCraft).orElse(null);
+            }
+            if (isGenericProfileName(role)) {
+                role = linkedAccount.map(UserAccountEntity::getRole).orElse("Cinema Professional");
+            }
+            dto.put("role", role);
+            String location = entity.getAddress();
+            if (location == null || location.isBlank()) {
+                location = linkedAccount.map(UserAccountEntity::getHeadquarters).orElse("");
+            }
+            dto.put("location", location);
             dto.put("profileImageUrl", entity.getProfileImageUrl() != null ? entity.getProfileImageUrl() : "");
             dto.put("avatar", entity.getProfileImageUrl() != null ? entity.getProfileImageUrl() : "");
             dto.put("initials", getInitials(name));
@@ -855,7 +871,8 @@ public class ConnectionService {
         String normalizedName = name.trim().toLowerCase(Locale.ROOT);
         return "truehunt member".equals(normalizedName)
                 || "cinema professional".equals(normalizedName)
-                || "member".equals(normalizedName);
+                || "member".equals(normalizedName)
+                || "profile".equals(normalizedName);
     }
 
     @Transactional

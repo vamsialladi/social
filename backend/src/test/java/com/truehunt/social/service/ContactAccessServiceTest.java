@@ -56,7 +56,7 @@ class ContactAccessServiceTest {
         Map<String, Object> status = contactAccessService.getStatus(OWNER_ID, "requester@example.com");
 
         assertEquals("ACCEPTED", status.get("status"));
-        assertEquals("+15551234567", status.get("phone"));
+        assertEquals(false, status.containsKey("phone"));
         assertEquals("+15559876543", status.get("professionalPhone"));
         assertEquals("owner@example.com", status.get("email"));
     }

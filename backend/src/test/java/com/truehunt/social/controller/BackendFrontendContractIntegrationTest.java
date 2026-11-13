@@ -313,7 +313,7 @@ class BackendFrontendContractIntegrationTest {
     }
 
     @Test
-    void messagesAndConversationsResolveXUserIdAndJwtToken() throws Exception {
+    void messagesAndConversationsRequireJwtAndPreserveCallerPerspective() throws Exception {
         String senderEmail = "msg.sender." + System.nanoTime() + "@truehunt.in";
         String regPayload = """
                 {
@@ -333,10 +333,9 @@ class BackendFrontendContractIntegrationTest {
 
         JsonNode regData = objectMapper.readTree(regResult.getResponse().getContentAsString()).path("data");
         String token = regData.path("token").asText();
-        String userId = regData.path("userId").asText();
 
         MvcResult sendRes = mockMvc.perform(post("/api/messages")
-                        .header("X-User-Id", userId)
+                        .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -352,14 +351,14 @@ class BackendFrontendContractIntegrationTest {
         long conversationId = objectMapper.readTree(sendRes.getResponse().getContentAsString())
                 .path("data").path("conversationId").asLong();
 
-        // Reading messages with only X-User-Id resolves outgoing direction properly
+        // Reading messages requires the caller's authenticated identity.
         mockMvc.perform(get("/api/messages/" + conversationId)
-                        .header("X-User-Id", userId))
+                        .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].direction").value("outgoing"))
                 .andExpect(jsonPath("$.data[0].content").value("Interested in collaborating on your next project."));
 
-        // Listing conversations with only Authorization: Bearer <token> works
+        // Listing conversations uses the authenticated account.
         mockMvc.perform(get("/api/conversations")
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
@@ -367,13 +366,13 @@ class BackendFrontendContractIntegrationTest {
 
         // Conversation actions preserve caller perspective
         mockMvc.perform(patch("/api/conversations/" + conversationId + "/star")
-                        .header("X-User-Id", userId))
+                        .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.starred").value(true))
                 .andExpect(jsonPath("$.data.name").value("arjun.kapoor@truehunt.in"));
 
         mockMvc.perform(patch("/api/conversations/" + conversationId + "/mailbox")
-                        .header("X-User-Id", userId)
+                        .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"mailbox\":\"Other\"}"))
                 .andExpect(status().isOk())
@@ -381,10 +380,14 @@ class BackendFrontendContractIntegrationTest {
                 .andExpect(jsonPath("$.data.name").value("arjun.kapoor@truehunt.in"));
 
         mockMvc.perform(patch("/api/conversations/" + conversationId + "/read")
-                        .header("X-User-Id", userId))
+                        .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.unread").value(false))
                 .andExpect(jsonPath("$.data.name").value("arjun.kapoor@truehunt.in"));
+
+        mockMvc.perform(get("/api/conversations")
+                        .header("X-User-Id", senderEmail))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test

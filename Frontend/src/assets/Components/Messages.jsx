@@ -175,7 +175,7 @@ function isMessageOutgoing(msg, currentConversation, user) {
   return false
 }
 
-function getUnreadConversationCount(conversations) {
+export function getUnreadConversationCount(conversations) {
   return conversations.filter((conversation) => {
     if (!conversation.unread) return false
 
@@ -511,11 +511,6 @@ function Messages({
 
     loadBackendConversations(mailbox)
 
-    const handleMsgEvent = (event) => {
-      if (event.detail) handleIncomingWebSocketMessage(event.detail)
-    }
-    window.addEventListener('truehunt-message-received', handleMsgEvent)
-
     const handleFocus = () => {
       if (!document.hidden) loadBackendConversations(mailbox)
     }
@@ -523,19 +518,10 @@ function Messages({
 
     return () => {
       window.removeEventListener('focus', handleFocus)
-      window.removeEventListener('truehunt-message-received', handleMsgEvent)
       unsubStatus()
       unsubMsg()
     }
   }, [mailbox, loadBackendConversations, handleIncomingWebSocketMessage])
-
-  useEffect(() => {
-    if (!selectedId) return undefined
-    const unsubTopic = websocketService.subscribe(`/topic/conversations/${selectedId}`, handleIncomingWebSocketMessage)
-    return () => {
-      unsubTopic?.()
-    }
-  }, [selectedId, handleIncomingWebSocketMessage])
 
   const openConversation = useCallback((conversation) => {
     const profileConversation = createProfileConversation(conversation)
@@ -898,7 +884,7 @@ function Messages({
       type: 'CHAT',
     }
 
-    const sentOverWs = websocketService.sendMessage('/app/chat.send', wsPayload)
+    const sentOverWs = websocketService.sendMessage('/app/chat.private', wsPayload)
 
     // 3. Fallback to REST persistence only if WebSocket is disconnected
     if (!sentOverWs) {
@@ -939,13 +925,6 @@ function Messages({
 
     if (!name || !content) return
 
-    let currentUser = null
-    try {
-      const u = localStorage.getItem('truehunt_user')
-      if (u) currentUser = JSON.parse(u)
-    } catch {}
-
-    const myIdentity = currentUser?.email || currentUser?.userId || 'me'
     const messageId = `msg-${Date.now()}`
 
     try {
@@ -970,15 +949,6 @@ function Messages({
       setMessages((currentMessages) => [newMessage, ...currentMessages.filter((m) => m.id !== convId)])
       setSelectedId(convId)
 
-      websocketService.sendMessage('/app/chat.send', {
-        conversationId: typeof convId === 'number' ? convId : null,
-        senderId: myIdentity,
-        senderName: currentUser?.name || 'You',
-        receiverId: name,
-        receiverName: name,
-        content,
-        type: 'CHAT',
-      })
     } catch (err) {
       console.error('Failed to create conversation:', err)
     }

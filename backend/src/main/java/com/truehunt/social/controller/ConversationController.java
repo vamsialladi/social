@@ -9,8 +9,6 @@ import com.truehunt.social.service.MessageService;
 import jakarta.validation.Valid;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -34,46 +32,33 @@ public class ConversationController {
         this.authenticatedUserResolver = authenticatedUserResolver;
     }
 
-    private String resolveCaller(String userEmail, String userId) {
-        if (userEmail != null && !userEmail.isBlank()) {
-            return userEmail.trim();
-        }
-        if (userId != null && !userId.isBlank()) {
-            return userId.trim();
-        }
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth != null && auth.isAuthenticated() && !"anonymousUser".equals(auth.getPrincipal())) {
-            return auth.getName();
-        }
-        return null;
+    private String resolveCaller(HttpServletRequest request) {
+        return authenticatedUserResolver.requireEmail(request);
     }
 
     @GetMapping
     public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getConversations(
             @RequestParam(required = false) String mailbox,
-            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
-            @RequestHeader(value = "X-User-Id", required = false) String userId
+            HttpServletRequest request
     ) {
-        return ResponseEntity.ok(ApiResponse.success(conversationService.getConversations(mailbox, resolveCaller(userEmail, userId))));
+        return ResponseEntity.ok(ApiResponse.success(conversationService.getConversations(mailbox, resolveCaller(request))));
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getConversation(
             @PathVariable String id,
-            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
-            @RequestHeader(value = "X-User-Id", required = false) String userId
+            HttpServletRequest request
     ) {
-        return ResponseEntity.ok(ApiResponse.success(conversationService.getConversation(id, resolveCaller(userEmail, userId))));
+        return ResponseEntity.ok(ApiResponse.success(conversationService.getConversation(id, resolveCaller(request))));
     }
 
     @PostMapping("/{id}/messages")
     public ResponseEntity<ApiResponse<Map<String, Object>>> sendMessage(
             @PathVariable String id,
             @Valid @RequestBody SendMessageRequest req,
-            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
-            @RequestHeader(value = "X-User-Id", required = false) String userId
+            HttpServletRequest request
     ) {
-        return ResponseEntity.ok(ApiResponse.success(conversationService.sendMessage(id, req, resolveCaller(userEmail, userId))));
+        return ResponseEntity.ok(ApiResponse.success(conversationService.sendMessage(id, req, resolveCaller(request))));
     }
 
     @PatchMapping("/{id}/messages/{messageId}")
@@ -119,44 +104,43 @@ public class ConversationController {
     @PostMapping
     public ResponseEntity<ApiResponse<Map<String, Object>>> createConversation(
             @Valid @RequestBody CreateConversationRequest req,
-            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
-            @RequestHeader(value = "X-User-Id", required = false) String userId
+            HttpServletRequest request
     ) {
-        return ResponseEntity.ok(ApiResponse.success(conversationService.createConversation(req, resolveCaller(userEmail, userId))));
+        return ResponseEntity.ok(ApiResponse.success(conversationService.createConversation(req, resolveCaller(request))));
     }
 
     @PatchMapping("/{id}/read")
     public ResponseEntity<ApiResponse<Map<String, Object>>> markAsRead(
             @PathVariable String id,
-            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
-            @RequestHeader(value = "X-User-Id", required = false) String userId
+            HttpServletRequest request
     ) {
-        return ResponseEntity.ok(ApiResponse.success(conversationService.markAsRead(id, resolveCaller(userEmail, userId))));
+        return ResponseEntity.ok(ApiResponse.success(conversationService.markAsRead(id, resolveCaller(request))));
     }
 
     @PatchMapping("/{id}/star")
     public ResponseEntity<ApiResponse<Map<String, Object>>> starConversation(
             @PathVariable String id,
-            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
-            @RequestHeader(value = "X-User-Id", required = false) String userId
+            HttpServletRequest request
     ) {
-        return ResponseEntity.ok(ApiResponse.success(conversationService.starConversation(id, resolveCaller(userEmail, userId))));
+        return ResponseEntity.ok(ApiResponse.success(conversationService.starConversation(id, resolveCaller(request))));
     }
 
     @PatchMapping("/{id}/mailbox")
     public ResponseEntity<ApiResponse<Map<String, Object>>> updateMailbox(
             @PathVariable String id,
             @RequestBody(required = false) Map<String, String> req,
-            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
-            @RequestHeader(value = "X-User-Id", required = false) String userId
+            HttpServletRequest request
     ) {
         String mailbox = (req != null && req.containsKey("mailbox")) ? req.get("mailbox") : "Focused";
-        return ResponseEntity.ok(ApiResponse.success(conversationService.updateMailbox(id, mailbox, resolveCaller(userEmail, userId))));
+        return ResponseEntity.ok(ApiResponse.success(conversationService.updateMailbox(id, mailbox, resolveCaller(request))));
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<ApiResponse<Map<String, String>>> deleteConversation(@PathVariable String id) {
-        conversationService.deleteConversation(id);
+    public ResponseEntity<ApiResponse<Map<String, String>>> deleteConversation(
+            @PathVariable String id,
+            HttpServletRequest request
+    ) {
+        conversationService.deleteConversation(id, resolveCaller(request));
         return ResponseEntity.ok(ApiResponse.success(Map.of("message", "Conversation deleted successfully", "id", id)));
     }
 }
