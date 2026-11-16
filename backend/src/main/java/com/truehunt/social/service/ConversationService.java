@@ -226,6 +226,10 @@ public class ConversationService {
         Set<String> updatedMessageIds = new LinkedHashSet<>();
 
         for (MessageEntity message : messageRepository.findAllByConversationIdOrderByCreatedAtAsc(entity.getId())) {
+            // A sender can never mark their own sent message as read
+            if (matchesIdentity(callerIdentifiers, message.getSenderId())) {
+                continue;
+            }
             if (!matchesIdentity(callerIdentifiers, message.getReceiverId())
                     || "READ".equalsIgnoreCase(message.getStatus())) {
                 continue;
@@ -241,20 +245,31 @@ public class ConversationService {
             Object receiverId = message.get("receiverId");
             Object senderId = message.get("senderId");
             Object direction = message.get("direction");
+
+            // A sender can never mark their own sent message as read
+            boolean sentByCaller = (senderId != null && matchesIdentity(callerIdentifiers, String.valueOf(senderId)))
+                    || (senderId == null && "outgoing".equalsIgnoreCase(String.valueOf(direction)));
+            if (sentByCaller) {
+                continue;
+            }
+
             boolean addressedToCaller = matchesIdentity(
                     callerIdentifiers,
-                    receiverId == null ? null : String.valueOf(receiverId)
-            );
+                    receiverId == null ? null : String.valueOf(receiverId));
             boolean sentByOther = senderId != null
                     ? !matchesIdentity(callerIdentifiers, String.valueOf(senderId))
                     : "incoming".equalsIgnoreCase(String.valueOf(direction));
             if (!addressedToCaller && !sentByOther) {
                 continue;
             }
+            if ("READ".equalsIgnoreCase(String.valueOf(message.get("status"))) && message.get("readAt") != null) {
+                continue;
+            }
             message.put("status", "READ");
             message.put("readAt", readAt.toString());
             Object messageId = message.get("id");
-            if (messageId != null) updatedMessageIds.add(String.valueOf(messageId));
+            if (messageId != null)
+                updatedMessageIds.add(String.valueOf(messageId));
         }
         entity.setThread(thread);
         entity.setUnread(false);
@@ -331,6 +346,7 @@ public class ConversationService {
 
         Set<String> identifiers = new HashSet<>();
         identifiers.add(normalizeIdentity(userId));
+        identifiers.add("me");
         Optional<UserAccountEntity> account = userAccountRepository.findByEmail(userId.trim().toLowerCase(Locale.ROOT))
                 .or(() -> userAccountRepository.findByPublicUserId(userId.trim()));
         if (account.isEmpty()) {
@@ -341,9 +357,14 @@ public class ConversationService {
             }
         }
         account.ifPresent(user -> {
-            if (user.getEmail() != null) identifiers.add(normalizeIdentity(user.getEmail()));
-            if (user.getPublicUserId() != null) identifiers.add(normalizeIdentity(user.getPublicUserId()));
-            if (user.getId() != null) identifiers.add(normalizeIdentity(String.valueOf(user.getId())));
+            if (user.getEmail() != null)
+                identifiers.add(normalizeIdentity(user.getEmail()));
+            if (user.getPublicUserId() != null)
+                identifiers.add(normalizeIdentity(user.getPublicUserId()));
+            if (user.getId() != null)
+                identifiers.add(normalizeIdentity(String.valueOf(user.getId())));
+            if (user.getName() != null && !user.getName().isBlank())
+                identifiers.add(normalizeIdentity(user.getName()));
         });
 
         boolean isParticipant = identifiers.contains(normalizeIdentity(conversation.getUser1Id()))
@@ -383,6 +404,7 @@ public class ConversationService {
         }
         String cleanEmail = userEmail.trim().toLowerCase(Locale.ROOT);
         callerIdentifiers.add(cleanEmail);
+        callerIdentifiers.add("me");
         userAccountRepository.findByEmail(cleanEmail)
                 .or(() -> userAccountRepository.findByPublicUserId(userEmail.trim()))
                 .ifPresent(u -> {
@@ -392,6 +414,8 @@ public class ConversationService {
                         callerIdentifiers.add(u.getPublicUserId().trim().toLowerCase(Locale.ROOT));
                     if (u.getId() != null)
                         callerIdentifiers.add(String.valueOf(u.getId()));
+                    if (u.getName() != null && !u.getName().isBlank())
+                        callerIdentifiers.add(u.getName().trim().toLowerCase(Locale.ROOT));
                 });
         return callerIdentifiers;
     }
@@ -405,8 +429,8 @@ public class ConversationService {
 
     @SuppressWarnings("unchecked")
     private Map<String, Object> toEnrichedDto(ConversationEntity entity,
-                                              String currentUserId,
-                                              Set<String> callerIdentifiers) {
+            String currentUserId,
+            Set<String> callerIdentifiers) {
         Map<String, Object> dto = entity.toDto(currentUserId, callerIdentifiers);
 
         String liveUser1Name = resolveLiveParticipantName(entity.getUser1Id());
@@ -466,7 +490,8 @@ public class ConversationService {
         if (rawThread instanceof List<?> rawList && !rawList.isEmpty()) {
             List<Map<String, Object>> enrichedThread = new ArrayList<>(rawList.size());
             for (Object entry : rawList) {
-                if (!(entry instanceof Map<?, ?> rawMap)) continue;
+                if (!(entry instanceof Map<?, ?> rawMap))
+                    continue;
                 Map<String, Object> msg = new HashMap<>((Map<String, Object>) rawMap);
                 Object senderIdObj = msg.get("senderId");
                 if (senderIdObj != null) {

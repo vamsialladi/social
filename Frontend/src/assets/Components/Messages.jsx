@@ -215,13 +215,18 @@ function isMessageOutgoing(msg, currentConversation, user) {
 
   const myEmail = (effectiveUser?.email || '').trim().toLowerCase()
   const myId = String(effectiveUser?.userId || effectiveUser?.publicUserId || effectiveUser?.id || '').trim().toLowerCase()
+  const myName = (effectiveUser?.name || effectiveUser?.fullName || '').trim().toLowerCase()
 
   const msgSender = String(msg.senderId || '').trim().toLowerCase()
+  const msgSenderName = String(msg.senderName || '').trim().toLowerCase()
   const msgReceiver = String(msg.receiverId || '').trim().toLowerCase()
 
-  // 1. Primary check: Unique sender ID (email, publicUserId, or user ID)
+  // 1. Primary check: Unique sender ID (email, publicUserId, user ID, name, or 'me')
   if (msgSender) {
-    if ((myEmail && msgSender === myEmail) || (myId && msgSender === myId) || msgSender === 'me') {
+    if ((myEmail && msgSender === myEmail) || (myId && msgSender === myId) || (myName && msgSender === myName) || msgSender === 'me') {
+      return true
+    }
+    if (myName && msgSenderName && msgSenderName === myName) {
       return true
     }
     // Sender ID is present and does not match current user -> incoming message
@@ -230,7 +235,7 @@ function isMessageOutgoing(msg, currentConversation, user) {
 
   // 2. Primary check: Unique receiver ID
   if (msgReceiver) {
-    if ((myEmail && msgReceiver === myEmail) || (myId && msgReceiver === myId)) {
+    if ((myEmail && msgReceiver === myEmail) || (myId && msgReceiver === myId) || (myName && msgReceiver === myName)) {
       return false
     }
     return true
@@ -532,17 +537,21 @@ function Messages({
 
     const myEmail = (currentUser?.email || '').trim().toLowerCase()
     const myId = String(currentUser?.userId || currentUser?.publicUserId || currentUser?.id || '').trim().toLowerCase()
+    const myName = (currentUser?.name || currentUser?.fullName || '').trim().toLowerCase()
 
     const senderEmail = (newMsg.senderId || '').trim().toLowerCase()
+    const senderName = (newMsg.senderName || '').trim().toLowerCase()
     const receiverEmail = (newMsg.receiverId || '').trim().toLowerCase()
     const isSenderMe = Boolean(
       (myEmail && senderEmail === myEmail) ||
       (myId && senderEmail === myId) ||
+      (myName && (senderEmail === myName || senderName === myName)) ||
       senderEmail === 'me'
     )
     const isReceiverMe = Boolean(
       (myEmail && receiverEmail === myEmail) ||
-      (myId && receiverEmail === myId)
+      (myId && receiverEmail === myId) ||
+      (myName && receiverEmail === myName)
     )
 
     const isOutgoing = isSenderMe ? true : isReceiverMe ? false : Boolean(newMsg.direction === 'outgoing')
@@ -681,12 +690,29 @@ function Messages({
     }
 
     if (!isOutgoing) {
-      const refreshUnreadCount = isSelectedConversationVisible && /^\d+$/.test(String(convId))
-        ? api.markConversationAsRead(convId).then(() => loadBackendConversations(mailbox))
-        : loadBackendConversations(mailbox)
-      refreshUnreadCount.catch((error) => {
-        console.warn('Could not update unread message count:', error)
-      })
+      const isVisibleAndFocused = isSelectedConversationVisible
+        && typeof document !== 'undefined'
+        && !document.hidden
+        && (typeof document.hasFocus !== 'function' || document.hasFocus())
+
+      if (isVisibleAndFocused && /^\d+$/.test(String(convId))) {
+        // Debounce read receipt so incoming messages do not instantly snap to Seen at 0ms
+        const timer = setTimeout(() => {
+          const stillFocused = typeof document !== 'undefined'
+            && !document.hidden
+            && (typeof document.hasFocus !== 'function' || document.hasFocus())
+          if (stillFocused) {
+            api.markConversationAsRead(convId)
+              .then(() => loadBackendConversations(mailbox))
+              .catch((error) => console.warn('Could not update unread message count:', error))
+          }
+        }, 1200)
+        return () => clearTimeout(timer)
+      } else {
+        loadBackendConversations(mailbox).catch((error) => {
+          console.warn('Could not update unread message count:', error)
+        })
+      }
     }
   }, [
     isActive,
@@ -715,7 +741,12 @@ function Messages({
     const unsubMsg = websocketService.onMessage(handleIncomingWebSocketMessage)
 
     const handleFocus = () => {
-      if (!document.hidden) loadBackendConversations(mailbox)
+      if (!document.hidden) {
+        loadBackendConversations(mailbox)
+        if (selectedId && /^\d+$/.test(String(selectedId))) {
+          void markConversationRead(selectedId)
+        }
+      }
     }
     window.addEventListener('focus', handleFocus)
 
@@ -1679,6 +1710,11 @@ function Messages({
                       placeholder="Write a message..."
                       value={replyText}
                       onChange={(event) => setReplyText(event.target.value)}
+                      onFocus={() => {
+                        if (selectedMessage?.id && selectedMessage?.unread) {
+                          void markConversationRead(selectedMessage.id)
+                        }
+                      }}
                     />
                   </label>
                   {replyAttachment && (

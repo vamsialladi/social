@@ -1,10 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import api from '../../api'
-import { api as directoryApi } from '../../services/api'
 import ProfileBanner from './ProfileBanner.jsx'
 import {
   ArrowLeft,
-  CalendarDays,
   Check,
   MessageCircle,
   UserPlus,
@@ -16,11 +14,31 @@ import {
 import './NetworkPage.css'
 
 const networkSections = [
-  { label: 'Connections', count: 0, Icon: UsersRound },
+  { label: 'Connections', Icon: UsersRound },
   { label: 'Following & followers', Icon: UserRound },
-  { label: 'Requests', count: 0, Icon: UserPlus },
-  { label: 'Events', count: 0, Icon: CalendarDays },
+  { label: 'Requests', Icon: UserPlus },
 ]
+
+const demoNetworkProfileIdentifiers = new Set([
+  'aarav',
+  'rohan',
+  'maya',
+  'me',
+  '1000001',
+  '1000002',
+  '1000003',
+  '1000004',
+  '1000005',
+  '2000001',
+  '2000002',
+  'pro@truehunt.in',
+  'producer@truehunt.in',
+  'aarav.varma@truehunt.in',
+  'mythri.studios@truehunt.in',
+  'arjun.varma@truehunt.in',
+  'meera.nambiar@truehunt.in',
+  'rohan.vats@truehunt.in',
+])
 
 function getProfileKey(profileOrId) {
   const id = typeof profileOrId === 'object' && profileOrId !== null
@@ -57,6 +75,10 @@ function getProfileIdentityKeys(profile) {
 function profilesMatch(first, second) {
   const secondKeys = new Set(getProfileIdentityKeys(second))
   return getProfileIdentityKeys(first).some((key) => secondKeys.has(key))
+}
+
+function isDemoNetworkProfile(profile) {
+  return getProfileIdentityKeys(profile).some((key) => demoNetworkProfileIdentifiers.has(key))
 }
 
 function getProfileName(...profiles) {
@@ -163,22 +185,29 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
 
     const normalizedCurrentUserIdentifiers = new Set(JSON.parse(currentUserIdentityKey || '[]'))
     try {
-      const [registeredProfiles, talentProfiles, serverConnected, suggestionsData, invitationsData] = await Promise.all([
+      const [registeredProfiles, serverConnected, suggestionsData, invitationsData] = await Promise.all([
         api.getProfileDirectory().catch(() => []),
-        directoryApi.talents.getAll().catch(() => []),
         api.getConnectedProfiles().catch(() => []),
         api.getNetworkSuggestions().catch(() => []),
         api.getInvitations().catch(() => []),
       ])
 
-      const networkProfiles = Array.isArray(suggestionsData) ? suggestionsData : []
-      const incomingInvitations = Array.isArray(invitationsData) ? invitationsData : []
-      const connectedList = Array.isArray(serverConnected) ? serverConnected : []
+      const networkProfiles = Array.isArray(suggestionsData)
+        ? suggestionsData.filter((profile) => !isDemoNetworkProfile(profile))
+        : []
+      const incomingInvitations = Array.isArray(invitationsData)
+        ? invitationsData.filter((invitation) => !isDemoNetworkProfile({
+          ...(invitation.profile || {}),
+          ...invitation,
+        }))
+        : []
+      const connectedList = Array.isArray(serverConnected)
+        ? serverConnected.filter((profile) => !isDemoNetworkProfile(profile))
+        : []
 
       setInvitations(incomingInvitations)
       const directory = []
       const profilesToMerge = [
-        ...(Array.isArray(talentProfiles) ? talentProfiles : []),
         ...(Array.isArray(registeredProfiles) ? registeredProfiles : []),
         ...(Array.isArray(connectedList) ? connectedList : []),
         ...(Array.isArray(networkProfiles) ? networkProfiles : []),
@@ -270,8 +299,8 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
             id,
             name,
             initials: profile.initials || nameParts.slice(0, 2).map((part) => part[0]).join('').toUpperCase() || 'TH',
-            status: connection?.status || 'active',
-            role: profile.headline || profile.role || profile.primaryCraft || profile.category || 'Cinema Professional',
+            status: connection?.status || profile.status || '',
+            role: profile.headline || profile.role || profile.primaryCraft || profile.category || '',
             location: profile.location || profile.address || '',
             mutualConnections: getMutualConnectionsLabel(connection?.mutualConnections),
             avatarClass: index % 2 === 0 ? 'network-avatar-coral' : 'network-avatar-blue',
@@ -302,8 +331,8 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
             userId: conn.userId || conn.id || conn.profileId || cKey,
             name,
             initials: conn.initials || nameParts.slice(0, 2).map((part) => part[0]).join('').toUpperCase() || 'TH',
-            status: 'active',
-            role: conn.role || conn.headline || conn.primaryCraft || 'Cinema Professional',
+            status: conn.status || '',
+            role: conn.role || conn.headline || conn.primaryCraft || '',
             location: conn.location || conn.address || '',
             mutualConnections: getMutualConnectionsLabel(conn.mutualConnections),
             avatarClass: 'network-avatar-coral',
@@ -406,6 +435,7 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
         targetProfile = profile || (eventProfileId ? { id: eventProfileId } : null)
       }
       if (!targetProfile) return
+      if (isDemoNetworkProfile(targetProfile)) return
 
       loadNetworkData()
       const profileId = getProfileKey(targetProfile)
@@ -443,8 +473,8 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
             userId: targetProfile.userId || targetProfile.id || profileId,
             name,
             initials: targetProfile.initials || nameParts.slice(0, 2).map((part) => part[0]).join('').toUpperCase() || 'TH',
-            status: 'active',
-            role: targetProfile.role || targetProfile.headline || 'Cinema Professional',
+            status: targetProfile.status || '',
+            role: targetProfile.role || targetProfile.headline || '',
             location: targetProfile.location || '',
             mutualConnections: '',
             avatarClass: 'network-avatar-coral',
@@ -470,7 +500,7 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
       if (isAdmin) return
       const { following, profile } = event.detail || {}
       const profileId = getProfileKey(profile)
-      if (!profileId) return
+      if (!profileId || isDemoNetworkProfile(profile)) return
       const profileKey = getProfileKey(profile)
       relationshipOverrides.current.set(profileKey, {
         ...relationshipOverrides.current.get(profileKey),
@@ -496,8 +526,8 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
           userId: profile.userId || profileId,
           name,
           initials: profile.initials || name.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase(),
-          status: profile.status || 'active',
-          role: profile.role || profile.headline || profile.primaryCraft || profile.category || 'Cinema Professional',
+          status: profile.status || '',
+          role: profile.role || profile.headline || profile.primaryCraft || profile.category || '',
           location: profile.location || profile.address || '',
           avatarClass: profile.avatarClass || 'network-avatar-coral',
           profileImageUrl: profile.profileImageUrl || profile.avatar || '',
@@ -757,11 +787,13 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
               ? <img src={profile.profileImageUrl} alt="" />
               : profile.initials}
           </button>
-          <span
-            className={`network-presence-dot is-${profile.status}`}
-            role="img"
-            aria-label={`${profile.name} is ${profile.status}`}
-          />
+            {profile.status && (
+              <span
+                className={`network-presence-dot is-${profile.status}`}
+                role="img"
+                aria-label={`${profile.name} is ${profile.status}`}
+              />
+            )}
         </div>
         <div className="network-profile-content">
           <h3>{profile.name}</h3>
@@ -858,7 +890,7 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
           <section className="network-manage-card" aria-labelledby="network-manage-title">
             <h1 id="network-manage-title">Manage my network</h1>
             <nav aria-label="Network sections">
-              {networkSections.map(({ label, count, Icon }) => {
+              {networkSections.map(({ label, Icon }) => {
                 const isSelected = (
                   (label === 'Connections' && activeSection === 'connections')
                   || (label === 'Following & followers' && activeSection === 'following')
@@ -871,7 +903,7 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
                       ? Math.max(followedProfiles.length, profiles.filter((p) => p.isFollowing).length)
                       : label === 'Requests'
                         ? Math.max(pendingProfiles.length, profiles.filter((p) => p.isPending).length)
-                        : count ?? 0
+                        : 0
                 )
                 return (
                   <button
@@ -904,32 +936,6 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
             <span className="network-tip-eyebrow">YOUR CREATIVE CIRCLE</span>
             <h2>Good connections lead to great collaborations.</h2>
             <p>Meet more people working across film and entertainment.</p>
-          </section>
-          <section className="home-card home-promotion-card" aria-label="Sponsored movie industry promotion">
-            <div className="home-promotion-art">
-              <span className="home-promotion-label">PROMOTED</span>
-              <span className="home-promotion-art-title">THE NEXT<br />BIG PICTURE</span>
-              <span className="home-promotion-studio">NORTHSTAR FILMS</span>
-            </div>
-            <div className="home-promotion-content">
-              <h2>Bring your next story to the screen</h2>
-              <p>Northstar Films is meeting new writers, actors, and independent filmmakers for upcoming productions.</p>
-              <span className="home-promotion-caption">Make your mark in the movies.</span>
-              <button
-                className="home-promotion-button"
-                type="button"
-                onClick={async () => {
-                  try {
-                    const res = await api.clickPromotion("Network Promo - Northstar Films")
-                    alert(res.message || 'Inquiry registered with studio casting office.')
-                  } catch (e) {
-                    console.warn(e)
-                  }
-                }}
-              >
-                Explore film careers
-              </button>
-            </div>
           </section>
         </aside>
 

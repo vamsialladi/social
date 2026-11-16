@@ -205,8 +205,14 @@ public class MessageService {
     private void deliverRealtime(ChatMessageDto outDto, String senderEmail, String receiverEmail, Long conversationId) {
         try {
             Set<String> participants = new LinkedHashSet<>();
-            if (senderEmail != null && !senderEmail.isBlank()) participants.add(senderEmail.trim());
-            if (receiverEmail != null && !receiverEmail.isBlank()) participants.add(receiverEmail.trim());
+            if (senderEmail != null && !senderEmail.isBlank()) {
+                participants.add(senderEmail.trim());
+                participants.add(senderEmail.trim().toLowerCase(Locale.ROOT));
+            }
+            if (receiverEmail != null && !receiverEmail.isBlank()) {
+                participants.add(receiverEmail.trim());
+                participants.add(receiverEmail.trim().toLowerCase(Locale.ROOT));
+            }
             for (String participant : participants) {
                 messagingTemplate.convertAndSendToUser(participant, "/queue/messages", outDto);
             }
@@ -283,7 +289,10 @@ public class MessageService {
             String email = resolveUserAccount(participantId)
                     .map(UserAccountEntity::getEmail)
                     .orElse(participantId.contains("@") ? participantId.trim() : "");
-            if (!email.isBlank()) participantEmails.add(email);
+            if (!email.isBlank()) {
+                participantEmails.add(email);
+                participantEmails.add(email.toLowerCase(Locale.ROOT));
+            }
         }
         for (String participantEmail : participantEmails) {
             messagingTemplate.convertAndSendToUser(participantEmail, "/queue/messages", event);
@@ -307,7 +316,10 @@ public class MessageService {
             String email = resolveUserAccount(participantId)
                     .map(UserAccountEntity::getEmail)
                     .orElse(participantId.contains("@") ? participantId.trim() : "");
-            if (!email.isBlank()) participantEmails.add(email);
+            if (!email.isBlank()) {
+                participantEmails.add(email);
+                participantEmails.add(email.toLowerCase(Locale.ROOT));
+            }
         }
         for (String participantEmail : participantEmails) {
             messagingTemplate.convertAndSendToUser(participantEmail, "/queue/messages", event);

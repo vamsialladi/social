@@ -1,13 +1,19 @@
 package com.truehunt.social.dto;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.util.Map;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class CreatePostRequest {
     private String type; // post, opportunity, article
+
+    @JsonAlias({"text", "body", "caption", "description"})
     private String content;
+
     private String title;
+
+    @JsonAlias({"imageUrl", "videoUrl"})
     private String mediaUrl;
     private String mediaType;
     private Map<String, Object> media;

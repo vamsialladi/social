@@ -1,5 +1,6 @@
 package com.truehunt.social.dto;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.validation.constraints.NotBlank;
 import java.util.Map;
@@ -7,6 +8,7 @@ import java.util.Map;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class SendMessageRequest {
     @NotBlank(message = "Content cannot be empty")
+    @JsonAlias({"message", "text", "body"})
     private String content;
 
     private String direction = "outgoing";
@@ -15,6 +17,14 @@ public class SendMessageRequest {
     public SendMessageRequest() {}
 
     public String getContent() {
+        return content;
+    }
+
+    public String getMessage() {
+        return content;
+    }
+
+    public String getText() {
         return content;
     }
 

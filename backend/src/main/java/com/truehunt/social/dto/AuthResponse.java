@@ -81,6 +81,22 @@ public class AuthResponse {
         this.subCraft = subCraft;
     }
 
+    public String getId() {
+        return userId;
+    }
+
+    public String getFullName() {
+        return name;
+    }
+
+    public String getPhoneNumber() {
+        return phone;
+    }
+
+    public String getCraft() {
+        return primaryCraft;
+    }
+
     public Map<String, Object> getUser() {
         return user;
     }

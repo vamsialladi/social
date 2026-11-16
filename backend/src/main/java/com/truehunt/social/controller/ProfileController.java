@@ -91,7 +91,6 @@ public class ProfileController {
     }
 
     @GetMapping("/me")
-    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<ApiResponse<ProfileDto>> getMyProfile(
             @RequestHeader(value = "X-User-Email", required = false) String userEmail,
             @RequestHeader(value = "X-User-Id", required = false) String userId,
@@ -102,7 +101,6 @@ public class ProfileController {
     }
 
     @RequestMapping(value = "/me", method = {RequestMethod.PATCH, RequestMethod.PUT, RequestMethod.POST})
-    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<ApiResponse<ProfileDto>> updateMyProfile(
             @RequestBody ProfileUpdateRequest updates,
             @RequestHeader(value = "X-User-Email", required = false) String userEmail,

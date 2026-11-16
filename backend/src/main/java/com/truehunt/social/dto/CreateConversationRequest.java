@@ -1,14 +1,17 @@
 package com.truehunt.social.dto;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.validation.constraints.NotBlank;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class CreateConversationRequest {
     @NotBlank(message = "Recipient is required")
+    @JsonAlias({"to", "recipientId", "targetReceiverId", "receiverId", "user", "userId"})
     private String recipient;
 
     @NotBlank(message = "Message text is required")
+    @JsonAlias({"content", "message", "text"})
     private String messageText;
 
     public CreateConversationRequest() {}
@@ -22,6 +25,10 @@ public class CreateConversationRequest {
     }
 
     public String getMessageText() {
+        return messageText;
+    }
+
+    public String getContent() {
         return messageText;
     }
 

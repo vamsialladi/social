@@ -3,4 +3,6 @@ backend/target/
 backend/data/
 data/
 scratch/
+backend/uploads/
+uploads/
 

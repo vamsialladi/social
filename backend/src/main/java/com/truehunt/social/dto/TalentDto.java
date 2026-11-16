@@ -322,5 +322,25 @@ public class TalentDto {
     public void setSubCraft(String subCraft) {
         this.subCraft = subCraft;
     }
+
+    public String getFullName() {
+        return name;
+    }
+
+    public String getProfileImageUrl() {
+        return avatar;
+    }
+
+    public String getCoverImageUrl() {
+        return coverImage;
+    }
+
+    public String getCraft() {
+        return getPrimaryCraft();
+    }
+
+    public String getAddress() {
+        return location;
+    }
 }
 

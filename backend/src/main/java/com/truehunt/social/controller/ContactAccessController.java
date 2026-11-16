@@ -13,7 +13,6 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/contact-access")
-@PreAuthorize("isAuthenticated()")
 public class ContactAccessController {
 
     private final ContactAccessService contactAccessService;

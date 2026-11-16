@@ -2,26 +2,21 @@ package com.truehunt.social.controller;
 
 import com.truehunt.social.dto.ApiResponse;
 import com.truehunt.social.dto.InvestorAccessRequestDto;
+import com.truehunt.social.exception.UnauthorizedException;
 import com.truehunt.social.service.InvestorAccessService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.*;
 
-import java.util.Map;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/investor-access")
-@PreAuthorize("isAuthenticated()")
 public class InvestorAccessController {
 
     private final InvestorAccessService investorAccessService;
@@ -30,43 +25,72 @@ public class InvestorAccessController {
         this.investorAccessService = investorAccessService;
     }
 
+    private String resolveCaller(UserDetails user, String userEmail, String userId) {
+        if (user != null && user.getUsername() != null && !user.getUsername().isBlank()) {
+            return user.getUsername();
+        }
+        if (userEmail != null && !userEmail.isBlank()) {
+            return userEmail.trim();
+        }
+        if (userId != null && !userId.isBlank()) {
+            return userId.trim();
+        }
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.isAuthenticated() && !"anonymousUser".equals(auth.getPrincipal())) {
+            return auth.getName();
+        }
+        throw new UnauthorizedException("Sign in required for investor access.");
+    }
+
     @PostMapping("/requests")
     public ResponseEntity<ApiResponse<Map<String, Object>>> submit(
             @Valid @RequestBody InvestorAccessRequestDto request,
-            @AuthenticationPrincipal UserDetails user
+            @AuthenticationPrincipal UserDetails user,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId
     ) {
-        return ResponseEntity.ok(ApiResponse.success(investorAccessService.submit(user.getUsername(), request)));
+        return ResponseEntity.ok(ApiResponse.success(investorAccessService.submit(resolveCaller(user, userEmail, userId), request)));
     }
 
     @GetMapping("/status")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> getStatus(@AuthenticationPrincipal UserDetails user) {
-        return ResponseEntity.ok(ApiResponse.success(investorAccessService.getStatus(user.getUsername())));
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getStatus(
+            @AuthenticationPrincipal UserDetails user,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(investorAccessService.getStatus(resolveCaller(user, userEmail, userId))));
     }
 
     @GetMapping("/listings")
     public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getPublishedListings(
-            @AuthenticationPrincipal UserDetails user
+            @AuthenticationPrincipal UserDetails user,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId
     ) {
-        return ResponseEntity.ok(ApiResponse.success(investorAccessService.getPublishedListings(user.getUsername())));
+        return ResponseEntity.ok(ApiResponse.success(investorAccessService.getPublishedListings(resolveCaller(user, userEmail, userId))));
     }
 
     @PostMapping("/listings/{id}/interest")
     public ResponseEntity<ApiResponse<Map<String, Object>>> sendInvestorInterest(
             @PathVariable Long id,
-            @AuthenticationPrincipal UserDetails user
+            @AuthenticationPrincipal UserDetails user,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId
     ) {
         return ResponseEntity.ok(ApiResponse.success(
-                investorAccessService.sendInvestorInterest(id, user.getUsername())
+                investorAccessService.sendInvestorInterest(id, resolveCaller(user, userEmail, userId))
         ));
     }
 
     @DeleteMapping("/listings/{id}")
     public ResponseEntity<ApiResponse<Map<String, Object>>> deletePublishedListing(
             @PathVariable Long id,
-            @AuthenticationPrincipal UserDetails user
+            @AuthenticationPrincipal UserDetails user,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId
     ) {
         return ResponseEntity.ok(ApiResponse.success(
-                investorAccessService.deletePublishedListing(id, user.getUsername())
+                investorAccessService.deletePublishedListing(id, resolveCaller(user, userEmail, userId))
         ));
     }
 }

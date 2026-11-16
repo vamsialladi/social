@@ -1,5 +1,6 @@
 package com.truehunt.social.dto;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 
@@ -7,10 +8,16 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class ProjectDto {
     private String id;
+
+    @JsonAlias({"name", "projectName"})
     private String title;
+
     private String description;
     private String technologies;
+
+    @JsonAlias({"url", "link"})
     private String projectUrl;
+
     private String startDate;
     private String endDate;
 
@@ -25,6 +32,10 @@ public class ProjectDto {
     }
 
     public String getTitle() {
+        return title;
+    }
+
+    public String getName() {
         return title;
     }
 
@@ -49,6 +60,10 @@ public class ProjectDto {
     }
 
     public String getProjectUrl() {
+        return projectUrl;
+    }
+
+    public String getUrl() {
         return projectUrl;
     }
 

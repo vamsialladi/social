@@ -1455,7 +1455,7 @@ function Home({
     !dismissedPostIds.includes(String(post.id))
     && (activeNavigation === 'opportunities'
       ? post.type === 'opportunity'
-      : post.type !== 'opportunity')
+      : true)
   ))
   const visibleInvestorListings = investorListings.filter(
     (listing) => !dismissedInvestorListingIds.includes(String(listing.id)),
@@ -1907,7 +1907,14 @@ function Home({
                       <button
                         type="button"
                         className="home-post-opportunity-trigger"
-                        onClick={() => setSelectedOpportunity(isOpportunityExpanded ? null : post)}
+                        onClick={() => {
+                          setSelectedOpportunity(post)
+                          if (activeNavigation === 'home') {
+                            setActiveNavigation?.('opportunities')
+                          } else {
+                            setSelectedOpportunity(isOpportunityExpanded ? null : post)
+                          }
+                        }}
                         aria-label={`View opportunity: ${post.title || getPostPreviewText(post) || 'Details'}`}
                         aria-expanded={isOpportunityExpanded}
                       >
@@ -1933,6 +1940,7 @@ function Home({
                     </>
                   )}
                   {post.type === 'article' && <span className="home-post-type">Article</span>}
+                  {post.type === 'opportunity' && <span className="home-post-type">Opportunity</span>}
 
                   {/* Post interactive action buttons wired to backend APIs */}
                   <div className="home-post-action-bar" style={{ display: 'flex', gap: '8px', marginTop: '12px', borderTop: '1px solid var(--color-border, #eee)', paddingTop: '8px', flexWrap: 'wrap' }}>

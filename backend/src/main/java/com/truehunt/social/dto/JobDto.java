@@ -152,5 +152,45 @@ public class JobDto {
     public void setExperience(String experience) {
         this.experience = experience;
     }
+
+    public String getCompany() {
+        return productionCompany;
+    }
+
+    public String getCompanyName() {
+        return productionCompany;
+    }
+
+    public String getRole() {
+        return roleCategory;
+    }
+
+    public String getCategory() {
+        return roleCategory;
+    }
+
+    public String getCraft() {
+        return roleCategory;
+    }
+
+    public String getPay() {
+        return budgetOrPay;
+    }
+
+    public String getBudget() {
+        return budgetOrPay;
+    }
+
+    public String getSalary() {
+        return budgetOrPay;
+    }
+
+    public String getDate() {
+        return postedDate;
+    }
+
+    public String getCreatedAt() {
+        return postedDate;
+    }
 }
 

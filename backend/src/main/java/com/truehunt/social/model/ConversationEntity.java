@@ -212,11 +212,29 @@ public class ConversationEntity {
         dto.put("name", displayName);
         dto.put("initials", displayInitials);
         dto.put("color", color != null ? color : "blue");
+        List<Map<String, Object>> thread = getThread();
+        boolean effectiveUnread = this.unread;
+        if (!cleanIdentifiers.isEmpty() && !thread.isEmpty()) {
+            Map<String, Object> lastMsg = thread.get(thread.size() - 1);
+            Object lastSender = lastMsg.get("senderId");
+            Object lastReceiver = lastMsg.get("receiverId");
+            String lastSenderClean = lastSender != null ? String.valueOf(lastSender).trim().toLowerCase(Locale.ROOT) : "";
+            String lastReceiverClean = lastReceiver != null ? String.valueOf(lastReceiver).trim().toLowerCase(Locale.ROOT) : "";
+
+            if (!lastSenderClean.isEmpty() && cleanIdentifiers.contains(lastSenderClean)) {
+                effectiveUnread = false;
+            } else if (!lastReceiverClean.isEmpty() && cleanIdentifiers.contains(lastReceiverClean)) {
+                boolean isLastRead = "READ".equalsIgnoreCase(String.valueOf(lastMsg.get("status")))
+                        || lastMsg.get("readAt") != null;
+                effectiveUnread = !isLastRead;
+            }
+        }
+
         dto.put("preview", preview != null ? preview : "");
         dto.put("date", date != null ? date : "");
         dto.put("updatedAt", updatedAt != null ? updatedAt.toString() : "");
         dto.put("category", category != null ? category : "Connections");
-        dto.put("unread", unread);
+        dto.put("unread", effectiveUnread);
         dto.put("sponsored", sponsored);
         dto.put("starred", starred);
         dto.put("subject", subject != null ? subject : "");
@@ -227,7 +245,6 @@ public class ConversationEntity {
         dto.put("user1Name", user1Name);
         dto.put("user2Name", user2Name);
 
-        List<Map<String, Object>> thread = getThread();
         if (!cleanIdentifiers.isEmpty()) {
             List<Map<String, Object>> adaptedThread = new ArrayList<>();
             for (Map<String, Object> msg : thread) {

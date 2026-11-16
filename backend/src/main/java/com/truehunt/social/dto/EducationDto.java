@@ -1,5 +1,6 @@
 package com.truehunt.social.dto;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 
@@ -7,9 +8,15 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class EducationDto {
     private String id;
+
+    @JsonAlias({"school", "college", "university", "institute"})
     private String institution;
+
     private String degree;
+
+    @JsonAlias({"major", "department", "stream"})
     private String fieldOfStudy;
+
     private String startDate;
     private String endDate;
     private String grade;
@@ -27,6 +34,10 @@ public class EducationDto {
     }
 
     public String getInstitution() {
+        return institution;
+    }
+
+    public String getSchool() {
         return institution;
     }
 

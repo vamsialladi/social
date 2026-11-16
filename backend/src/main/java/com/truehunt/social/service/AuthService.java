@@ -254,13 +254,40 @@ public class AuthService {
         data.put("publicUserId", publicId);
         data.put("email", u.getEmail());
         data.put("name", u.getName());
+        data.put("fullName", u.getName());
         data.put("role", u.getRole());
         data.put("phone", u.getPhone());
+        data.put("phoneNumber", u.getPhone());
         data.put("primaryCraft", u.getPrimaryCraft());
+        data.put("craft", u.getPrimaryCraft());
         data.put("subCraft", u.getSubCraft());
         data.put("experience", u.getExperience());
         data.put("companyName", u.getCompanyName());
+        data.put("company", u.getCompanyName());
         data.put("headquarters", u.getHeadquarters());
+        data.put("address", u.getHeadquarters());
+        data.put("location", u.getHeadquarters());
+
+        profileRepository.findByEmail(u.getEmail())
+                .or(() -> profileRepository.findByUserId(publicId))
+                .ifPresent(p -> {
+                    if (p.getProfileImageUrl() != null && !p.getProfileImageUrl().isBlank()) {
+                        data.put("avatar", p.getProfileImageUrl());
+                        data.put("profileImageUrl", p.getProfileImageUrl());
+                    }
+                    if (p.getCoverImageUrl() != null && !p.getCoverImageUrl().isBlank()) {
+                        data.put("coverImage", p.getCoverImageUrl());
+                        data.put("coverImageUrl", p.getCoverImageUrl());
+                    }
+                    if (p.getHeadline() != null && !p.getHeadline().isBlank()) {
+                        data.put("headline", p.getHeadline());
+                    }
+                    if (p.getBio() != null && !p.getBio().isBlank()) {
+                        data.put("bio", p.getBio());
+                        data.put("highlights", p.getBio());
+                    }
+                });
+
         return data;
     }
 

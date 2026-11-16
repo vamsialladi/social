@@ -106,6 +106,10 @@ public class ProtectProjectDto {
         return currentStage;
     }
 
+    public String getStage() {
+        return currentStage;
+    }
+
     public void setCurrentStage(String currentStage) {
         this.currentStage = currentStage;
     }
@@ -114,8 +118,28 @@ public class ProtectProjectDto {
         return stageProgress;
     }
 
+    public Integer getProgress() {
+        return stageProgress;
+    }
+
     public void setStageProgress(Integer stageProgress) {
         this.stageProgress = stageProgress;
+    }
+
+    public String getBannerImage() {
+        return bannerImageUrl;
+    }
+
+    public String getBanner() {
+        return bannerImageUrl;
+    }
+
+    public String getCompany() {
+        return productionCompany;
+    }
+
+    public String getName() {
+        return title;
     }
 
     public String getTotalBudget() {

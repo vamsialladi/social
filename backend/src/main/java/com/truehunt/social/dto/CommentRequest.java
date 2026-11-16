@@ -1,11 +1,13 @@
 package com.truehunt.social.dto;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.validation.constraints.NotBlank;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class CommentRequest {
     @NotBlank(message = "Comment text cannot be empty")
+    @JsonAlias({"content", "message", "comment", "body"})
     private String text;
 
     public CommentRequest() {}
@@ -15,6 +17,14 @@ public class CommentRequest {
     }
 
     public String getText() {
+        return text;
+    }
+
+    public String getContent() {
+        return text;
+    }
+
+    public String getMessage() {
         return text;
     }
 
