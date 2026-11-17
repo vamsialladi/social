@@ -18,7 +18,7 @@ import api from '../../api'
 import { websocketService } from '../../services/websocket'
 
 const categories = ['Opportunities', 'Unread', 'Connections', 'InMail', 'Starred']
-const mailboxOptions = ['Focused', 'Other', 'Archived', 'Spam']
+const mailboxOptions = ['Focused', 'Archived', ]
 const emojis = ['😀', '😂', '😍', '😊', '👍', '🎉', '❤️', '🙏', '🤔']
 const genericContactNames = new Set(['truehunt member', 'cinema professional', 'member'])
 
@@ -194,6 +194,7 @@ function createProfileConversation(conversation) {
     preview: 'Start a conversation',
     date: 'Now',
     category: 'Connections',
+    mailbox: 'Focused',
     unread: false,
     sponsored: false,
     subject: `Conversation with ${name}`,
@@ -278,6 +279,7 @@ function Messages({
   const [editingMessageId, setEditingMessageId] = useState('')
   const [editMessageDraft, setEditMessageDraft] = useState('')
   const [isUpdatingMessage, setIsUpdatingMessage] = useState(false)
+  const [isUpdatingMailbox, setIsUpdatingMailbox] = useState(false)
   const [isClearingChat, setIsClearingChat] = useState(false)
   const [conversationActionError, setConversationActionError] = useState('')
   const [search, setSearch] = useState('')
@@ -293,6 +295,7 @@ function Messages({
   const [replyText, setReplyText] = useState('')
   const [replyValidationError, setReplyValidationError] = useState('')
   const [replyAttachment, setReplyAttachment] = useState(null)
+  const [isSendingReply, setIsSendingReply] = useState(false)
   const [isConnectPromptOpen, setIsConnectPromptOpen] = useState(false)
   const [isSendingConnectionRequest, setIsSendingConnectionRequest] = useState(false)
   const [connectionRequestError, setConnectionRequestError] = useState('')
@@ -488,24 +491,40 @@ function Messages({
           ]
               .filter(Boolean)
               .map((identity) => String(identity).trim().toLowerCase())
-          const priorNetworkConversation = messagesRef.current.find((message) => {
-              if (!message.profile?.networkMessageLimit) return false
+          const previousConversation = messagesRef.current.find((message) => {
               const profileIds = [
-                message.profile.id,
-                message.profile.userId,
-                message.profile.user_id,
-                message.profile.profileId,
-                message.profile.publicUserId,
-                message.profile.email,
+                message.profile?.id,
+                message.profile?.userId,
+                message.profile?.user_id,
+                message.profile?.profileId,
+                message.profile?.publicUserId,
+                message.profile?.email,
               ]
                 .filter(Boolean)
                 .map((identity) => String(identity).trim().toLowerCase())
               return profileIds.some((identity) => participantIds.includes(identity))
                 || message.name.trim().toLowerCase() === conversation.name.trim().toLowerCase()
           })
-          return priorNetworkConversation
-              ? { ...conversation, profile: priorNetworkConversation.profile }
-              : conversation
+          if (!previousConversation) return conversation
+
+          return {
+              ...conversation,
+              avatar: conversation.profileImageUrl
+                || conversation.avatar
+                || previousConversation.avatar
+                || previousConversation.profile?.profileImageUrl
+                || previousConversation.profile?.avatar
+                || '',
+              profileImageUrl: conversation.profileImageUrl
+                || previousConversation.profileImageUrl
+                || previousConversation.avatar
+                || previousConversation.profile?.profileImageUrl
+                || previousConversation.profile?.avatar
+                || '',
+              ...(previousConversation.profile?.networkMessageLimit
+                ? { profile: previousConversation.profile }
+                : {}),
+          }
         })
         const unreadConversation = conversationsWithNetworkState.find((conversation) => (
           getUnreadConversationCount([conversation]) > 0
@@ -1025,12 +1044,13 @@ function Messages({
     const filteredMessages = messages.filter((message) => {
       const matchesSearch = !query
         || `${message.name} ${message.preview} ${message.subject}`.toLowerCase().includes(query)
+      const matchesMailbox = String(message.mailbox || 'Focused').toLowerCase() === mailbox.toLowerCase()
       const matchesCategory = !activeCategory
         || (activeCategory === 'Unread' ? message.unread : activeCategory === 'Starred'
           ? message.starred
           : message.category === activeCategory)
 
-      return matchesSearch && matchesCategory
+      return matchesSearch && matchesMailbox && matchesCategory
     })
 
     return filteredMessages
@@ -1041,7 +1061,7 @@ function Messages({
         || first.index - second.index
       ))
       .map(({ message }) => message)
-  }, [activeCategory, messages, search])
+  }, [activeCategory, mailbox, messages, search])
 
   const filteredRecipients = useMemo(() => {
     const query = recipient.trim().toLowerCase()
@@ -1152,6 +1172,31 @@ function Messages({
     setEditMessageDraft(lastEditableMessage.content || '')
     setConversationActionError('')
     setIsConversationMenuOpen(false)
+  }
+
+  async function moveSelectedChatToMailbox(targetMailbox) {
+    if (!selectedMessage || isUpdatingMailbox) return
+
+    setIsUpdatingMailbox(true)
+    setConversationActionError('')
+    try {
+      if (/^\d+$/.test(String(selectedMessage.id))) {
+        await api.updateMailbox(selectedMessage.id, targetMailbox)
+      }
+
+      setMessages((currentMessages) => currentMessages.map((message) => (
+        String(message.id) === String(selectedMessage.id)
+          ? { ...message, mailbox: targetMailbox }
+          : message
+      )))
+      setMailbox(targetMailbox)
+      setIsConversationMenuOpen(false)
+    } catch (error) {
+      console.error(`Could not move conversation to ${targetMailbox}:`, error)
+      setConversationActionError(error.message || `Could not move this chat to ${targetMailbox}. Please try again.`)
+    } finally {
+      setIsUpdatingMailbox(false)
+    }
   }
 
   async function saveEditedMessage(event) {
@@ -1268,7 +1313,7 @@ function Messages({
     event.preventDefault()
     const content = replyText.trim()
 
-    if (!selectedMessage || (!content && !replyAttachment)) return
+    if (isSendingReply || !selectedMessage || (!content && !replyAttachment)) return
 
     let currentUser = null
     try {
@@ -1396,6 +1441,72 @@ function Messages({
       receiverName: selectedMessage.name,
     }
 
+    const isTempId = String(selectedMessage.id).startsWith('profile-')
+      || String(selectedMessage.id).startsWith('conv-')
+    if (isTempId) {
+      setIsSendingReply(true)
+      try {
+        const sentMessage = await api.sendDirectMessage(
+          targetReceiverId,
+          selectedMessage.name,
+          content,
+          attachment,
+          messageId,
+        )
+        if (sentMessage?.conversationId == null) {
+          throw new Error('The message could not be added to a conversation. Please try again.')
+        }
+
+        const persistedMessage = {
+          ...outgoingItem,
+          ...sentMessage,
+          id: sentMessage.id || messageId,
+          direction: 'outgoing',
+          attachment: sentMessage.attachment ?? attachment,
+          sentAt: sentMessage.sentAt || sentAt,
+        }
+        setMessages((currentMessages) => currentMessages.map((message) => {
+          if (
+            String(message.id) !== String(selectedMessage.id)
+            && String(message.id) !== String(sentMessage.conversationId)
+          ) {
+            return message
+          }
+
+          const thread = message.thread || []
+          const existingMessageIndex = thread.findIndex((threadMessage) => (
+            String(threadMessage.id) === String(persistedMessage.id)
+          ))
+          return {
+            ...message,
+            id: sentMessage.conversationId,
+            thread: existingMessageIndex >= 0
+              ? thread.map((threadMessage, index) => (
+                index === existingMessageIndex
+                  ? { ...threadMessage, ...persistedMessage }
+                  : threadMessage
+              ))
+              : [...thread, persistedMessage],
+            preview: content || (attachment ? `Attachment: ${attachment.name}` : ''),
+            date: 'Now',
+            updatedAt: persistedMessage.sentAt,
+            unread: false,
+          }
+        }))
+        setSelectedId(sentMessage.conversationId)
+        setReplyText('')
+        setReplyAttachment(null)
+        setIsEmojiPickerOpen(false)
+        setReplyValidationError('')
+      } catch (error) {
+        console.error('Could not send the first message:', error)
+        setReplyValidationError(error.message || 'Could not send the message. Please try again.')
+      } finally {
+        setIsSendingReply(false)
+      }
+      return
+    }
+
     // 1. Optimistic update
     setMessages((currentMessages) => currentMessages.map((message) => (
       message.id === selectedMessage.id
@@ -1420,8 +1531,7 @@ function Messages({
     setIsEmojiPickerOpen(false)
 
     // 2. Real-time WebSocket transmission
-    const isTempId = String(selectedMessage.id).startsWith('profile-') || String(selectedMessage.id).startsWith('conv-')
-    const numericConvId = !isTempId && !Number.isNaN(Number(selectedMessage.id)) ? Number(selectedMessage.id) : null
+    const numericConvId = !Number.isNaN(Number(selectedMessage.id)) ? Number(selectedMessage.id) : null
 
     const wsPayload = {
       id: messageId,
@@ -1814,6 +1924,18 @@ function Messages({
                           <button
                             type="button"
                             role="menuitem"
+                            disabled={isUpdatingMailbox}
+                            onClick={() => moveSelectedChatToMailbox(
+                              selectedMessage.mailbox === 'Archived' ? 'Focused' : 'Archived',
+                            )}
+                          >
+                            {isUpdatingMailbox
+                              ? selectedMessage.mailbox === 'Archived' ? 'Unarchiving…' : 'Archiving…'
+                              : selectedMessage.mailbox === 'Archived' ? 'Unarchive' : 'Archive'}
+                          </button>
+                          <button
+                            type="button"
+                            role="menuitem"
                             disabled={!lastEditableMessage || isUpdatingMessage}
                             onClick={startEditingLastMessage}
                           >
@@ -2089,8 +2211,8 @@ function Messages({
                     <button
                       className="reply-send-button"
                       type="submit"
-                      aria-label="Send message"
-                      disabled={!replyText.trim() && !replyAttachment}
+                      aria-label={isSendingReply ? 'Sending message' : 'Send message'}
+                      disabled={isSendingReply || (!replyText.trim() && !replyAttachment)}
                     >
                       <Send size={17} />
                     </button>

@@ -243,6 +243,19 @@ export const api = {
       method: "POST",
       body: { content, direction: "outgoing", attachment },
     }),
+  sendDirectMessage: (receiverId, receiverName, content, attachment = null, id = "") =>
+    fetchJson("/messages", {
+      method: "POST",
+      body: {
+        id,
+        receiverId,
+        receiverName,
+        content,
+        attachment,
+        direction: "outgoing",
+        type: "CHAT",
+      },
+    }),
   editMessage: (conversationId, messageId, content) =>
     fetchJson(
       `/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}`,
