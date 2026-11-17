@@ -103,28 +103,17 @@ export default function ProtectProducerLandingPage() {
 
         <div className="container" style={{ position: 'relative', zIndex: 2 }}>
           <div style={{ maxWidth: '840px', margin: '0 auto' }}>
-            
-            {/* Module Badge */}
-            <div 
+            <img
+              src="/assets/protect-producer-banner.png"
+              alt="Protect Producer — Protecting every rupee behind every single frame"
               style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '6px 14px',
-                borderRadius: 'var(--radius-full)',
-                backgroundColor: 'rgba(128, 24, 35, 0.25)',
-                border: '1px solid rgba(232, 180, 184, 0.4)',
-                color: '#FED7AA',
-                fontSize: '13px',
-                fontWeight: 600,
-                marginBottom: '20px'
+                display: 'block',
+                width: 'min(100%, 742px)',
+                height: 'auto',
+                margin: '0 auto 24px',
               }}
-            >
-              <Shield size={16} color="var(--color-maroon-border)" />
-              <span>TrueHunt Production Lifecycle & Risk Governance • Protect Producer</span>
-            </div>
+            />
 
-            {/* Headline */}
             <h1 
               style={{ 
                 fontSize: 'clamp(34px, 4.5vw, 52px)', 
@@ -138,25 +127,9 @@ export default function ProtectProducerLandingPage() {
               Your Production. Your Investment. Your Control.
             </h1>
 
-            {/* Supporting Text */}
-            <p 
-              style={{ 
-                fontSize: '18px', 
-                color: '#CBD5E1', 
-                lineHeight: 1.65, 
-                marginBottom: '36px',
-                maxWidth: '720px',
-                margin: '0 auto 36px'
-              }}
-            >
-              Manage every stage of your film and content production lifecycle in one organized workspace, 
-              from initial planning to final release. Ensure financial transparency, script and cast chain-of-custody, 
-              milestone accountability, and pre-release audit readiness.
-            </p>
-
             <div style={{ display: 'flex', justifyContent: 'center' }}>
-              <button
-                type="button"
+              <Link
+                to="/protect-producer/movies"
                 className="btn btn-lg btn-maroon"
                 style={{
                   boxShadow: '0 4px 18px rgba(128, 24, 35, 0.35)',
@@ -165,7 +138,7 @@ export default function ProtectProducerLandingPage() {
               >
                 <span>Explore Production Categories</span>
                 <ArrowRight size={18} />
-              </button>
+              </Link>
             </div>
 
           </div>

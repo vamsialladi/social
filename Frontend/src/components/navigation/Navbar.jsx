@@ -141,7 +141,7 @@ export default function Navbar() {
     { name: 'Talents', path: '/talents', icon: Users },
     { name: 'Jobs', path: '/jobs', icon: Briefcase },
     { name: 'Investors Connect', path: '/investors-connect', icon: TrendingUp },
-    { name: 'Protect Producer', path: '/protect-producer', icon: Shield },
+    { name: 'Producer Shield', path: '/protect-producer', icon: Shield },
     { name: 'ZineWood', path: '/lcm-app', icon: Smartphone },
     { name: 'Get Support', path: '/get-support', icon: HelpCircle },
   ];
