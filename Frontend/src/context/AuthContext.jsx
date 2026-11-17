@@ -52,9 +52,14 @@ export function AuthProvider({ children }) {
     const signInRole = role === 'STUDIO' || role === 'PRODUCER' ? 'STUDIO' : 'TALENT';
     localStorage.removeItem('truehunt_token');
     localStorage.removeItem('truehunt_user');
+    const userKeys = [user?.userId, user?.id, user?.email].filter(Boolean);
+    userKeys.forEach((key) => {
+      localStorage.removeItem(`truehunt-profile:${encodeURIComponent(String(key).trim().toLowerCase())}`);
+    });
+    localStorage.removeItem('truehunt-profile:me');
     setUser(null);
     navigate(`/sign-in?role=${signInRole}`);
-  }, [navigate, user?.role]);
+  }, [navigate, user]);
 
   const updateUser = useCallback((updates) => {
     if (!user) return;

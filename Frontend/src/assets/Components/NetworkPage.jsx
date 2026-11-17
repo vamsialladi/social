@@ -19,26 +19,7 @@ const networkSections = [
   { label: 'Requests', Icon: UserPlus },
 ]
 
-const demoNetworkProfileIdentifiers = new Set([
-  'aarav',
-  'rohan',
-  'maya',
-  'me',
-  '1000001',
-  '1000002',
-  '1000003',
-  '1000004',
-  '1000005',
-  '2000001',
-  '2000002',
-  'pro@truehunt.in',
-  'producer@truehunt.in',
-  'aarav.varma@truehunt.in',
-  'mythri.studios@truehunt.in',
-  'arjun.varma@truehunt.in',
-  'meera.nambiar@truehunt.in',
-  'rohan.vats@truehunt.in',
-])
+const demoNetworkProfileIdentifiers = new Set([])
 
 function getProfileKey(profileOrId) {
   const id = typeof profileOrId === 'object' && profileOrId !== null
@@ -131,18 +112,24 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
   const currentUserIdentityKey = JSON.stringify(currentUserIdentifiers
     .filter(Boolean)
     .map((identifier) => String(identifier).trim().toLowerCase()))
+  const isProfileConnected = (profile) => {
+    const keys = getProfileIdentityKeys(profile)
+    return keys.some((k) => connectedProfiles.includes(k)) || Boolean(profile.isConnected)
+  }
+  const isProfilePending = (profile) => {
+    const keys = getProfileIdentityKeys(profile)
+    return keys.some((k) => pendingProfiles.includes(k)) || Boolean(profile.isPending)
+  }
   const suggestionProfiles = profiles.filter((profile) => (
-    !connectedProfiles.includes(getProfileKey(profile))
-    && !followedProfiles.includes(getProfileKey(profile))
-    && !pendingProfiles.includes(getProfileKey(profile))
+    !isProfileConnected(profile) && !isProfilePending(profile)
   ))
   const displayedProfiles = (
     activeSection === 'connections'
-      ? profiles.filter((profile) => connectedProfiles.includes(getProfileKey(profile)) || Boolean(profile.isConnected))
+      ? profiles.filter((profile) => isProfileConnected(profile))
       : activeSection === 'following'
-        ? profiles.filter((profile) => followedProfiles.includes(getProfileKey(profile)) || Boolean(profile.isFollowing))
+        ? profiles.filter((profile) => getProfileIdentityKeys(profile).some((k) => followedProfiles.includes(k)) || Boolean(profile.isFollowing))
         : activeSection === 'requests'
-          ? profiles.filter((profile) => pendingProfiles.includes(getProfileKey(profile)) || Boolean(profile.isPending))
+          ? profiles.filter((profile) => isProfilePending(profile))
           : []
   )
 
@@ -296,8 +283,6 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
             .find(Boolean)
           const isConn = profileIdentityKeys.some((key) => serverConnectedKeys.has(key))
             || Boolean(connection?.isConnected)
-            || Boolean(profile.isConnected)
-            || Boolean(profile.connected)
           const isPend = !isConn && Boolean(connection?.isPending || connection?.isOutgoingPending || profile.isPending)
 
           return {
@@ -353,12 +338,12 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
 
       setProfiles(allProfiles)
       const allConnectedKeys = Array.from(new Set([
-        ...connectedList.map((p) => getProfileKey(p)),
-        ...allProfiles.filter((profile) => profile.isConnected).map((profile) => getProfileKey(profile)),
+        ...connectedList.flatMap((p) => getProfileIdentityKeys(p)),
+        ...allProfiles.filter((profile) => profile.isConnected).flatMap((profile) => getProfileIdentityKeys(profile)),
       ])).filter(Boolean)
       setConnectedProfiles(allConnectedKeys)
-      setFollowedProfiles(allProfiles.filter((profile) => profile.isFollowing).map((profile) => getProfileKey(profile)))
-      setPendingProfiles(allProfiles.filter((profile) => profile.isPending).map((profile) => getProfileKey(profile)))
+      setFollowedProfiles(allProfiles.filter((profile) => profile.isFollowing).flatMap((profile) => getProfileIdentityKeys(profile)))
+      setPendingProfiles(allProfiles.filter((profile) => profile.isPending).flatMap((profile) => getProfileIdentityKeys(profile)))
     } catch (err) {
       console.warn('Network profiles load error:', err)
     } finally {
@@ -453,19 +438,20 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
         pending: typeof pending === 'boolean' ? pending : false,
       })
 
+      const targetIdentityKeys = new Set(getProfileIdentityKeys(targetProfile))
       setConnectedProfiles((current) => (
         connected
-          ? current.includes(profileKey) ? current : [...current, profileKey]
-          : current.filter((id) => id !== profileKey)
+          ? Array.from(new Set([...current, ...targetIdentityKeys]))
+          : current.filter((id) => !targetIdentityKeys.has(id))
       ))
       if (connected) {
-        setPendingProfiles((current) => current.filter((id) => id !== profileKey))
-        setInvitations((current) => current.filter((inv) => getProfileKey(inv.profileId) !== profileKey))
+        setPendingProfiles((current) => current.filter((id) => !targetIdentityKeys.has(id)))
+        setInvitations((current) => current.filter((inv) => !profilesMatch(inv, targetProfile)))
       } else if (typeof pending === 'boolean') {
         setPendingProfiles((current) => (
           pending
-            ? current.includes(profileKey) ? current : [...current, profileKey]
-            : current.filter((id) => id !== profileKey)
+            ? Array.from(new Set([...current, ...targetIdentityKeys]))
+            : current.filter((id) => !targetIdentityKeys.has(id))
         ))
       }
       setProfiles((current) => {
@@ -487,7 +473,7 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
             profileImageUrl: targetProfile.profileImageUrl || targetProfile.avatar || '',
             coverImageUrl: targetProfile.coverImageUrl || targetProfile.coverImage || '',
             isConnected: Boolean(connected),
-            isPending: typeof pending === 'boolean' ? Boolean(pending) : (connected ? false : false),
+            isPending: typeof pending === 'boolean' ? Boolean(pending) : false,
           }, ...current]
         }
         return current.map((item) => (
@@ -495,7 +481,7 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
             ? {
                 ...item,
                 isConnected: connected,
-                isPending: typeof pending === 'boolean' ? pending : (connected ? false : item.isPending),
+                isPending: typeof pending === 'boolean' ? pending : (connected ? false : false),
               }
             : item
         ))
@@ -768,9 +754,9 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
 
   function renderProfileCard(profile, isRequestView = false, isConnectedView = false) {
     const profileKey = getProfileKey(profile)
-    const isConnected = connectedProfiles.includes(profileKey)
-    const isPending = pendingProfiles.includes(profileKey)
-    const isFollowing = followedProfiles.includes(profileKey)
+    const isConnected = isProfileConnected(profile)
+    const isPending = isProfilePending(profile)
+    const isFollowing = getProfileIdentityKeys(profile).some((k) => followedProfiles.includes(k)) || Boolean(profile.isFollowing)
 
     return (
       <article className="network-profile-card" key={profile.id || profile.userId}>

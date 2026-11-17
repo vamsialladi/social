@@ -73,7 +73,7 @@ public class DataInitializer {
                 UserAccountEntity talent = new UserAccountEntity();
                 talent.setEmail("pro@truehunt.in");
                 talent.setPasswordHash(passwordEncoder.encode("Password@123"));
-                talent.setName("Cinema Professional");
+                talent.setName("Chandrabose Alladi");
                 talent.setPhone("9876543210");
                 talent.setRole("TALENT");
                 talent.setPublicUserId("1000001");
@@ -99,10 +99,22 @@ public class DataInitializer {
                 userAccountRepository.save(producer);
             }
 
+            // Clean up or migrate legacy "me" profile if present
+            profileRepository.findByUserId("me").ifPresent(legacy -> {
+                Optional<ProfileEntity> existing = profileRepository.findByUserId("1000001")
+                        .or(() -> profileRepository.findByEmail("pro@truehunt.in"));
+                if (existing.isPresent() && !existing.get().getId().equals(legacy.getId())) {
+                    profileRepository.delete(legacy);
+                } else {
+                    legacy.setUserId("1000001");
+                    profileRepository.save(legacy);
+                }
+            });
+
             // 1. Seed the demo profile with education and project details
-            if (profileRepository.findByUserId("me").isEmpty()) {
+            if (profileRepository.findByUserId("1000001").isEmpty() && profileRepository.findByEmail("pro@truehunt.in").isEmpty()) {
                 ProfileEntity profile = new ProfileEntity();
-                profile.setUserId("me");
+                profile.setUserId("1000001");
                 profile.setName("Chandrabose Alladi");
                 profile.setPhone("+91 9876543210");
                 profile.setProfessionalPhone("+91 9876543210");
@@ -144,6 +156,47 @@ public class DataInitializer {
                 profile.setProjects(List.of(proj1));
 
                 profileRepository.save(profile);
+            }
+
+            if (profileRepository.findByUserId("1000002").isEmpty() && profileRepository.findByEmail("aarav.varma@truehunt.in").isEmpty()) {
+                ProfileEntity aaravProfile = new ProfileEntity();
+                aaravProfile.setUserId("1000002");
+                aaravProfile.setName("Aarav Varma");
+                aaravProfile.setPhone("+91 9876543212");
+                aaravProfile.setProfessionalPhone("+91 9876543212");
+                aaravProfile.setEmail("aarav.varma@truehunt.in");
+                aaravProfile.setPrimaryCraft("Cinematography");
+                aaravProfile.setSubCraft("Director of Photography (DoP)");
+                aaravProfile.setHeadline("Cinematographer (DoP) | Visual Storyteller & Lighting Specialist");
+                aaravProfile.setAddress("Mumbai, Maharashtra, India");
+                aaravProfile.setExperience("8+ Years");
+                aaravProfile.setRole("Cinematographer");
+                aaravProfile.setTalents(List.of("Cinematographer (DoP)", "Camera Operator", "Lighting Specialist"));
+                aaravProfile.setProfileImageUrl("https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80");
+                aaravProfile.setCoverImageUrl("https://images.unsplash.com/photo-1518133910546-b6c2fb7d79e3?auto=format&fit=crop&w=1200&q=80");
+                aaravProfile.setHighlights("Experienced cinematographer specializing in feature films, commercials, and high-contrast dramatic visual narratives.");
+                aaravProfile.setBio(aaravProfile.getHighlights());
+                profileRepository.save(aaravProfile);
+            }
+
+            if (profileRepository.findByUserId("2000002").isEmpty() && profileRepository.findByEmail("mythri.studios@truehunt.in").isEmpty()) {
+                ProfileEntity mythriProfile = new ProfileEntity();
+                mythriProfile.setUserId("2000002");
+                mythriProfile.setName("Mythri Movie Makers");
+                mythriProfile.setPhone("+91 9876543213");
+                mythriProfile.setEmail("mythri.studios@truehunt.in");
+                mythriProfile.setPrimaryCraft("Production");
+                mythriProfile.setSubCraft("Feature Film Production House");
+                mythriProfile.setCompany("Mythri Movie Makers");
+                mythriProfile.setHeadline("Leading Indian Feature Film Production House | Pan-India Blockbusters");
+                mythriProfile.setAddress("Jubilee Hills, Hyderabad, India");
+                mythriProfile.setExperience("15+ Years");
+                mythriProfile.setRole("Production House");
+                mythriProfile.setTalents(List.of("Feature Film Production", "Pan-India Cinema", "Studio Distribution"));
+                mythriProfile.setProfileImageUrl("https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=400&q=80");
+                mythriProfile.setHighlights("Premier production house behind industry-defining commercial blockbusters across Indian cinema.");
+                mythriProfile.setBio(mythriProfile.getHighlights());
+                profileRepository.save(mythriProfile);
             }
 
             if (profileRepository.findByUserId("1000004").isEmpty()) {

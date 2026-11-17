@@ -295,6 +295,77 @@ public class ConnectionService {
                         });
             }
         }
+
+        for (ProfileEntity p : profileRepository.findAll()) {
+            if (p == null) continue;
+            String candidateId = p.getUserId();
+            if (candidateId == null || candidateId.isBlank() || isInvalidTarget(candidateId)
+                    || lowerOwnerIds.contains(candidateId.toLowerCase(Locale.ROOT))) {
+                continue;
+            }
+            final String finalCandidateId = candidateId;
+            profiles.computeIfAbsent(
+                    finalCandidateId,
+                    profileId -> {
+                        Set<String> targetIds = resolveAllUserIdentifiers(finalCandidateId);
+                        UserProfileRelationshipEntity rel = findRelationshipBetween(ownerIds, targetIds, allRels);
+                        boolean isConn = rel != null && (rel.isConnected() || "ACCEPTED".equalsIgnoreCase(rel.getStatus()));
+                        boolean isFollow = rel != null && rel.isFollowing();
+                        Map<String, Object> dto = getProfileDto(finalCandidateId, isConn, isFollow);
+                        boolean isPend = rel != null && !isConn && "PENDING".equalsIgnoreCase(rel.getStatus());
+                        String sender = rel != null && rel.getSenderUserId() != null
+                                ? rel.getSenderUserId().toLowerCase(Locale.ROOT)
+                                : "";
+                        boolean isOutPending = isPend && lowerOwnerIds.contains(sender);
+                        boolean isInPending = isPend && !isOutPending;
+                        dto.put("isConnected", isConn);
+                        dto.put("connected", isConn);
+                        dto.put("isFollowing", isFollow);
+                        dto.put("following", isFollow);
+                        dto.put("isPending", isPend);
+                        dto.put("isOutgoingPending", isOutPending);
+                        dto.put("isIncomingPending", isInPending);
+                        dto.put("connectionStatus", isConn ? "CONNECTED"
+                                : (isPend ? (isOutPending ? "PENDING_OUTGOING" : "PENDING_INCOMING") : "NONE"));
+                        return dto;
+                    });
+        }
+
+        for (UserAccountEntity acc : userAccountRepository.findAll()) {
+            if (acc == null || "ADMIN".equalsIgnoreCase(acc.getRole())) continue;
+            String candidateId = acc.getPublicUserId() != null && !acc.getPublicUserId().isBlank()
+                    ? acc.getPublicUserId() : String.valueOf(acc.getId());
+            if (candidateId == null || candidateId.isBlank() || isInvalidTarget(candidateId)
+                    || lowerOwnerIds.contains(candidateId.toLowerCase(Locale.ROOT))) {
+                continue;
+            }
+            final String finalCandidateId = candidateId;
+            profiles.computeIfAbsent(
+                    finalCandidateId,
+                    profileId -> {
+                        Set<String> targetIds = resolveAllUserIdentifiers(finalCandidateId);
+                        UserProfileRelationshipEntity rel = findRelationshipBetween(ownerIds, targetIds, allRels);
+                        boolean isConn = rel != null && (rel.isConnected() || "ACCEPTED".equalsIgnoreCase(rel.getStatus()));
+                        boolean isFollow = rel != null && rel.isFollowing();
+                        Map<String, Object> dto = getProfileDto(finalCandidateId, isConn, isFollow);
+                        boolean isPend = rel != null && !isConn && "PENDING".equalsIgnoreCase(rel.getStatus());
+                        String sender = rel != null && rel.getSenderUserId() != null
+                                ? rel.getSenderUserId().toLowerCase(Locale.ROOT)
+                                : "";
+                        boolean isOutPending = isPend && lowerOwnerIds.contains(sender);
+                        boolean isInPending = isPend && !isOutPending;
+                        dto.put("isConnected", isConn);
+                        dto.put("connected", isConn);
+                        dto.put("isFollowing", isFollow);
+                        dto.put("following", isFollow);
+                        dto.put("isPending", isPend);
+                        dto.put("isOutgoingPending", isOutPending);
+                        dto.put("isIncomingPending", isInPending);
+                        dto.put("connectionStatus", isConn ? "CONNECTED"
+                                : (isPend ? (isOutPending ? "PENDING_OUTGOING" : "PENDING_INCOMING") : "NONE"));
+                        return dto;
+                    });
+        }
         return new ArrayList<>(profiles.values());
     }
 

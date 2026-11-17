@@ -48,6 +48,12 @@ public class ProfileController {
                 && auth.getName() != null && !auth.getName().isBlank()) {
             return auth.getName().trim();
         }
+        if (userEmail != null && !userEmail.isBlank() && !"me".equalsIgnoreCase(userEmail.trim())) {
+            return userEmail.trim();
+        }
+        if (userId != null && !userId.isBlank() && !"me".equalsIgnoreCase(userId.trim())) {
+            return userId.trim();
+        }
         if (userId != null && !userId.isBlank()) {
             return userId.trim();
         }

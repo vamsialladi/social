@@ -1469,8 +1469,55 @@ export default function SocialApp() {
       return 'light'
     }
   })
-  const [profileDetails, setProfileDetails] = useState(emptyProfileDetails)
-  const [profilePreview, setProfilePreview] = useState('')
+  const [profileDetails, setProfileDetails] = useState(() => {
+    if (profileStorageKey) {
+      try {
+        const saved = localStorage.getItem(profileStorageKey)
+        if (saved) {
+          const parsed = JSON.parse(saved)
+          if (parsed && parsed.name) {
+            return { ...emptyProfileDetails, ...parsed }
+          }
+        }
+      } catch (error) {
+        console.warn('Could not read saved profile:', error)
+      }
+    }
+    if (user && user.name) {
+      return {
+        ...emptyProfileDetails,
+        userId: user.userId || user.id || '',
+        name: user.name,
+        email: user.email || '',
+        phone: user.phone || user.phoneNumber || '',
+        role: user.role || '',
+        primaryCraft: user.primaryCraft || user.craft || '',
+        subCraft: user.subCraft || '',
+        experience: user.experience || '',
+        company: user.companyName || user.company || '',
+        address: user.headquarters || user.address || user.location || '',
+        avatar: user.avatar || user.profileImageUrl || '',
+        profileImageUrl: user.profileImageUrl || user.avatar || '',
+      }
+    }
+    return emptyProfileDetails
+  })
+  const [profilePreview, setProfilePreview] = useState(() => {
+    if (profileStorageKey) {
+      try {
+        const saved = localStorage.getItem(profileStorageKey)
+        if (saved) {
+          const parsed = JSON.parse(saved)
+          if (parsed.profileImageUrl || parsed.avatar) {
+            return parsed.profileImageUrl || parsed.avatar
+          }
+        }
+      } catch (error) {
+        console.warn('Could not read saved profile avatar:', error)
+      }
+    }
+    return user?.avatar || user?.profileImageUrl || ''
+  })
 
   const handleThemeChange = useCallback((nextTheme) => {
     setTheme(nextTheme)
@@ -1753,8 +1800,6 @@ export default function SocialApp() {
 
   useLayoutEffect(() => {
     let isCurrentAccount = true
-    setProfileDetails(emptyProfileDetails)
-    setProfilePreview('')
 
     if (profileStorageKey) {
       try {
@@ -1766,6 +1811,36 @@ export default function SocialApp() {
         }
       } catch (error) {
         console.warn('Could not read the current account profile cache:', error)
+      }
+    } else if (!user || !user.name) {
+      setProfileDetails(emptyProfileDetails)
+      setProfilePreview('')
+    }
+
+    if (user && user.name) {
+      setProfileDetails((prev) => {
+        if (prev.name && prev.name !== 'Your name' && prev.userId === (user.userId || user.id)) {
+          return prev
+        }
+        return {
+          ...emptyProfileDetails,
+          ...prev,
+          userId: user.userId || user.id || '',
+          name: user.name,
+          email: user.email || '',
+          phone: user.phone || user.phoneNumber || '',
+          role: user.role || '',
+          primaryCraft: user.primaryCraft || user.craft || '',
+          subCraft: user.subCraft || '',
+          experience: user.experience || '',
+          company: user.companyName || user.company || '',
+          address: user.headquarters || user.address || user.location || '',
+          avatar: user.avatar || user.profileImageUrl || '',
+          profileImageUrl: user.profileImageUrl || user.avatar || '',
+        }
+      })
+      if (user.avatar || user.profileImageUrl) {
+        setProfilePreview(user.avatar || user.profileImageUrl)
       }
     }
 
@@ -1788,7 +1863,7 @@ export default function SocialApp() {
     return () => {
       isCurrentAccount = false
     }
-  }, [profileStorageKey])
+  }, [profileStorageKey, user])
 
   useEffect(() => {
     const token = localStorage.getItem('truehunt_token') || ''

@@ -8,6 +8,7 @@ import java.util.Optional;
 
 public interface InvestorAccessRequestRepository extends JpaRepository<InvestorAccessRequestEntity, Long> {
     Optional<InvestorAccessRequestEntity> findFirstByApplicantEmailIgnoreCaseOrderByCreatedAtDesc(String email);
+    Optional<InvestorAccessRequestEntity> findFirstByFeedPostId(Long feedPostId);
     Optional<InvestorAccessRequestEntity> findFirstByFeedPostIdAndApplicantEmailIgnoreCase(Long feedPostId, String email);
     List<InvestorAccessRequestEntity> findAllByOrderByCreatedAtDesc();
     List<InvestorAccessRequestEntity> findAllByStatusOrderByCreatedAtDesc(String status);

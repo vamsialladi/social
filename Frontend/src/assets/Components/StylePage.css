@@ -3526,6 +3526,12 @@
   color: #bc342d;
 }
 
+.form-field input.is-invalid,
+.form-field.has-error input {
+  border-color: #bc342d !important;
+  box-shadow: 0 0 0 3px rgba(188, 52, 45, 0.12) !important;
+}
+
 .field-error,
 .submit-error {
   color: #bc342d;

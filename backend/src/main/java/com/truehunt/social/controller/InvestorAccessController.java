@@ -82,7 +82,7 @@ public class InvestorAccessController {
 
     @PostMapping("/listings/{id}/interest")
     public ResponseEntity<ApiResponse<Map<String, Object>>> sendInvestorInterest(
-            @PathVariable Long id,
+            @PathVariable String id,
             @AuthenticationPrincipal UserDetails user,
             @RequestHeader(value = "X-User-Email", required = false) String userEmail,
             @RequestHeader(value = "X-User-Id", required = false) String userId
@@ -94,7 +94,7 @@ public class InvestorAccessController {
 
     @DeleteMapping("/listings/{id}")
     public ResponseEntity<ApiResponse<Map<String, Object>>> deletePublishedListing(
-            @PathVariable Long id,
+            @PathVariable String id,
             @AuthenticationPrincipal UserDetails user,
             @RequestHeader(value = "X-User-Email", required = false) String userEmail,
             @RequestHeader(value = "X-User-Id", required = false) String userId

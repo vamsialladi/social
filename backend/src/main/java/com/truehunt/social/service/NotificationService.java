@@ -123,8 +123,13 @@ public class NotificationService {
     }
 
     private Long parseLongId(String id) {
+        if (id == null) return null;
+        String clean = id.trim();
+        if (clean.toLowerCase(Locale.ROOT).startsWith("notif-")) {
+            clean = clean.substring("notif-".length());
+        }
         try {
-            return Long.parseLong(id);
+            return Long.parseLong(clean);
         } catch (Exception e) {
             return null;
         }

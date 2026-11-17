@@ -15,6 +15,7 @@ import com.truehunt.social.repository.ProfileRepository;
 import com.truehunt.social.repository.ProfileViewRepository;
 import com.truehunt.social.repository.UserAccountRepository;
 import com.truehunt.social.repository.UserProfileRelationshipRepository;
+import com.truehunt.social.validation.PhoneNumberPolicy;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -860,9 +861,8 @@ public class ProfileService {
 
     public ProfileEntity findCurrentProfile(String userEmail) {
         String clean = resolveUserEmail(userEmail);
-        if (clean != null && !clean.isBlank()) {
-            Optional<UserAccountEntity> accountOpt = findAccountByEmail(clean)
-                    .or(() -> findAccountByPublicUserId(clean));
+        if (clean != null && !clean.isBlank() && !"me".equalsIgnoreCase(clean)) {
+            Optional<UserAccountEntity> accountOpt = resolveAccount(clean);
             if (isAdminAccount(accountOpt)) {
                 UserAccountEntity account = accountOpt.orElseThrow();
                 ProfileEntity adminProfile = new ProfileEntity();
@@ -877,8 +877,13 @@ public class ProfileService {
             // First try direct profile match by userId or email
             Optional<ProfileEntity> directProfile = profileRepository.findByUserId(clean)
                     .or(() -> profileRepository.findByEmail(clean));
-            if (directProfile.isPresent()) {
-                return directProfile.get();
+            if (directProfile.isPresent() && !isAdminProfile(directProfile.get())) {
+                ProfileEntity dp = directProfile.get();
+                if (accountOpt.isPresent()) {
+                    syncProfileWithAccount(dp, accountOpt.get());
+                    return profileRepository.save(dp);
+                }
+                return dp;
             }
 
             // Then try UserAccount by email, publicUserId, or ID
@@ -888,39 +893,33 @@ public class ProfileService {
                 if (publicUserId == null || publicUserId.isBlank()) {
                     publicUserId = String.valueOf(account.getId());
                 }
-                ProfileEntity profile = profileRepository.findByUserId(publicUserId)
-                        .or(() -> profileRepository.findByEmail(account.getEmail()))
+                final String pid = publicUserId;
+                ProfileEntity profile = profileRepository.findByUserId(pid)
+                        .or(() -> (account.getEmail() != null && !account.getEmail().isBlank())
+                                ? profileRepository.findByEmail(account.getEmail()).filter(p -> !"me".equalsIgnoreCase(p.getUserId()))
+                                : Optional.empty())
                         .orElseGet(ProfileEntity::new);
-                profile.setUserId(publicUserId);
-                if (profile.getName() == null || profile.getName().isBlank()) {
-                    profile.setName(account.getName());
-                }
-                if (profile.getEmail() == null || profile.getEmail().isBlank()) {
-                    profile.setEmail(account.getEmail());
-                }
+                profile.setUserId(pid);
+                syncProfileWithAccount(profile, account);
                 return profileRepository.save(profile);
             }
         }
 
-        // Fallback to pro@truehunt.in only if not found
-        Optional<UserAccountEntity> currentAccountOpt = userAccountRepository.findByEmail("pro@truehunt.in");
+        // Fallback to 1000001 / pro@truehunt.in only if not found
+        Optional<UserAccountEntity> currentAccountOpt = userAccountRepository.findByEmail("pro@truehunt.in")
+                .or(() -> userAccountRepository.findByPublicUserId("1000001"));
         if (currentAccountOpt.isPresent()) {
             UserAccountEntity currentAccount = currentAccountOpt.get();
             String publicUserId = currentAccount.getPublicUserId();
             if (publicUserId == null || publicUserId.isBlank()) {
                 publicUserId = String.valueOf(currentAccount.getId());
             }
-
-            ProfileEntity profile = profileRepository.findByUserId(publicUserId)
+            final String pid = publicUserId;
+            ProfileEntity profile = profileRepository.findByUserId(pid)
                     .or(() -> profileRepository.findByEmail(currentAccount.getEmail()))
                     .orElseGet(ProfileEntity::new);
-            profile.setUserId(publicUserId);
-            if (profile.getName() == null || profile.getName().isBlank()) {
-                profile.setName(currentAccount.getName());
-            }
-            if (profile.getEmail() == null || profile.getEmail().isBlank()) {
-                profile.setEmail(currentAccount.getEmail());
-            }
+            profile.setUserId(pid);
+            syncProfileWithAccount(profile, currentAccount);
             return profileRepository.save(profile);
         }
 
@@ -930,16 +929,77 @@ public class ProfileService {
         }
 
         ProfileEntity fallback = new ProfileEntity();
-        fallback.setUserId("me");
+        fallback.setUserId("1000001");
         fallback.setName("Cinema Professional");
         fallback.setEmail("pro@truehunt.in");
         return profileRepository.save(fallback);
     }
 
+    private void syncProfileWithAccount(ProfileEntity profile, UserAccountEntity account) {
+        if (account == null) return;
+        if (account.getName() != null && !account.getName().isBlank()) {
+            if (profile.getName() == null || profile.getName().isBlank()
+                    || "Cinema Professional".equalsIgnoreCase(profile.getName())) {
+                profile.setName(account.getName());
+            }
+        }
+        if (account.getEmail() != null && !account.getEmail().isBlank()) {
+            if (profile.getEmail() == null || profile.getEmail().isBlank()) {
+                profile.setEmail(account.getEmail());
+            }
+        }
+        if (account.getPhone() != null && !account.getPhone().isBlank()) {
+            if (profile.getPhone() == null || profile.getPhone().isBlank()) {
+                profile.setPhone(account.getPhone());
+            }
+        }
+        if (account.getPrimaryCraft() != null && !account.getPrimaryCraft().isBlank()) {
+            if (profile.getPrimaryCraft() == null || profile.getPrimaryCraft().isBlank()) {
+                profile.setPrimaryCraft(account.getPrimaryCraft());
+            }
+        }
+        if (account.getSubCraft() != null && !account.getSubCraft().isBlank()) {
+            if (profile.getSubCraft() == null || profile.getSubCraft().isBlank()) {
+                profile.setSubCraft(account.getSubCraft());
+            }
+        }
+        if (account.getExperience() != null && !account.getExperience().isBlank()) {
+            if (profile.getExperience() == null || profile.getExperience().isBlank()) {
+                profile.setExperience(account.getExperience());
+            }
+        }
+        if (account.getRole() != null && !account.getRole().isBlank()) {
+            if (profile.getRole() == null || profile.getRole().isBlank()) {
+                profile.setRole(account.getRole());
+            }
+        }
+        if (account.getHeadquarters() != null && !account.getHeadquarters().isBlank()) {
+            if (profile.getAddress() == null || profile.getAddress().isBlank()) {
+                profile.setAddress(account.getHeadquarters());
+            }
+        }
+        if (account.getCompanyName() != null && !account.getCompanyName().isBlank()) {
+            if (profile.getCompany() == null || profile.getCompany().isBlank()) {
+                profile.setCompany(account.getCompanyName());
+            }
+        }
+        if (profile.getTalents() == null || profile.getTalents().isEmpty()) {
+            List<String> talents = new ArrayList<>();
+            if (account.getPrimaryCraft() != null && !account.getPrimaryCraft().isBlank()) {
+                talents.add(account.getPrimaryCraft());
+            }
+            if (account.getSubCraft() != null && !account.getSubCraft().isBlank()) {
+                talents.add(account.getSubCraft());
+            }
+            if (!talents.isEmpty()) {
+                profile.setTalents(talents);
+            }
+        }
+    }
+
     private ProfileEntity findEditableProfile(String userEmail) {
         String identifier = resolveUserEmail(userEmail);
-        Optional<UserAccountEntity> account = findAccountByEmail(identifier)
-                .or(() -> findAccountByPublicUserId(identifier));
+        Optional<UserAccountEntity> account = resolveAccount(identifier);
         if (isAdminAccount(account)) {
             throw new BadRequestException("Administrator accounts do not have a public social profile.");
         }
@@ -948,8 +1008,8 @@ public class ProfileService {
 
     private boolean isAdminProfile(ProfileEntity profile) {
         if (profile == null) return false;
-        Optional<UserAccountEntity> account = findAccountByEmail(profile.getEmail())
-                .or(() -> findAccountByPublicUserId(profile.getUserId()));
+        Optional<UserAccountEntity> account = resolveAccount(profile.getEmail())
+                .or(() -> resolveAccount(profile.getUserId()));
         return isAdminAccount(account);
     }
 
@@ -958,12 +1018,16 @@ public class ProfileService {
     }
 
     private String resolveUserEmail(String userEmail) {
-        if (userEmail != null && !userEmail.isBlank()) {
+        if (userEmail != null && !userEmail.isBlank() && !"me".equalsIgnoreCase(userEmail.trim())) {
             return userEmail.trim().toLowerCase(Locale.ROOT);
         }
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth != null && auth.isAuthenticated() && !"anonymousUser".equals(auth.getPrincipal())) {
+        if (auth != null && auth.isAuthenticated() && !"anonymousUser".equals(auth.getPrincipal())
+                && auth.getName() != null && !auth.getName().isBlank()) {
             return auth.getName().trim().toLowerCase(Locale.ROOT);
+        }
+        if (userEmail != null && !userEmail.isBlank()) {
+            return userEmail.trim().toLowerCase(Locale.ROOT);
         }
         return null;
     }
@@ -1223,6 +1287,38 @@ public class ProfileService {
         m.put("activities", ed.getActivities());
         m.put("description", ed.getDescription());
         return m;
+    }
+
+    private Optional<UserAccountEntity> resolveAccount(String identifier) {
+        if (identifier == null || identifier.isBlank()) {
+            return Optional.empty();
+        }
+        String clean = identifier.trim();
+        Optional<UserAccountEntity> byEmail = findAccountByEmail(clean);
+        if (byEmail.isPresent()) {
+            return byEmail;
+        }
+        Optional<UserAccountEntity> byPublicId = findAccountByPublicUserId(clean);
+        if (byPublicId.isPresent()) {
+            return byPublicId;
+        }
+        String normalizedPhone = PhoneNumberPolicy.normalizeUnchecked(clean);
+        Optional<UserAccountEntity> byPhone = userAccountRepository.findByPhoneNumber(clean)
+                .or(() -> (normalizedPhone != null && !normalizedPhone.isBlank())
+                        ? userAccountRepository.findByPhoneNumber(normalizedPhone)
+                        : Optional.empty());
+        if (byPhone.isPresent()) {
+            return byPhone;
+        }
+        try {
+            Long numericId = Long.parseLong(clean);
+            Optional<UserAccountEntity> byId = userAccountRepository.findById(numericId);
+            if (byId.isPresent()) {
+                return byId;
+            }
+        } catch (NumberFormatException ignored) {}
+
+        return Optional.empty();
     }
 
     private Optional<UserAccountEntity> findAccountByEmail(String email) {

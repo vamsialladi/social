@@ -97,6 +97,38 @@ function getOrganizationLogoUrl(organizationName, experiences = []) {
     || ''
 }
 
+function extractDigits(val) {
+  if (!val) return ''
+  const digits = String(val).replace(/\D/g, '')
+  if (digits.length === 12 && digits.startsWith('91')) {
+    return digits.slice(2)
+  }
+  if (digits.length === 11 && digits.startsWith('0')) {
+    return digits.slice(1)
+  }
+  return digits.slice(0, 10)
+}
+
+function validatePhoneNumber(value, isRequired = false, fieldName = 'Phone number') {
+  const trimmed = String(value || '').trim()
+  if (!trimmed) {
+    if (isRequired) {
+      return `${fieldName} is required.`
+    }
+    return ''
+  }
+  if (!/^\d+$/.test(trimmed)) {
+    return `${fieldName} must contain numbers only.`
+  }
+  if (trimmed.length !== 10) {
+    return `${fieldName} must be exactly 10 digits.`
+  }
+  if (!/^[6-9]/.test(trimmed)) {
+    return `${fieldName} must start with 6, 7, 8, or 9.`
+  }
+  return ''
+}
+
 function OrganizationPicker({ options, value, onChange }) {
   const [isOpen, setIsOpen] = useState(false)
   const [isOtherSelected, setIsOtherSelected] = useState(false)
@@ -465,6 +497,47 @@ function ProfilePage({
   const [isSubmittingProfile, setIsSubmittingProfile] = useState(false)
   const [profileFormKey, setProfileFormKey] = useState(0)
   const [isEditingProfile, setIsEditingProfile] = useState(false)
+  const [phoneDraft, setPhoneDraft] = useState(() => extractDigits(profileDetails.phone))
+  const [professionalPhoneDraft, setProfessionalPhoneDraft] = useState(() => extractDigits(profileDetails.professionalPhone))
+  const [phoneError, setPhoneError] = useState('')
+  const [professionalPhoneError, setProfessionalPhoneError] = useState('')
+
+  useEffect(() => {
+    if (!isEditingProfile) {
+      setPhoneDraft(extractDigits(profileDetails.phone))
+      setProfessionalPhoneDraft(extractDigits(profileDetails.professionalPhone))
+    }
+  }, [profileDetails.phone, profileDetails.professionalPhone, isEditingProfile])
+
+  function handlePhoneKeyDown(e) {
+    if (
+      ['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', 'Enter', 'Home', 'End'].includes(e.key) ||
+      (e.ctrlKey || e.metaKey)
+    ) {
+      return
+    }
+    if (!/^[0-9]$/.test(e.key)) {
+      e.preventDefault()
+    }
+  }
+
+  function handlePhoneChange(e) {
+    const raw = e.target.value
+    const onlyDigits = raw.replace(/\D/g, '').slice(0, 10)
+    setPhoneDraft(onlyDigits)
+    if (phoneError) {
+      setPhoneError(validatePhoneNumber(onlyDigits, true, 'Personal phone number'))
+    }
+  }
+
+  function handleProfessionalPhoneChange(e) {
+    const raw = e.target.value
+    const onlyDigits = raw.replace(/\D/g, '').slice(0, 10)
+    setProfessionalPhoneDraft(onlyDigits)
+    if (professionalPhoneError) {
+      setProfessionalPhoneError(validatePhoneNumber(onlyDigits, false, 'Professional phone number'))
+    }
+  }
   const [dateOfBirthDraft, setDateOfBirthDraft] = useState('')
   const [genderDraft, setGenderDraft] = useState(profileDetails.gender || '')
   const [isExperienceModalOpen, setIsExperienceModalOpen] = useState(false)
@@ -1167,10 +1240,18 @@ function ProfilePage({
         ...profileDetails,
         id: effectiveProfileId,
         userId: effectiveProfileId,
+        isConnected: connected,
+        connected,
       }
       setConnectionState({ profileId: effectiveProfileId, connected, pending })
       window.dispatchEvent(new CustomEvent('truehunt-connection-changed', {
-        detail: { connected, pending, profile },
+        detail: {
+          connected,
+          isConnected: connected,
+          pending,
+          isPending: pending,
+          profile,
+        },
       }))
     } catch (error) {
       console.error('Could not update profile connection:', error)
@@ -1428,6 +1509,10 @@ function ProfilePage({
     setProfilePic(null)
     setProfilePreview(profileDetails.profileImageUrl || '')
     setIsProfileImageRemoved(false)
+    setPhoneDraft(extractDigits(profileDetails.phone))
+    setProfessionalPhoneDraft(extractDigits(profileDetails.professionalPhone))
+    setPhoneError('')
+    setProfessionalPhoneError('')
     setIsEditingProfile(false)
   }
 
@@ -1715,6 +1800,10 @@ function ProfilePage({
     setDateOfBirthDraft(profileDetails.dateOfBirth || '')
     setGenderDraft(profileDetails.gender || '')
     setProfilePreview(profileDetails.profileImageUrl || profilePreview)
+    setPhoneDraft(extractDigits(profileDetails.phone))
+    setProfessionalPhoneDraft(extractDigits(profileDetails.professionalPhone))
+    setPhoneError('')
+    setProfessionalPhoneError('')
     setProfileFormKey((key) => key + 1)
     setIsEditingProfile(true)
   }
@@ -1876,6 +1965,40 @@ function ProfilePage({
       return
     }
 
+    const personalPhoneErr = validatePhoneNumber(phoneDraft, true, 'Personal phone number')
+    if (personalPhoneErr) {
+      setPhoneError(personalPhoneErr)
+      const phoneInput = form.elements.namedItem('phone')
+      if (phoneInput) {
+        phoneInput.focus()
+        phoneInput.setCustomValidity(personalPhoneErr)
+        phoneInput.reportValidity()
+      }
+      setValidationError(personalPhoneErr)
+      return
+    } else {
+      setPhoneError('')
+      const phoneInput = form.elements.namedItem('phone')
+      if (phoneInput) phoneInput.setCustomValidity('')
+    }
+
+    const professionalPhoneErr = validatePhoneNumber(professionalPhoneDraft, false, 'Professional phone number')
+    if (professionalPhoneErr) {
+      setProfessionalPhoneError(professionalPhoneErr)
+      const profInput = form.elements.namedItem('professionalPhone')
+      if (profInput) {
+        profInput.focus()
+        profInput.setCustomValidity(professionalPhoneErr)
+        profInput.reportValidity()
+      }
+      setValidationError(professionalPhoneErr)
+      return
+    } else {
+      setProfessionalPhoneError('')
+      const profInput = form.elements.namedItem('professionalPhone')
+      if (profInput) profInput.setCustomValidity('')
+    }
+
     const videoInputs = Array.from(form.querySelectorAll('input[type="file"][data-video]'))
     const invalidVideoIndex = uploadedVideos.findIndex((video) => video && (
       video.file.size > MAX_VIDEO_SIZE
@@ -1907,8 +2030,8 @@ function ProfilePage({
         ...profileDetails,
         userId: formData.get('userId')?.toString().trim() || '',
         name: formData.get('name') || '',
-        phone: formData.get('phone')?.trim() || '',
-        professionalPhone: formData.get('professionalPhone')?.trim() || '',
+        phone: phoneDraft.trim(),
+        professionalPhone: professionalPhoneDraft.trim(),
         email: formData.get('email')?.trim() || '',
         experience: formData.get('experience') || '',
         dateOfBirth: formData.get('dateOfBirth') || '',
@@ -3306,27 +3429,53 @@ function ProfilePage({
                   placeholder="e.g. Arjun Kumar"
                 />
               </div>
-              <div className="form-field">
+              <div className={`form-field${phoneError ? ' has-error' : ''}`}>
                 <label htmlFor="phone">Personal phone number</label>
                 <input
                   id="phone"
                   name="phone"
                   type="tel"
+                  inputMode="numeric"
                   autoComplete="tel"
-                  defaultValue={profileDetails.phone}
-                  placeholder="e.g. +91 98765 43210"
+                  maxLength={10}
+                  value={phoneDraft}
+                  onChange={handlePhoneChange}
+                  onKeyDown={handlePhoneKeyDown}
+                  onBlur={() => setPhoneError(validatePhoneNumber(phoneDraft, true, 'Personal phone number'))}
+                  placeholder="e.g. 9876543210"
+                  className={phoneError ? 'is-invalid' : ''}
+                  aria-invalid={Boolean(phoneError)}
+                  aria-describedby={phoneError ? 'phone-error' : undefined}
                 />
+                {phoneError && (
+                  <span id="phone-error" className="field-error" role="alert">
+                    {phoneError}
+                  </span>
+                )}
               </div>
-              <div  className="form-field">
+              <div className={`form-field${professionalPhoneError ? ' has-error' : ''}`}>
                 <label htmlFor="professionalPhone">Professional phone number</label>
                 <input
                   id="professionalPhone"
                   name="professionalPhone"
                   type="tel"
+                  inputMode="numeric"
                   autoComplete="tel"
-                  defaultValue={profileDetails.professionalPhone}
-                  placeholder="e.g. +91 98765 43210"
+                  maxLength={10}
+                  value={professionalPhoneDraft}
+                  onChange={handleProfessionalPhoneChange}
+                  onKeyDown={handlePhoneKeyDown}
+                  onBlur={() => setProfessionalPhoneError(validatePhoneNumber(professionalPhoneDraft, false, 'Professional phone number'))}
+                  placeholder="e.g. 9876543210"
+                  className={professionalPhoneError ? 'is-invalid' : ''}
+                  aria-invalid={Boolean(professionalPhoneError)}
+                  aria-describedby={professionalPhoneError ? 'professional-phone-error' : undefined}
                 />
+                {professionalPhoneError && (
+                  <span id="professional-phone-error" className="field-error" role="alert">
+                    {professionalPhoneError}
+                  </span>
+                )}
               </div>
               <div className="form-field">
                 <label htmlFor="email">Email address</label>

@@ -105,6 +105,18 @@ public class InvestorAccessService {
     }
 
     @Transactional
+    public Map<String, Object> sendInvestorInterest(String rawListingId, String senderEmail) {
+        if (senderEmail == null || senderEmail.isBlank()) {
+            throw new UnauthorizedException("Sign in to contact this investor.");
+        }
+        Long listingId = parseListingId(rawListingId);
+        if (listingId == null) {
+            throw new ResourceNotFoundException("Investor profile", "id", rawListingId);
+        }
+        return sendInvestorInterest(listingId, senderEmail);
+    }
+
+    @Transactional
     public Map<String, Object> sendInvestorInterest(Long listingId, String senderEmail) {
         if (senderEmail == null || senderEmail.isBlank()) {
             throw new UnauthorizedException("Sign in to contact this investor.");
@@ -112,17 +124,26 @@ public class InvestorAccessService {
 
         InvestorAccessRequestEntity listing = requestRepository.findById(listingId)
                 .filter(item -> "PUBLISHED".equals(item.getStatus()))
-                .orElseThrow(() -> new ResourceNotFoundException("Investor profile", "id", listingId));
+                .orElse(null);
+        if (listing == null) {
+            listing = requestRepository.findFirstByFeedPostId(listingId)
+                    .filter(item -> "PUBLISHED".equals(item.getStatus()))
+                    .orElse(null);
+        }
+        if (listing == null) {
+            throw new ResourceNotFoundException("Investor profile", "id", listingId);
+        }
         if (listing.getApplicantEmail() == null
                 || listing.getApplicantEmail().equalsIgnoreCase(senderEmail.trim())) {
             throw new BadRequestException("You cannot send an interest message to your own investor profile.");
         }
 
+        final String ownerEmail = listing.getApplicantEmail();
         UserAccountEntity sender = userAccountRepository.findByEmail(senderEmail.trim().toLowerCase(Locale.ROOT))
                 .orElseThrow(() -> new ResourceNotFoundException("Account", "email", senderEmail));
         UserAccountEntity owner = userAccountRepository.findByEmail(
-                        listing.getApplicantEmail().trim().toLowerCase(Locale.ROOT))
-                .orElseThrow(() -> new ResourceNotFoundException("Account", "email", listing.getApplicantEmail()));
+                        ownerEmail.trim().toLowerCase(Locale.ROOT))
+                .orElseThrow(() -> new ResourceNotFoundException("Account", "email", ownerEmail));
         String senderName = sender.getName() == null || sender.getName().isBlank()
                 ? sender.getEmail().split("@")[0]
                 : sender.getName().trim();
@@ -168,12 +189,29 @@ public class InvestorAccessService {
     }
 
     @Transactional
+    public Map<String, Object> deletePublishedListing(String rawListingId, String email) {
+        if (email == null || email.isBlank()) {
+            throw new UnauthorizedException("Sign in to delete this investor profile.");
+        }
+        Long listingId = parseListingId(rawListingId);
+        if (listingId == null) {
+            throw new ResourceNotFoundException("Investor profile", "id", rawListingId);
+        }
+        return deletePublishedListing(listingId, email);
+    }
+
+    @Transactional
     public Map<String, Object> deletePublishedListing(Long listingId, String email) {
         if (email == null || email.isBlank()) {
             throw new UnauthorizedException("Sign in to delete this investor profile.");
         }
-        InvestorAccessRequestEntity listing = requestRepository.findById(listingId)
-                .orElseThrow(() -> new ResourceNotFoundException("Investor profile", "id", listingId));
+        InvestorAccessRequestEntity listing = requestRepository.findById(listingId).orElse(null);
+        if (listing == null) {
+            listing = requestRepository.findFirstByFeedPostIdAndApplicantEmailIgnoreCase(listingId, email).orElse(null);
+        }
+        if (listing == null) {
+            throw new ResourceNotFoundException("Investor profile", "id", listingId);
+        }
         if (listing.getApplicantEmail() == null || !listing.getApplicantEmail().equalsIgnoreCase(email)) {
             throw new UnauthorizedException("You can only delete investor profiles that you created.");
         }
@@ -186,7 +224,7 @@ public class InvestorAccessService {
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("message", "Investor profile deleted successfully");
-        result.put("id", listingId);
+        result.put("id", listing.getId());
         if (feedPostId != null) {
             result.put("feedPostId", feedPostId);
         }
@@ -261,5 +299,22 @@ public class InvestorAccessService {
         String budget = value == null ? "" : value.trim();
         if (budget.isEmpty() || budget.startsWith("₹")) return budget;
         return "₹" + budget.replaceFirst("^(?i:INR\\b|Rs\\.?|[$€£¥])\\s*", "");
+    }
+
+    private Long parseListingId(String raw) {
+        if (raw == null || raw.isBlank()) return null;
+        String clean = raw.trim();
+        if (clean.toLowerCase(Locale.ROOT).startsWith("social-")) {
+            clean = clean.substring("social-".length());
+        } else if (clean.toLowerCase(Locale.ROOT).startsWith("inv-")) {
+            clean = clean.substring("inv-".length());
+        } else if (clean.toLowerCase(Locale.ROOT).startsWith("listing-")) {
+            clean = clean.substring("listing-".length());
+        }
+        try {
+            return Long.parseLong(clean);
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 }

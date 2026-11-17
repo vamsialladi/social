@@ -59,14 +59,29 @@ public class ConnectionController {
         return ResponseEntity.ok(ApiResponse.success(connectionService.getConnectedProfiles(resolveUserIdentifier(userEmail, userId))));
     }
 
+    private String extractProfileId(Map<String, String> req, String... fallbacks) {
+        if (req == null) return null;
+        for (String key : new String[]{"profileId", "talentId", "targetProfileId", "senderId", "userId", "id"}) {
+            String val = req.get(key);
+            if (val != null && !val.isBlank()) return val.trim();
+        }
+        if (fallbacks != null) {
+            for (String key : fallbacks) {
+                String val = req.get(key);
+                if (val != null && !val.isBlank()) return val.trim();
+            }
+        }
+        return null;
+    }
+
     @PostMapping("/request")
     public ResponseEntity<ApiResponse<Map<String, Object>>> sendConnectionRequest(
             @RequestBody(required = false) Map<String, String> req,
             @RequestHeader(value = "X-User-Email", required = false) String userEmail,
             @RequestHeader(value = "X-User-Id", required = false) String userId
     ) {
-        String profileId = req != null ? (req.get("profileId") != null ? req.get("profileId") : req.get("talentId")) : null;
-        String message = req != null ? req.get("message") : null;
+        String profileId = extractProfileId(req);
+        String message = req != null ? (req.get("message") != null ? req.get("message") : req.get("note")) : null;
         return ResponseEntity.ok(ApiResponse.success(connectionService.sendConnectionRequest(profileId, message, resolveUserIdentifier(userEmail, userId))));
     }
 
@@ -76,7 +91,7 @@ public class ConnectionController {
             @RequestHeader(value = "X-User-Email", required = false) String userEmail,
             @RequestHeader(value = "X-User-Id", required = false) String userId
     ) {
-        String profileId = req != null ? (req.get("profileId") != null ? req.get("profileId") : req.get("senderId")) : null;
+        String profileId = extractProfileId(req);
         return ResponseEntity.ok(ApiResponse.success(connectionService.acceptConnection(profileId, resolveUserIdentifier(userEmail, userId))));
     }
 
@@ -86,7 +101,7 @@ public class ConnectionController {
             @RequestHeader(value = "X-User-Email", required = false) String userEmail,
             @RequestHeader(value = "X-User-Id", required = false) String userId
     ) {
-        String profileId = req != null ? (req.get("profileId") != null ? req.get("profileId") : req.get("senderId")) : null;
+        String profileId = extractProfileId(req);
         return ResponseEntity.ok(ApiResponse.success(connectionService.rejectConnection(profileId, resolveUserIdentifier(userEmail, userId))));
     }
 
@@ -96,7 +111,7 @@ public class ConnectionController {
             @RequestHeader(value = "X-User-Email", required = false) String userEmail,
             @RequestHeader(value = "X-User-Id", required = false) String userId
     ) {
-        String profileId = req != null ? (req.get("profileId") != null ? req.get("profileId") : req.get("targetProfileId")) : null;
+        String profileId = extractProfileId(req);
         return ResponseEntity.ok(ApiResponse.success(connectionService.cancelConnectionRequest(profileId, resolveUserIdentifier(userEmail, userId))));
     }
 
@@ -106,7 +121,7 @@ public class ConnectionController {
             @RequestHeader(value = "X-User-Email", required = false) String userEmail,
             @RequestHeader(value = "X-User-Id", required = false) String userId
     ) {
-        String profileId = req != null ? req.get("profileId") : null;
+        String profileId = extractProfileId(req);
         return ResponseEntity.ok(ApiResponse.success(connectionService.toggleConnection(profileId, resolveUserIdentifier(userEmail, userId))));
     }
 
@@ -116,7 +131,7 @@ public class ConnectionController {
             @RequestHeader(value = "X-User-Email", required = false) String userEmail,
             @RequestHeader(value = "X-User-Id", required = false) String userId
     ) {
-        String profileId = req != null ? req.get("profileId") : null;
+        String profileId = extractProfileId(req);
         return ResponseEntity.ok(ApiResponse.success(connectionService.toggleFollow(profileId, resolveUserIdentifier(userEmail, userId))));
     }
 

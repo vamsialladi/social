@@ -538,5 +538,101 @@ class BackendFrontendContractIntegrationTest {
         NotificationEntity reloadedB = notificationRepository.findById(notifB.getId()).orElseThrow();
         assertFalse(reloadedB.isRead());
     }
+
+    @Test
+    void socialPrefixedIdsAndFlexibleConnectionPayloadsMatchFrontendContract() throws Exception {
+        String emailInvestor = "contract.investor." + System.nanoTime() + "@truehunt.in";
+        String emailApplicant = "contract.applicant." + System.nanoTime() + "@truehunt.in";
+
+        MvcResult regInvestor = mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "fullName": "Siddharth Roy",
+                                  "email": "%s",
+                                  "password": "Password@123",
+                                  "role": "STUDIO"
+                                }
+                                """.formatted(emailInvestor)))
+                .andExpect(status().isOk())
+                .andReturn();
+        String tokenInvestor = objectMapper.readTree(regInvestor.getResponse().getContentAsString())
+                .path("data").path("token").asText();
+
+        MvcResult regApplicant = mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "fullName": "Deepa S",
+                                  "email": "%s",
+                                  "password": "Password@123",
+                                  "role": "TALENT",
+                                  "craft": "Director"
+                                }
+                                """.formatted(emailApplicant)))
+                .andExpect(status().isOk())
+                .andReturn();
+        String tokenApplicant = objectMapper.readTree(regApplicant.getResponse().getContentAsString())
+                .path("data").path("token").asText();
+
+        // 1. Submit investor access request and verify published listing
+        MvcResult submitRes = mockMvc.perform(post("/api/investor-access/requests")
+                        .header("Authorization", "Bearer " + tokenInvestor)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "name": "Siddharth Roy",
+                                  "role": "Investor",
+                                  "budget": "₹5,00,00,000",
+                                  "description": "Looking for commercial thriller scripts.",
+                                  "mobileNumber": "+91 9876543210",
+                                  "consentAccepted": true
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        long listingId = objectMapper.readTree(submitRes.getResponse().getContentAsString())
+                .path("data").path("id").asLong();
+
+        // 2. Express interest using prefixed ID "social-<listingId>" as sent by Frontend
+        mockMvc.perform(post("/api/investor-access/listings/social-" + listingId + "/interest")
+                        .header("Authorization", "Bearer " + tokenApplicant))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.message").value(org.hamcrest.Matchers.containsString("Deepa S")));
+
+        // 3. Delete investor listing using prefixed ID "social-<listingId>"
+        mockMvc.perform(delete("/api/investor-access/listings/social-" + listingId)
+                        .header("Authorization", "Bearer " + tokenInvestor))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
+
+        // 4. Test notification markAsRead with "notif-<id>"
+        NotificationEntity notif = notificationRepository.save(new NotificationEntity(emailApplicant, "Alert", "Check profile", "INFO"));
+        mockMvc.perform(patch("/api/notifications/notif-" + notif.getId() + "/read")
+                        .header("Authorization", "Bearer " + tokenApplicant))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.read").value(true));
+
+        mockMvc.perform(delete("/api/notifications/notif-" + notif.getId())
+                        .header("Authorization", "Bearer " + tokenApplicant))
+                .andExpect(status().isOk());
+
+        // 5. Test flexible connection toggle & follow with userId or talentId payload
+        mockMvc.perform(post("/api/connections/toggle")
+                        .header("Authorization", "Bearer " + tokenApplicant)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"talentId\":\"t-2\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
+
+        mockMvc.perform(post("/api/connections/follow")
+                        .header("Authorization", "Bearer " + tokenApplicant)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"userId\":\"t-2\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.isFollowing").value(true));
+    }
 }
 

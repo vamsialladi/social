@@ -749,16 +749,16 @@ export const api = {
       }
 
       const defaultUserFallback = {
-        id: storedUser?.id || 'me',
-        userId: storedUser?.id || null,
+        id: storedUser?.userId || storedUser?.id || '1000001',
+        userId: storedUser?.userId || storedUser?.id || '1000001',
         name: storedUser?.name || 'Cinema Professional',
-        role: 'Cinema Professional',
-        headline: 'Add your headline',
+        role: storedUser?.role || 'Cinema Professional',
+        headline: storedUser?.primaryCraft ? `${storedUser.primaryCraft} | Cinema Professional` : 'Cinema Professional',
         category: 'Film Industry',
-        company: '',
-        location: 'Add your location',
+        company: storedUser?.company || storedUser?.companyName || '',
+        location: storedUser?.address || storedUser?.headquarters || storedUser?.location || 'Hyderabad, India',
         bio: 'Add your bio to introduce yourself, your cinematic focus, and past productions.',
-        avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80',
+        avatar: storedUser?.avatar || storedUser?.profileImageUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80',
         coverImage: 'https://images.unsplash.com/photo-1485846234645-a62644f84728?auto=format&fit=crop&w=1200&q=80',
         availability: 'Available for New Projects',
         verified: false,

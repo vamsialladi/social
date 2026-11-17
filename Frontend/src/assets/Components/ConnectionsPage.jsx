@@ -147,11 +147,21 @@ export default function ConnectionsPage({
     setUpdatingProfileId(profileId)
     try {
       await api.toggleConnection(profileId)
-      setProfiles((currentProfiles) => currentProfiles.filter((item) => String(
-        item.userId || item.id || item.user_id || item._id || '',
-      ) !== profileId))
+      setProfiles((currentProfiles) => currentProfiles.filter((item) => !profilesMatch(item, profile)))
       window.dispatchEvent(new CustomEvent('truehunt-connection-changed', {
-        detail: { connected: false, profile: { ...profile, id: profileId } },
+        detail: {
+          connected: false,
+          isConnected: false,
+          pending: false,
+          isPending: false,
+          profile: {
+            ...profile,
+            id: profileId,
+            userId: profile.userId || profile.user_id || profileId,
+            isConnected: false,
+            connected: false,
+          },
+        },
       }))
     } catch (error) {
       console.error('Failed to disconnect profile:', error)
