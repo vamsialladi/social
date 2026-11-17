@@ -23,8 +23,8 @@ export function AuthProvider({ children }) {
     setLoading(false);
   }, []);
 
-  const login = async (email, password) => {
-    const res = await api.auth.login(email, password);
+  const login = async (identifier, password) => {
+    const res = await api.auth.login(identifier, password);
     if (!res.data?.token || !res.data?.user) {
       throw new Error('The authentication service returned an invalid sign-in response.');
     }

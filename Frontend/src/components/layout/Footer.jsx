@@ -1,48 +1,43 @@
-import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { 
-  Film, 
   Mail, 
   MapPin, 
   Phone,
   Building2,
-  Send, 
   ExternalLink,
   Shield,
-  FileText,
-  MessageSquare
+  FileText
 } from 'lucide-react';
 import TrueHuntLogo from '../common/TrueHuntLogo';
-import { useNotification } from '../../context/NotificationContext';
 import { OFFICIAL_CONTACT } from '../../constants/contactInfo';
 
 export default function Footer() {
-  const [newsletterEmail, setNewsletterEmail] = useState('');
-  const [subscribed, setSubscribed] = useState(false);
-  const { showNotification } = useNotification();
-
-  const handleNewsletterSubmit = (e) => {
-    e.preventDefault();
-    if (!newsletterEmail || !newsletterEmail.includes('@')) {
-      showNotification('Please provide a valid email address', 'error');
-      return;
-    }
-    setSubscribed(true);
-    showNotification('Thank you for subscribing to TrueHunt Industry Briefings (Demo Mode)', 'success');
-  };
-
   return (
     <footer 
       style={{
         backgroundColor: 'var(--color-navy)',
         color: '#E2E8F0',
-        paddingTop: '64px',
+        paddingTop: '60px',
         paddingBottom: '32px',
         borderTop: '3px solid var(--color-maroon)'
       }}
     >
       <div className="container">
-        
+        <div
+          className="footer-concept"
+          style={{
+            marginBottom: '32px',
+            fontSize: '16px',
+            color: '#CBD5E1',
+            textAlign: 'center'
+          }}
+        >
+          <span style={{color:'#94A3B8',}}>Concept:</span>{' '}
+          <span style={{ color: '#94A3B8' }}>
+            “Connecting Cinema Talent. Empowering Creative Careers. Shaping the Future of Film.”
+          </span>
+        </div>
+
         {/* Top Footer Grid */}
         <div 
           style={{
@@ -54,7 +49,7 @@ export default function Footer() {
         >
           
           {/* Col 1: Brand & Bio */}
-          <div style={{ maxWidth: '340px' }}>
+          <div>
             <div style={{ marginBottom: '16px' }}>
               <TrueHuntLogo size="md" variant="dark" />
             </div>
@@ -62,14 +57,10 @@ export default function Footer() {
               TrueHunt (<strong>truehunt.in</strong>) is the dedicated professional networking and opportunity platform 
               connecting cinema professionals, cast, technicians, studios, and investors across the film industry.
             </p>
-            <div className="footer-concept" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '6px 12px', borderRadius: 'var(--radius-xs)', backgroundColor: 'rgba(255, 255, 255, 0.08)', fontSize: '12px', color: '#CBD5E1' }}>
-              <span>Concept:</span>
-              <span style={{ color: '#F1F5F9', fontStyle: 'italic' }}>Find talent. Discover opportunity. Create the next story.</span>
-            </div>
           </div>
 
           {/* Col 2: Quick Links */}
-          <div>
+          <div style={{ paddingLeft: '90px' }}>
             <h4 style={{ color: '#FFFFFF', fontSize: '16px', fontWeight: 700, marginBottom: '20px', letterSpacing: '0.02em' }}>
               Navigation
             </h4>
@@ -211,53 +202,6 @@ export default function Footer() {
             </div>
           </div>
 
-          {/* Col 4: Industry Updates Newsletter */}
-          <div>
-            <h4 style={{ color: '#FFFFFF', fontSize: '16px', fontWeight: 700, marginBottom: '12px', letterSpacing: '0.02em' }}>
-              Cinema Intelligence
-            </h4>
-            <p style={{ fontSize: '13px', color: '#94A3B8', marginBottom: '16px' }}>
-              Subscribe for casting calls, studio rosters, and film financing updates.
-            </p>
-            {subscribed ? (
-              <div style={{ backgroundColor: 'rgba(21, 128, 61, 0.2)', border: '1px solid #15803D', padding: '10px 14px', borderRadius: 'var(--radius-sm)', color: '#86EFAC', fontSize: '13px' }}>
-                ✓ Subscribed! You will receive film industry notifications.
-              </div>
-            ) : (
-              <form onSubmit={handleNewsletterSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <div style={{ display: 'flex', gap: '6px' }}>
-                  <input 
-                    type="email" 
-                    value={newsletterEmail}
-                    onChange={(e) => setNewsletterEmail(e.target.value)}
-                    placeholder="name@studio.com"
-                    aria-label="Email address for newsletter"
-                    style={{
-                      flex: 1,
-                      padding: '10px 12px',
-                      borderRadius: 'var(--radius-sm)',
-                      border: '1px solid #334155',
-                      backgroundColor: '#0F233D',
-                      color: '#FFFFFF',
-                      fontSize: '13px',
-                      outline: 'none'
-                    }}
-                  />
-                  <button 
-                    type="submit"
-                    className="btn btn-sm btn-maroon"
-                    aria-label="Subscribe to newsletter"
-                  >
-                    <Send size={15} />
-                  </button>
-                </div>
-                <span style={{ fontSize: '11px', color: '#64748B' }}>
-                  * Integration status: UI ready. Syncs to backend newsletter registry.
-                </span>
-              </form>
-            )}
-          </div>
-
         </div>
 
         {/* Bottom Bar: Copyright & Disclaimers */}
@@ -274,8 +218,8 @@ export default function Footer() {
             color: '#64748B'
           }}
         >
-          <div>
-            © {new Date().getFullYear()} K-Hub & Zineeverse motion pictures Pvt Ltd. 
+          <div style={{fontSize:'15px' , color:'white'}}>
+            © {new Date().getFullYear()} K-HUB & ZINEERVERSE MOTION PICTURES PVT LTD. ALL RIGHTS RESERVED.
           </div>
           <div className="footer-legal-links">
             <Link to="/privacy-policy" style={{ color: '#94A3B8' }}>Privacy</Link>

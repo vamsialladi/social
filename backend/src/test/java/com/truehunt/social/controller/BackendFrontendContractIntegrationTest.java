@@ -47,6 +47,21 @@ class BackendFrontendContractIntegrationTest {
     private NotificationRepository notificationRepository;
 
     @Test
+    void publishedInvestorListingsArePublicWithoutExposingContactDetails() throws Exception {
+        MvcResult result = mockMvc.perform(get("/api/investor-access/listings"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andReturn();
+
+        JsonNode listings = objectMapper.readTree(result.getResponse().getContentAsString()).path("data");
+        assertTrue(listings.isArray());
+        listings.forEach(listing -> {
+            assertFalse(listing.has("email"));
+            assertFalse(listing.has("mobileNumber"));
+        });
+    }
+
+    @Test
     void authMeResolvesJwtTokenAndXUserIdAndOtpSupportsPhoneNumber() throws Exception {
         String phoneDigits = "9" + String.format("%09d", Math.abs(System.nanoTime() % 1_000_000_000L));
         String formattedPhone = "+91 " + phoneDigits;
@@ -89,6 +104,18 @@ class BackendFrontendContractIntegrationTest {
         String token = regData.path("token").asText();
         String userId = regData.path("userId").asText();
         assertTrue(userId.startsWith("thscKM"), "Expected thscKM prefix, got: " + userId);
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "email": "%s",
+                                  "password": "Password@123"
+                                }
+                                """.formatted(phoneDigits)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.user.email").value(email));
 
         // /api/auth/me with ONLY Authorization: Bearer <token>
         mockMvc.perform(get("/api/auth/me")

@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowLeft, ArrowUpRight, BriefcaseBusiness, Eye, MessageCircle, Search, ThumbsUp, Trash2, UsersRound, X } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { ArrowLeft, ArrowUpRight, BriefcaseBusiness, Eye, MessageCircle, MoreVertical, Search, ThumbsUp, Trash2, UsersRound, X } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
 import './Home.css'
 import Article from './Article.jsx'
 import OpportunitiesPage from './OpportunitiesPage.jsx'
 import ProfileBanner from './ProfileBanner.jsx'
 import api from '../../api'
 import { hasVisitedFilmMaker, markFilmMakerVisited } from '../../services/filmMakerAccess'
+import { useAuth } from '../../context/AuthContext'
 
 function formatInvestorBudget(value) {
   const budget = String(value || '').trim()
@@ -212,12 +213,16 @@ function Home({
   onOwnPostCreated,
   activeNavigation,
   setActiveNavigation,
+  selectedOpportunityId,
+  selectedInvestorId,
   investorRequestOpenSignal,
   hidden,
   onViewProfile,
   onViewConnection,
   onOpenConnections,
 }) {
+  const navigate = useNavigate()
+  const { isAuthenticated, loading: authLoading } = useAuth()
   const [posts, setPosts] = useState([])
   const [focusedPostId, setFocusedPostId] = useState('')
   const [selectedOpportunity, setSelectedOpportunity] = useState(null)
@@ -320,6 +325,16 @@ function Home({
       window.removeEventListener('focus', handleFocus)
     }
   }, [activeNavigation, dismissedPostsStorageKey])
+
+  useEffect(() => {
+    if (activeNavigation !== 'opportunities' || !selectedOpportunityId) return
+
+    const opportunity = posts.find((post) => (
+      post.type === 'opportunity'
+      && String(post.id) === String(selectedOpportunityId)
+    ))
+    if (opportunity) setSelectedOpportunity(opportunity)
+  }, [activeNavigation, posts, selectedOpportunityId])
 
   useEffect(() => {
     let isCurrent = true
@@ -591,6 +606,11 @@ function Home({
   }
 
   function startPost() {
+    if (isComposerOpen) {
+      setIsComposerOpen(false)
+      return
+    }
+
     setDraftType(activeNavigation === 'opportunities' ? 'opportunity' : 'post')
     setIsComposerOpen(true)
   }
@@ -794,7 +814,7 @@ function Home({
     if (investorRequestOpenSignal) openInvestorRequest()
   }, [investorRequestOpenSignal, openInvestorRequest])
 
-  async function openInvestorSearch() {
+  const openInvestorSearch = useCallback(async () => {
     setIsInvestorSearchOpen(true)
     setIsLoadingInvestorListings(true)
     setInvestorListingsError('')
@@ -812,7 +832,19 @@ function Home({
     } finally {
       setIsLoadingInvestorListings(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    if (selectedInvestorId) void openInvestorSearch()
+  }, [openInvestorSearch, selectedInvestorId])
+
+  useEffect(() => {
+    if (!selectedInvestorId || !isInvestorSearchOpen || isLoadingInvestorListings) return
+    const listingElement = document.getElementById(
+      `social-investor-listing-${encodeURIComponent(String(selectedInvestorId))}`,
+    )
+    listingElement?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [investorListings, isInvestorSearchOpen, isLoadingInvestorListings, selectedInvestorId])
 
   async function submitInvestorRequest(event) {
     event.preventDefault()
@@ -913,7 +945,7 @@ function Home({
     const status = investorInterestStatus[interestKey]?.status
     if (status === 'sending' || status === 'sent') return
 
-    const investorProfileId = String(post.investorProfileId || '').trim()
+    const investorProfileId = String(post.investorProfileId || post.id || '').trim()
     if (!investorProfileId) {
       setInvestorInterestStatus((current) => ({
         ...current,
@@ -922,6 +954,15 @@ function Home({
           message: 'Could not identify the investor profile owner.',
         },
       }))
+      return
+    }
+
+    if (!isAuthenticated) {
+      navigate('/sign-in?role=STUDIO', {
+        state: {
+          returnTo: `/social/opportunities?investorId=${encodeURIComponent(investorProfileId)}`,
+        },
+      })
       return
     }
 
@@ -1452,13 +1493,17 @@ function Home({
   }
 
   const visiblePosts = posts.filter((post) => (
-    !dismissedPostIds.includes(String(post.id))
+    (!dismissedPostIds.includes(String(post.id))
+      || String(post.id) === String(selectedOpportunityId))
     && (activeNavigation === 'opportunities'
       ? post.type === 'opportunity'
       : true)
   ))
   const visibleInvestorListings = investorListings.filter(
-    (listing) => !dismissedInvestorListingIds.includes(String(listing.id)),
+    (listing) => (
+      !dismissedInvestorListingIds.includes(String(listing.id))
+      || String(listing.id) === String(selectedInvestorId)
+    ),
   )
   const selectedOpportunityPost = activeNavigation === 'opportunities'
     ? visiblePosts.find((post) => String(post.id) === String(selectedOpportunity?.id))
@@ -1601,6 +1646,19 @@ function Home({
               </span>
               <span className="home-connections-count">{profileViewers.length}</span>
             </button>
+            {activeNavigation === 'home' && (
+              <div className="home-connections-card home-post-impressions-row" aria-labelledby="home-post-impressions-heading">
+                <span className="home-connections-icon"><ThumbsUp size={20} aria-hidden="true" /></span>
+                <span className="home-connections-copy">
+                  <strong id="home-post-impressions-heading">Post impressions</strong>
+                  <small>
+                    <span aria-label={`${totalPostLikes} likes across all posts`}>
+                      {totalPostLikes}
+                    </span>
+                  </small>
+                </span>
+              </div>
+            )}
             {activeNavigation === 'opportunities' && (
               <button
                 className="home-profile-viewers-card home-investor-search-button"
@@ -1617,23 +1675,20 @@ function Home({
               </button>
             )}
           </div>
+          {activeNavigation === 'opportunities' && (
+            <Link className="home-explore-promo home-explore-promo-tickets" to="/entertainments">
+              <span className="home-explore-promo-art">
+                <img src="/assets/explore-tickets.png" alt="" />
+              </span>
+              <span className="home-explore-promo-copy">
+                <strong>Book a ticket</strong>
+                <small>Explore films and showtimes</small>
+                <ArrowUpRight size={16} aria-hidden="true" />
+              </span>
+            </Link>
+          )}
           {connectionsError && <p className="home-connections-error" role="alert">{connectionsError}</p>}
           {profileViewersError && <p className="home-connections-error" role="alert">{profileViewersError}</p>}
-          {activeNavigation === 'home' && (
-            <section className="home-card home-sidebar-stats" aria-labelledby="home-post-impressions-heading">
-              <div className="home-connections-card home-post-impressions-row">
-                <span className="home-connections-icon"><ThumbsUp size={20} aria-hidden="true" /></span>
-                <span className="home-connections-copy">
-                  <strong id="home-post-impressions-heading">Post impressions</strong>
-                  <small>
-                    <span aria-label={`${totalPostLikes} likes across all posts`}>
-                      {totalPostLikes}
-                    </span>
-                  </small>
-                </span>
-              </div>
-            </section>
-          )}
           {activeNavigation === 'home' && (
             <section className="home-card home-my-posts-card" aria-labelledby="home-my-posts-heading">
               <header className="home-my-posts-header">
@@ -1660,7 +1715,7 @@ function Home({
             </section>
           )}
           {activeNavigation === 'home' && (
-            <Link className="home-explore-promo home-explore-promo-tickets" to="/entertainments">
+            <Link className="home-explore-promo home-explore-promo-tickets home-explore-promo-tickets-desktop" to="/entertainments">
               <span className="home-explore-promo-art">
                 <img src="/assets/explore-tickets.png" alt="" />
               </span>
@@ -1695,7 +1750,11 @@ function Home({
               ) : visibleInvestorListings.length ? (
                 <div className="home-investor-listings">
                   {visibleInvestorListings.map((listing) => (
-                    <article className="home-card home-investor-listing" key={listing.id}>
+                    <article
+                      className={`home-card home-investor-listing${String(listing.id) === String(selectedInvestorId) ? ' is-selected' : ''}`}
+                      id={`social-investor-listing-${encodeURIComponent(String(listing.id))}`}
+                      key={listing.id}
+                    >
                       <header>
                         <div>
                           <h2>{listing.name}</h2>
@@ -1714,13 +1773,37 @@ function Home({
                         </button>
                       )}
                       {!listing.isMine && (
-                        <button
-                          className="home-investor-listing-dismiss"
-                          type="button"
-                          onClick={() => handleNotInterestedInvestorListing(listing.id)}
-                        >
-                          Not interested
-                        </button>
+                        <>
+                          <div className="home-investor-listing-actions">
+                            <button
+                              className="home-investor-interest"
+                              type="button"
+                              onClick={() => void sendInvestorInterest({
+                                id: listing.id,
+                                investorProfileId: listing.id,
+                              })}
+                              disabled={authLoading || ['sending', 'sent'].includes(investorInterestStatus[String(listing.id)]?.status)}
+                            >
+                              {investorInterestStatus[String(listing.id)]?.status === 'sending'
+                                ? 'Sending…'
+                                : investorInterestStatus[String(listing.id)]?.status === 'sent'
+                                  ? 'Interest sent'
+                                  : 'Interested'}
+                            </button>
+                            <button
+                              className="home-investor-listing-dismiss"
+                              type="button"
+                              onClick={() => handleNotInterestedInvestorListing(listing.id)}
+                            >
+                              Not interested
+                            </button>
+                          </div>
+                          {investorInterestStatus[String(listing.id)]?.status === 'error' && (
+                            <span className="home-investor-interest-error" role="alert">
+                              {investorInterestStatus[String(listing.id)].message}
+                            </span>
+                          )}
+                        </>
                       )}
                     </article>
                   ))}
@@ -1746,6 +1829,7 @@ function Home({
                 className="home-start-post"
                 type="button"
                 onClick={startPost}
+                aria-expanded={isComposerOpen}
               >
                 Start a post
               </button>
@@ -1774,7 +1858,7 @@ function Home({
                     <button type="button" onClick={removeDraftMedia}>Remove attachment</button>
                   </div>
                 )}
-                <div className="home-publish-row">
+                <div className="home-publish-row ">
                   <span>{draftType === 'opportunity' ? 'Opportunity' : 'Post'}</span>
                   <button
                     className="home-publish-button"
@@ -2390,6 +2474,9 @@ function Home({
           <section className="home-promotion-card" aria-label="Sponsored movie industry promotion">
             <div className="home-promotion-art">
               <span className="home-promotion-label">PROMOTED</span>
+              <span className="home-promotion-menu-icon" aria-hidden="true">
+                <MoreVertical size={18} />
+              </span>
               <span className="home-promotion-art-title">THE NEXT<br />BIG PICTURE</span>
               <span className="home-promotion-studio">NORTHSTAR FILMS</span>
             </div>
@@ -2451,6 +2538,27 @@ function Home({
                 <ArrowUpRight size={16} aria-hidden="true" />
               </span>
             </a>
+            <section className="home-explore-promo home-explore-promo-asset" aria-label="For film asset owners">
+              <span className="home-explore-promo-art">
+                <img src="/assets/explore-assets.svg" alt="" />
+              </span>
+              <span className="home-explore-promo-copy">
+                <strong>Are you an asset?</strong>
+                <small>Showcase your production assets to the film community</small>
+              </span>
+            </section>
+            {activeNavigation === 'home' && (
+              <Link className="home-explore-promo home-explore-promo-tickets home-explore-promo-tickets-mobile" to="/entertainments">
+                <span className="home-explore-promo-art">
+                  <img src="/assets/explore-tickets.png" alt="" />
+                </span>
+                <span className="home-explore-promo-copy">
+                  <strong>Book a ticket</strong>
+                  <small>Explore films and showtimes</small>
+                  <ArrowUpRight size={16} aria-hidden="true" />
+                </span>
+              </Link>
+            )}
           </section>
         </aside>
       </div>

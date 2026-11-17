@@ -1,8 +1,29 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { TrendingUp, Landmark, ShieldAlert, CheckCircle2, Send, Filter, MapPin, DollarSign, Info } from 'lucide-react';
 import { INVESTORS_CONNECT_DATA } from '../services/mockData';
 import { api } from '../services/api';
+import socialApi from '../api';
 import { useNotification } from '../context/NotificationContext';
+import { useAuth } from '../context/AuthContext';
+
+function mapSocialInvestorListing(listing) {
+  if (!listing || listing.id == null) return null;
+
+  return {
+    id: `social-${listing.id}`,
+    socialListingId: String(listing.id),
+    source: 'social',
+    name: listing.name || 'Community investor',
+    category: listing.role || 'Investor',
+    location: listing.location || 'Not specified',
+    ticketSize: listing.budget || 'Not specified',
+    description: listing.description || 'No profile description provided.',
+    focusGenres: Array.isArray(listing.focusGenres) ? listing.focusGenres : [],
+    criteria: listing.criteria || listing.description || 'Review the investor profile on Social for submission requirements.',
+    verified: false,
+  };
+}
 
 export default function InvestorsConnectPage() {
   const [investors, setInvestors] = useState(INVESTORS_CONNECT_DATA);
@@ -16,6 +37,70 @@ export default function InvestorsConnectPage() {
   const [synopsis, setSynopsis] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const { showNotification } = useNotification();
+  const { isAuthenticated, loading: authLoading } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    let isCurrent = true;
+
+    async function loadInvestorListings() {
+      const [directoryResult, socialResult] = await Promise.allSettled([
+        api.investors.getAll(),
+        socialApi.getInvestorListings(),
+      ]);
+
+      const directory = directoryResult.status === 'fulfilled' && Array.isArray(directoryResult.value)
+        ? directoryResult.value
+        : INVESTORS_CONNECT_DATA;
+      if (directoryResult.status === 'rejected' || !Array.isArray(directoryResult.value)) {
+        console.error('Could not load investor directory:', directoryResult.status === 'rejected'
+          ? directoryResult.reason
+          : new Error('The investor directory returned an invalid response.'));
+      }
+
+      let socialListings = [];
+      if (socialResult.status === 'fulfilled' && Array.isArray(socialResult.value)) {
+        socialListings = socialResult.value.map(mapSocialInvestorListing).filter(Boolean);
+      } else {
+        console.error('Could not load Social investor listings:', socialResult.status === 'rejected'
+          ? socialResult.reason
+          : new Error('The Social investor service returned an invalid response.'));
+      }
+
+      if (isCurrent) setInvestors([...socialListings, ...directory]);
+    }
+
+    void loadInvestorListings();
+    return () => {
+      isCurrent = false;
+    };
+  }, []);
+
+  function openSocialInvestorListing(investor) {
+    const returnTo = `/social/opportunities?investorId=${encodeURIComponent(investor.socialListingId)}`;
+    if (!isAuthenticated) {
+      navigate('/sign-in?role=STUDIO', { state: { returnTo } });
+      return;
+    }
+    navigate(returnTo);
+  }
+
+  function handleViewCriteria(investor) {
+    if (investor.source === 'social') {
+      openSocialInvestorListing(investor);
+      return;
+    }
+    setSelectedInvestor(investor);
+  }
+
+  function handlePitchProject(investor) {
+    if (investor.source === 'social') {
+      openSocialInvestorListing(investor);
+      return;
+    }
+    setSelectedInvestor(investor);
+    setShowPitchModal(true);
+  }
 
   const handlePitchSubmit = async (e) => {
     e.preventDefault();
@@ -160,16 +245,15 @@ export default function InvestorsConnectPage() {
               {/* Action Buttons */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', paddingTop: '16px', borderTop: '1px solid var(--color-border)' }}>
                 <button 
-                  onClick={() => setSelectedInvestor(inv)}
+                  onClick={() => handleViewCriteria(inv)}
+                  disabled={inv.source === 'social' && authLoading}
                   className="btn btn-sm btn-outline-subtle"
                 >
                   View Criteria
                 </button>
                 <button 
-                  onClick={() => {
-                    setSelectedInvestor(inv);
-                    setShowPitchModal(true);
-                  }}
+                  onClick={() => handlePitchProject(inv)}
+                  disabled={inv.source === 'social' && authLoading}
                   className="btn btn-sm btn-maroon"
                 >
                   <Send size={13} />

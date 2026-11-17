@@ -90,27 +90,36 @@ public class AuthService {
 
     @Transactional
     public AuthResponse login(LoginRequest credentials, String clientIp) {
-        String email = normalizeEmail(credentials.getEmail());
-        if (email == null) {
-            throw new BadRequestException("Email is required.");
+        String identifier = credentials != null && credentials.getEmail() != null
+                ? credentials.getEmail().trim()
+                : "";
+        if (identifier.isBlank()) {
+            throw new BadRequestException("Email or phone number is required.");
         }
 
+        String email = identifier.contains("@") ? normalizeEmail(identifier) : null;
+        String phoneNumber = email == null ? PhoneNumberPolicy.normalizeUnchecked(identifier) : null;
+        String rateLimitKey = email != null ? email : phoneNumber != null ? phoneNumber : identifier;
         if (loginRateLimiter != null) {
-            loginRateLimiter.checkAllowed(email, clientIp);
+            loginRateLimiter.checkAllowed(rateLimitKey, clientIp);
         }
 
-        Optional<UserAccountEntity> userOpt = userAccountRepository.findByEmail(email);
+        Optional<UserAccountEntity> userOpt = email != null
+                ? userAccountRepository.findByEmail(email)
+                : phoneNumber != null
+                        ? userAccountRepository.findByPhoneNumber(phoneNumber)
+                        : Optional.empty();
         if (userOpt.isEmpty()
                 || credentials.getPassword() == null
                 || !passwordEncoder.matches(credentials.getPassword(), userOpt.get().getPasswordHash())) {
             if (loginRateLimiter != null) {
-                loginRateLimiter.recordFailure(email, clientIp);
+                loginRateLimiter.recordFailure(rateLimitKey, clientIp);
             }
-            throw new UnauthorizedException("INVALID_CREDENTIALS", "Invalid email or password.");
+            throw new UnauthorizedException("INVALID_CREDENTIALS", "Invalid email or phone number or password.");
         }
 
         if (loginRateLimiter != null) {
-            loginRateLimiter.clearFailures(email, clientIp);
+            loginRateLimiter.clearFailures(rateLimitKey, clientIp);
         }
 
         UserAccountEntity user = userOpt.get();

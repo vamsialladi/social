@@ -1926,7 +1926,8 @@
 }
 
 .cinemans-page.is-dark .social-talent-search-overlay,
-.cinemans-page.is-dark .social-talent-search {
+.cinemans-page.is-dark .social-talent-search,
+.cinemans-page.is-dark .social-talent-search-layout {
   background: #202127;
 }
 
@@ -1976,6 +1977,15 @@
 .cinemans-page.is-dark .social-talent-search-field select {
   border-color: #454650;
   background: transparent;
+  color: #e7e5ea;
+}
+
+.cinemans-page.is-dark .social-talent-search-field select {
+  color-scheme: dark;
+}
+
+.cinemans-page.is-dark .social-talent-search-field select option {
+  background-color: #292a32;
   color: #e7e5ea;
 }
 

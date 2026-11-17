@@ -216,7 +216,7 @@
 
 .home-promotion-card {
   --home-blue: #0a66c2;
-  min-height: 250px;
+  min-height: 220px;
   overflow: hidden;
   border: 1px solid #dedbd6;
   border-radius: 9px;
@@ -229,7 +229,7 @@
 .home-promotion-art {
   position: relative;
   display: flex;
-  min-height: 76px;
+  min-height: 64px;
   flex-direction: column;
   justify-content: center;
   overflow: hidden;
@@ -255,7 +255,7 @@
 .home-promotion-label {
   position: absolute;
   top: 9px;
-  right: 10px;
+  right: 36px;
   z-index: 1;
   padding: 4px 6px;
   border-radius: 3px;
@@ -263,6 +263,20 @@
   color: #333;
   font-size: 9px;
   font-weight: 700;
+}
+
+.home-promotion-menu-icon {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 1;
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(17, 36, 43, 0.35);
+  color: #fff;
 }
 
 .home-promotion-art-title {
@@ -284,8 +298,8 @@
 
 .home-promotion-content {
   display: grid;
-  gap: 8px;
-  padding: 12px 14px 14px;
+  gap: 6px;
+  padding: 10px 12px 12px;
 }
 
 .home-promotion-content h2 {
@@ -833,6 +847,7 @@
 }
 
 .cinemans-page.is-dark .linkedin-search,
+.cinemans-page.is-dark .linkedin-refer-search,
 .cinemans-page.is-dark .messages-page .messages-search {
   box-sizing: border-box;
   border: 1px solid #444953;
@@ -841,13 +856,36 @@
   transition: background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
 }
 
+.cinemans-page.is-dark .linkedin-refer-search input {
+  background: transparent;
+  color: #e5e7eb;
+  color-scheme: dark;
+}
+
+.cinemans-page.is-dark .linkedin-refer-search input::placeholder {
+  color: #a4aab4;
+  opacity: 1;
+}
+
+.cinemans-page.is-dark .linkedin-refer-search button:hover:not(:disabled) {
+  background: #30353d;
+}
+
+.cinemans-page.is-dark .linkedin-refer-search-message {
+  border-color: #444953;
+  background: #282c33;
+  color: #e5e7eb;
+}
+
 .cinemans-page.is-dark .linkedin-search:hover,
+.cinemans-page.is-dark .linkedin-refer-search:hover,
 .cinemans-page.is-dark .messages-page .messages-search:hover {
   border-color: #59616d;
   background: #30353d;
 }
 
 .cinemans-page.is-dark .linkedin-search:focus-within,
+.cinemans-page.is-dark .linkedin-refer-search:focus-within,
 .cinemans-page.is-dark .messages-page .messages-search:focus-within {
   border-color: #78aef8;
   background: #282c33;
@@ -1098,4 +1136,86 @@
 
 .cinemans-page.is-dark .home-promotion-content :is(h2, p, .home-promotion-caption) {
   color: #e5e7eb;
+}
+
+.cinemans-page.is-dark :is(
+  .home-my-posts-list button:hover,
+  .home-profile-viewer-action:hover,
+  .home-connection-person:hover,
+  .home-start-post:hover,
+  .home-composer-actions button:hover,
+  .home-opportunity-result-row:hover .home-opportunity-result,
+  .home-opportunity-button:hover,
+  .home-opportunity-result-action:hover:not(.is-delete),
+  .home-opportunity-detail-close:hover,
+  .home-investor-interest:hover:not(:disabled),
+  .home-explore-promo:hover,
+  .article-add-button:hover,
+  .article-add-menu button:hover,
+  .network-manage-item:hover,
+  .network-manage-item:focus-visible,
+  .network-invitation-item:hover,
+  .network-connect-dialog header button:hover:not(:disabled),
+  .network-connections-back:hover,
+  .network-profile-view-button:hover,
+  .network-message-button:hover,
+  .messages-icon-button:hover,
+  .mailbox-menu button:hover,
+  .message-preview:hover,
+  .conversation-options-menu button:hover:not(:disabled),
+  .message-reply-actions button:hover:not(.reply-send-button),
+  .message-emoji-picker button:hover,
+  .compose-recipient-option:hover,
+  .compose-recipient-option:focus-visible,
+  .settings-edit-button:hover,
+  .cover-image-button:hover,
+  .identity-edit-button:hover,
+  .social-connection-action-button:not(.is-message):hover,
+  .social-talent-search-close:hover,
+  .social-talent-filter-option:hover,
+  .social-talent-result-view-profile:hover,
+  .organization-picker-option:hover,
+  .organization-picker-option[aria-selected="true"],
+  .language-edit-button:hover,
+  .photo-upload:hover,
+  .add-video-url-button:hover,
+  .save-video-url-button:hover:not(:disabled),
+  .secondary-button:hover,
+  .profile-page-content .profile-view-mode-bar button:hover,
+  .profile-page-content .profile-actions-trigger:hover,
+  .profile-page-content .profile-relationship-action:hover:not(:disabled),
+  .linkedin-navbar .linkedin-nav-items > .linkedin-nav-item:hover,
+  .linkedin-navbar .linkedin-profile-menu > .linkedin-nav-item:hover
+) {
+  border-color: #59616d !important;
+  background-color: #30353d !important;
+  color: #e5e7eb !important;
+}
+
+.cinemans-page.is-dark :is(
+  .home-opportunity-result-action.is-delete:hover,
+  .home-post-comment-actions button.home-post-comment-delete:hover,
+  .home-post-reply-actions button.home-post-comment-delete:hover,
+  .network-invitation-reject:hover,
+  .network-profile-actions .network-connect-button:hover,
+  .network-follow-button:hover,
+  .network-profile-actions .network-connect-button.is-pending:hover,
+  .network-remove-request-button:hover,
+  .contact-access-reject:hover:not(:disabled),
+  .social-connection-connected-button:hover:not(:disabled),
+  .delete-video-url-button:hover
+) {
+  border-color: #77434a !important;
+  background-color: #512b30 !important;
+  color: #ffb4b4 !important;
+}
+
+.cinemans-page.is-dark .home-promotion-button:hover {
+  border-color: #174bdc !important;
+  background-color: #174bdc !important;
+  color: #fff !important;
+}
+
+.cinemans-page.is-dark .opportunity-date-input::-webkit-calendar-picker-indicator:hover {
+  background-color: #393d45;
 }

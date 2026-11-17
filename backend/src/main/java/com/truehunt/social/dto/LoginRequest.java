@@ -2,14 +2,12 @@ package com.truehunt.social.dto;
 
 import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class LoginRequest {
-    @NotBlank(message = "Email is required")
-    @Email(message = "Invalid email format")
-    @JsonAlias({"username", "user"})
+    @NotBlank(message = "Email or phone number is required")
+    @JsonAlias({"username", "user", "identifier", "phoneNumber", "phone"})
     private String email;
 
     @NotBlank(message = "Password is required")

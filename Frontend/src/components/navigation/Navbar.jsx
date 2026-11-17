@@ -12,8 +12,7 @@ import {
   X,
   User,
   LogOut,
-  Phone,
-  Languages
+  Phone
 } from 'lucide-react';
 import TrueHuntLogo from '../common/TrueHuntLogo';
 import { useAuth } from '../../context/AuthContext';
@@ -24,7 +23,7 @@ function LanguageSelector({ selectedLanguage, onChange }) {
   const selectorRef = useRef(null);
   const triggerRef = useRef(null);
   const optionRefs = useRef([]);
-  const languages = ['Telugu / తెలుగు', 'Hindi / हिन्दी ', 'English', 'Kannada / ಕನ್ನಡ', 'Tamil /தமிழ்'];
+  const languages = ['Tollywood', 'Bollywood', 'Hollywood', 'Kollywood', 'Sandalwood'];
 
   useEffect(() => {
     if (!isOpen) return undefined;
@@ -70,7 +69,7 @@ function LanguageSelector({ selectedLanguage, onChange }) {
         className="navbar-language-trigger"
         type="button"
         ref={triggerRef}
-        aria-label={`Language: ${selectedLanguage}`}
+        aria-label={`Global Films: ${selectedLanguage}`}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
         onClick={() => (isOpen ? setIsOpen(false) : openMenu())}
@@ -81,13 +80,12 @@ function LanguageSelector({ selectedLanguage, onChange }) {
           }
         }}
       >
-        <Languages size={17} aria-hidden="true" />
-        <span className="navbar-language-label">Language</span>
+        <span className="navbar-language-label">Global Films</span>
         <span className="navbar-language-current">{selectedLanguage}</span>
         <span className="navbar-language-chevron" aria-hidden="true" />
       </button>
       {isOpen && (
-        <div className="navbar-language-menu" role="listbox" aria-label="Choose a language">
+        <div className="navbar-language-menu" role="listbox" aria-label="Choose a film industry">
           {languages.map((language, index) => (
             <button
               className="navbar-language-option"
@@ -116,9 +114,9 @@ export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState(() => {
     const savedLanguage = localStorage.getItem('truehunt_language');
-    return ['Telugu', 'Hindi', 'English', 'Kannada', 'Tamil'].includes(savedLanguage)
+    return ['Tollywood', 'Bollywood', 'Hollywood', 'Kollywood', 'Sandalwood'].includes(savedLanguage)
       ? savedLanguage
-      : 'English';
+      : 'Tollywood';
   });
   const { user, logout, isAuthenticated } = useAuth();
   const navigate = useNavigate();

@@ -4,6 +4,8 @@ import { Search, Briefcase, Filter, MapPin, Building2, Clock, RotateCcw } from '
 import OpportunityCard from '../components/cards/OpportunityCard';
 import { LATEST_OPPORTUNITIES, FILM_CRAFTS } from '../services/mockData';
 import { api } from '../services/api';
+import socialApi from '../api';
+import { mapSocialOpportunityToJob } from '../services/socialOpportunity';
 
 export default function JobsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -15,12 +17,32 @@ export default function JobsPage() {
 
   useEffect(() => {
     async function loadJobs() {
-      try {
-        const data = await api.jobs.getAll();
-        if (data) setJobs(data);
-      } catch (e) {
-        console.warn('Using mock jobs');
+      const [jobsResult, opportunitiesResult] = await Promise.allSettled([
+        api.jobs.getAll(),
+        socialApi.getOpportunities(),
+      ]);
+
+      let availableJobs = LATEST_OPPORTUNITIES;
+      if (jobsResult.status === 'fulfilled' && Array.isArray(jobsResult.value)) {
+        availableJobs = jobsResult.value;
+      } else {
+        console.error('Could not load job listings:', jobsResult.status === 'rejected'
+          ? jobsResult.reason
+          : new Error('The jobs service returned an invalid response.'));
       }
+
+      let socialOpportunities = [];
+      if (opportunitiesResult.status === 'fulfilled' && Array.isArray(opportunitiesResult.value)) {
+        socialOpportunities = opportunitiesResult.value
+          .map(mapSocialOpportunityToJob)
+          .filter(Boolean);
+      } else {
+        console.error('Could not load social-page opportunities:', opportunitiesResult.status === 'rejected'
+          ? opportunitiesResult.reason
+          : new Error('The opportunities service returned an invalid response.'));
+      }
+
+      setJobs([...socialOpportunities, ...availableJobs]);
     }
     loadJobs();
   }, []);
@@ -179,7 +201,7 @@ export default function JobsPage() {
               <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--color-navy)' }}>
                 {filteredJobs.length} Active Opportunities Available
               </span>
-              <span className="badge badge-demo">Verified Studio Calls</span>
+              <span className="badge badge-demo">Studio & Community Opportunities</span>
             </div>
 
             {filteredJobs.length === 0 ? (

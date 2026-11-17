@@ -158,7 +158,7 @@ function Notifications({
       </aside>
 
       <section className="notifications-content" aria-labelledby="notifications-heading">
-        <h2 id="notifications-heading">Endorsement</h2>
+        <h2 id="notifications-heading">Notifications</h2>
         {requestError && <p className="notifications-request-error" role="alert">{requestError}</p>}
         {endorsements.length > 0 || contactRequests.length > 0 ? (
           <div className="notifications-list">

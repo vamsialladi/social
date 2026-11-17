@@ -1044,3 +1044,75 @@
     font-size: 12px;
   }
 }
+
+.cinemans-page.is-dark .network-page {
+  --network-ink: #e5e7eb;
+  --network-muted: #a4aab4;
+  --network-line: #393d45;
+}
+
+.cinemans-page.is-dark .network-page :is(
+  h1,
+  h2,
+  h3,
+  p,
+  span,
+  small,
+  strong,
+  label,
+  a,
+  button
+) {
+  color: #e5e7eb !important;
+}
+
+.cinemans-page.is-dark .network-page :is(
+  .network-tip-card,
+  .network-connect-dialog,
+  .network-invitation-note
+) {
+  border-color: #393d45;
+  background: #202329;
+}
+
+.cinemans-page.is-dark .network-page :is(
+  .network-invitation-item:hover,
+  .network-connections-back:hover,
+  .network-profile-view-button:hover,
+  .network-message-button:hover,
+  .network-connect-dialog header button:hover
+) {
+  background: #30353d;
+}
+
+.cinemans-page.is-dark .network-page :is(
+  .network-invitation-reject,
+  .network-profile-actions .network-connect-button,
+  .network-follow-button,
+  .network-profile-view-button,
+  .network-message-button,
+  .network-remove-request-button,
+  .network-connections-back,
+  .network-connections-empty button,
+  .network-catch-up button,
+  .network-connect-dialog-footer .network-connect-without-note
+) {
+  border-color: #59616d;
+  background: #30353d;
+}
+
+.cinemans-page.is-dark .network-page .network-connect-dialog textarea {
+  border-color: #444953;
+  background: #282c33;
+  color: #e5e7eb;
+}
+
+.cinemans-page.is-dark .network-page .network-invitations > span,
+.cinemans-page.is-dark .network-page .network-catch-up-icon {
+  background: #293d32;
+  color: #b6e4c4 !important;
+}
+
+.cinemans-page.is-dark .network-page .network-profile-avatar {
+  border-color: #202329;
+}

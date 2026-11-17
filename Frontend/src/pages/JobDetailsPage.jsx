@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   Building2, 
   MapPin, 
@@ -15,10 +15,19 @@ import {
 } from 'lucide-react';
 import { LATEST_OPPORTUNITIES } from '../services/mockData';
 import { api } from '../services/api';
+import socialApi from '../api';
+import {
+  mapSocialOpportunityToJob,
+  SOCIAL_OPPORTUNITY_ID_PREFIX,
+} from '../services/socialOpportunity';
 import { useNotification } from '../context/NotificationContext';
+import { useAuth } from '../context/AuthContext';
 
 export default function JobDetailsPage() {
   const { id } = useParams();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { isAuthenticated, loading: authLoading } = useAuth();
   const [job, setJob] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showApplyModal, setShowApplyModal] = useState(false);
@@ -34,16 +43,55 @@ export default function JobDetailsPage() {
     async function loadJob() {
       setLoading(true);
       try {
+        if (id.startsWith(SOCIAL_OPPORTUNITY_ID_PREFIX)) {
+          const socialPostId = id.slice(SOCIAL_OPPORTUNITY_ID_PREFIX.length);
+          const opportunities = await socialApi.getOpportunities();
+          const post = opportunities.find((item) => String(item.id) === socialPostId);
+          setJob(mapSocialOpportunityToJob(post));
+          return;
+        }
+
         const data = await api.jobs.getById(id);
         setJob(data || LATEST_OPPORTUNITIES[0]);
       } catch (e) {
-        setJob(LATEST_OPPORTUNITIES[0]);
+        if (id.startsWith(SOCIAL_OPPORTUNITY_ID_PREFIX)) {
+          console.error('Could not load the social-page opportunity:', e);
+          setJob(null);
+        } else {
+          setJob(LATEST_OPPORTUNITIES[0]);
+        }
       } finally {
         setLoading(false);
       }
     }
     loadJob();
   }, [id]);
+
+  const handleApplyClick = async () => {
+    if (applied || submitting) return;
+    if (!isAuthenticated) {
+      navigate('/sign-in?role=TALENT', {
+        state: { returnTo: `${location.pathname}${location.search}` },
+      });
+      return;
+    }
+
+    if (job.source !== 'social') {
+      setShowApplyModal(true);
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      await socialApi.applyToOpportunity(job.socialPostId);
+      setApplied(true);
+      showNotification(`Interest submitted for ${job.title}!`, 'success');
+    } catch (error) {
+      showNotification(error.message || 'Failed to submit interest', 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const handleApply = async (e) => {
     e.preventDefault();
@@ -66,10 +114,19 @@ export default function JobDetailsPage() {
     }
   };
 
-  if (loading || !job) {
+  if (loading) {
     return (
       <div className="container" style={{ padding: '80px 20px', textAlign: 'center' }}>
         <p style={{ color: 'var(--color-text-muted)' }}>Loading opportunity breakdown...</p>
+      </div>
+    );
+  }
+
+  if (!job) {
+    return (
+      <div className="container" style={{ padding: '80px 20px', textAlign: 'center' }}>
+        <p style={{ color: 'var(--color-text-muted)' }}>This opportunity could not be found.</p>
+        <Link to="/jobs" className="btn btn-sm btn-outline-subtle">Back to Jobs</Link>
       </div>
     );
   }
@@ -121,7 +178,8 @@ export default function JobDetailsPage() {
 
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', fontSize: '14px', color: 'var(--color-text-secondary)', marginBottom: '24px' }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, color: 'var(--color-navy)' }}>
-                  <Building2 size={16} color="var(--color-maroon)" /> {job.productionCompany}
+                  <Building2 size={16} color="var(--color-maroon)" />
+                  {job.source === 'social' ? `Posted by ${job.productionCompany}` : job.productionCompany}
                 </span>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <MapPin size={16} /> {job.location}
@@ -174,27 +232,36 @@ export default function JobDetailsPage() {
                 Application Deadline: <strong>{job.deadline}</strong>
               </p>
               <button 
-                onClick={() => applied ? null : setShowApplyModal(true)}
-                disabled={applied}
+                onClick={handleApplyClick}
+                disabled={applied || submitting || authLoading}
                 className={`btn btn-lg ${applied ? 'btn-outline-subtle' : 'btn-maroon'}`}
                 style={{ width: '100%', marginBottom: '12px' }}
               >
-                {applied ? '✓ Application Submitted' : 'Express Interest / Apply'}
+                {applied
+                  ? '✓ Application Submitted'
+                  : submitting
+                    ? 'Submitting...'
+                    : 'Express Interest / Apply'}
               </button>
               <span style={{ fontSize: '11px', color: 'var(--color-text-muted)', display: 'block' }}>
-                Submissions are sent directly to the casting director & AD team.
+                {job.source === 'social'
+                  ? 'Your interest is shared with the opportunity poster.'
+                  : 'Submissions are sent directly to the casting director & AD team.'}
               </span>
             </div>
 
             {/* Production Team Transparency */}
             <div className="card" style={{ padding: '24px', borderRadius: 'var(--radius-md)', backgroundColor: '#F8FAFC' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-navy)', fontWeight: 700, marginBottom: '8px' }}>
-                <ShieldCheck size={18} color="#2563EB" />
-                <span>Verified Studio Listing</span>
+                {job.source === 'social'
+                  ? <Briefcase size={18} color="#2563EB" />
+                  : <ShieldCheck size={18} color="#2563EB" />}
+                <span>{job.source === 'social' ? 'Community Opportunity' : 'Verified Studio Listing'}</span>
               </div>
               <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', lineHeight: '1.5', margin: 0 }}>
-                This production call has been validated for legitimacy. TrueHunt strictly bans pay-to-audition 
-                schemes and preserves professional labor standards across film crafts.
+                {job.source === 'social'
+                  ? 'This opportunity was shared by a social page member. Confirm its details directly with the poster.'
+                  : 'This production call has been validated for legitimacy. TrueHunt strictly bans pay-to-audition schemes and preserves professional labor standards across film crafts.'}
               </p>
             </div>
 

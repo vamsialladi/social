@@ -907,15 +907,13 @@ export default function JoinNowPage() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
               <div className="form-group">
                 <label className="form-label" htmlFor="production-profile-type">Profile Type *</label>
-                <select
+                <input
                   id="production-profile-type"
                   className="form-control"
-                  value={productionProfileType}
-                  disabled
+                  value="Production Team"
+                  readOnly
                   aria-describedby="production-profile-type-help"
-                >
-                  <option value="Production">Production Team</option>
-                </select>
+                />
                 <small id="production-profile-type-help" style={{ color: 'var(--color-text-muted)' }}>
                   Your profile will be available in Social and Production with the same login.
                 </small>

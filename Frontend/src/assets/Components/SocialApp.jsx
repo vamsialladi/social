@@ -1384,6 +1384,8 @@ export default function SocialApp() {
   const { isAuthenticated, user, logout } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
+  const selectedOpportunityId = new URLSearchParams(location.search).get('opportunityId') || ''
+  const selectedInvestorId = new URLSearchParams(location.search).get('investorId') || ''
   const profileStorageKey = getProfileStorageKey(user?.userId || user?.id || user?.email)
   const [activeNavigation, setActiveNavigationState] = useState(() => (
     location.state?.connectTalent?.name
@@ -1458,9 +1460,26 @@ export default function SocialApp() {
     }
   }, [refreshUnreadMessageCount])
   const recordedProfileViewRef = useRef('')
-  const [theme, setTheme] = useState('light')
+  const [theme, setTheme] = useState(() => {
+    if (typeof window === 'undefined') return 'light'
+    try {
+      return window.localStorage.getItem('truehunt-social-theme') === 'dark' ? 'dark' : 'light'
+    } catch (error) {
+      console.warn('Could not read saved Social theme:', error)
+      return 'light'
+    }
+  })
   const [profileDetails, setProfileDetails] = useState(emptyProfileDetails)
   const [profilePreview, setProfilePreview] = useState('')
+
+  const handleThemeChange = useCallback((nextTheme) => {
+    setTheme(nextTheme)
+    try {
+      window.localStorage.setItem('truehunt-social-theme', nextTheme)
+    } catch (error) {
+      console.warn('Could not save Social theme:', error)
+    }
+  }, [])
 
   function persistOwnPost(post) {
     const profileId = String(
@@ -1835,6 +1854,8 @@ export default function SocialApp() {
         onOwnPostCreated={persistOwnPost}
         activeNavigation={activeNavigation}
         setActiveNavigation={setActiveNavigation}
+        selectedOpportunityId={selectedOpportunityId}
+        selectedInvestorId={selectedInvestorId}
         investorRequestOpenSignal={investorRequestOpenSignal}
         hidden={!['home', 'opportunities'].includes(activeNavigation)}
         onViewProfile={showMyProfile}
@@ -1973,7 +1994,7 @@ export default function SocialApp() {
           profilePreview={profilePreview}
           onEditProfile={showMyProfile}
           theme={theme}
-          onThemeChange={setTheme}
+          onThemeChange={handleThemeChange}
           onAccountDeleted={logout}
         />
       )}

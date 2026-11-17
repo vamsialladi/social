@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeft, Eye, MessageCircle, UsersRound } from 'lucide-react'
+import { ArrowLeft, MessageCircle, UsersRound } from 'lucide-react'
 import api from '../../api'
 import './StylePage.css'
 
@@ -58,6 +58,7 @@ export default function ConnectionsPage({
   const [loadError, setLoadError] = useState('')
   const [actionError, setActionError] = useState('')
   const [updatingProfileId, setUpdatingProfileId] = useState('')
+  const [updatingFollowProfileId, setUpdatingFollowProfileId] = useState('')
   const currentUserIdentityKey = currentUserIdentifiers
     .filter(Boolean)
     .map((value) => String(value).trim().toLowerCase())
@@ -160,6 +161,32 @@ export default function ConnectionsPage({
     }
   }
 
+  async function toggleFollow(profile) {
+    const profileId = String(
+      profile.userId || profile.id || profile.user_id || profile._id || '',
+    )
+    if (!profileId || updatingFollowProfileId) return
+
+    const wasFollowing = Boolean(profile.isFollowing || profile.following)
+    setActionError('')
+    setUpdatingFollowProfileId(profileId)
+    try {
+      const result = await api.toggleFollow(profileId)
+      const following = typeof result?.following === 'boolean' ? result.following : !wasFollowing
+      setProfiles((currentProfiles) => currentProfiles.map((item) => (
+        profilesMatch(item, profile) ? { ...item, isFollowing: following } : item
+      )))
+      window.dispatchEvent(new CustomEvent('truehunt-follow-changed', {
+        detail: { following, profile: { ...profile, id: profileId } },
+      }))
+    } catch (error) {
+      console.error('Failed to update connection follow status:', error)
+      setActionError(`Could not ${wasFollowing ? 'unfollow' : 'follow'} ${profile.name || 'this person'}. Please try again.`)
+    } finally {
+      setUpdatingFollowProfileId('')
+    }
+  }
+
   return (
     <main className="social-connections-page">
       <button className="social-connections-back" type="button" onClick={onBack}>
@@ -197,6 +224,7 @@ export default function ConnectionsPage({
                   name,
                   isConnected: true,
                 }
+                const isFollowing = Boolean(profile.isFollowing || profile.following)
 
                 return (
                   <li className="social-connection-item" key={profileId || name}>
@@ -225,12 +253,25 @@ export default function ConnectionsPage({
                     </span>
                     <div className="social-connection-actions">
                       <button
+                        className="social-connection-connected-button"
+                        type="button"
+                        disabled={Boolean(updatingProfileId)}
+                        aria-pressed="true"
+                        title="Click to remove this connection"
+                        onClick={() => disconnectProfile(profile)}
+                      >
+                        {updatingProfileId === profileId ? 'Updating…' : '✓ Connected'}
+                      </button>
+                      <button
                         className="social-connection-action-button"
                         type="button"
-                        onClick={() => onProfileSelect?.(profileForActions)}
+                        disabled={Boolean(updatingFollowProfileId)}
+                        aria-pressed={isFollowing}
+                        onClick={() => toggleFollow(profileForActions)}
                       >
-                        <Eye size={14} aria-hidden="true" />
-                        View profile
+                        {updatingFollowProfileId === profileId
+                          ? 'Updating…'
+                          : isFollowing ? 'Unfollow' : 'Follow'}
                       </button>
                       <button
                         className="social-connection-action-button is-message"
@@ -239,14 +280,6 @@ export default function ConnectionsPage({
                       >
                         <MessageCircle size={14} aria-hidden="true" />
                         Message
-                      </button>
-                      <button
-                        className="social-connection-connected-button"
-                        type="button"
-                        disabled={Boolean(updatingProfileId)}
-                        onClick={() => disconnectProfile(profile)}
-                      >
-                        {updatingProfileId === profileId ? 'Updating…' : 'Remove Connection'}
                       </button>
                     </div>
                   </li>

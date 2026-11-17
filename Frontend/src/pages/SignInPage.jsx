@@ -8,11 +8,19 @@ import { getPasswordValidationMessage, isPasswordValid } from '../components/com
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 
+function isValidEmailOrPhone(value) {
+  const identifier = value.trim();
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifier)) return true;
+
+  const phone = identifier.replace(/[\s()-]/g, '');
+  return /^(?:\+?91|0)?[6-9]\d{9}$/.test(phone);
+}
+
 export default function SignInPage() {
   const location = useLocation();
   const requestedRole = new URLSearchParams(location.search).get('role')?.toUpperCase();
   const [selectedRole, setSelectedRole] = useState(requestedRole === 'STUDIO' ? 'STUDIO' : 'TALENT');
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -20,7 +28,7 @@ export default function SignInPage() {
   const { showNotification } = useNotification();
   const navigate = useNavigate();
 
-  const isFormValid = email.trim().length > 0 && isPasswordValid(password);
+  const isFormValid = isValidEmailOrPhone(identifier) && isPasswordValid(password);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -35,12 +43,15 @@ export default function SignInPage() {
     setLoading(true);
 
     try {
-      const res = await login(email, password);
+      const res = await login(identifier.trim(), password);
       if (res.success) {
         showNotification(`Welcome back, ${res.user.name}!`, 'success');
         const connectTalent = location.state?.connectTalent;
+        const returnTo = location.state?.returnTo;
         if (connectTalent) {
           navigate('/social/profile', { state: { connectTalent } });
+        } else if (typeof returnTo === 'string' && returnTo.startsWith('/') && !returnTo.startsWith('//')) {
+          navigate(returnTo);
         } else {
           navigate(selectedRole === 'STUDIO' ? '/protect-producer' : '/social/home');
         }
@@ -57,11 +68,11 @@ export default function SignInPage() {
   const fillDemoAccount = (role) => {
     if (role === 'talent') {
       setSelectedRole('TALENT');
-      setEmail('aarav.varma@truehunt.in');
+      setIdentifier('aarav.varma@truehunt.in');
       setPassword('TrueHunt2026!');
     } else {
       setSelectedRole('STUDIO');
-      setEmail('mythri.studios@truehunt.in');
+      setIdentifier('mythri.studios@truehunt.in');
       setPassword('TrueHunt2026!');
     }
   };
@@ -101,18 +112,18 @@ export default function SignInPage() {
 
         <form onSubmit={handleSubmit}>
           <div className="form-group">
-            <label className="form-label" htmlFor="sign-in-email">Professional Email</label>
+            <label className="form-label" htmlFor="sign-in-identifier">Email or Phone Number</label>
             <div style={{ position: 'relative' }}>
               <input
-                id="sign-in-email"
-                type="email"
+                id="sign-in-identifier"
+                type="text"
                 className="form-control"
-                value={email}
+                value={identifier}
                 onChange={(e) => {
-                  setEmail(e.target.value);
+                  setIdentifier(e.target.value);
                   setErrorMsg('');
                 }}
-                placeholder="name@cinema.com"
+                placeholder="name@cinema.com or +91 9876543210"
                 autoComplete="username"
                 required
               />

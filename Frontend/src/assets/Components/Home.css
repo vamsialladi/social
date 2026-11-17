@@ -105,6 +105,7 @@
 }
 
 .home-post-impressions-row {
+  border-top: 1px solid var(--home-line);
   cursor: default;
 }
 
@@ -714,7 +715,9 @@
 }
 
 .home-publish-button:hover:not(:disabled) {
-  background: #edf6ff;
+  border-radius: 52px;
+  background: #376ea5;
+  color:black
 }
 
 .home-composer {
@@ -864,7 +867,9 @@
   font-size: 13px;
   font-weight: 700;
 }
-
+.home-publish-button:hover {
+  background: #0a66c2;
+}
 .home-publish-button:disabled {
   background: #d5d5d5;
   color: #777;
@@ -1795,6 +1800,10 @@
   transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
 }
 
+.home-explore-promo-tickets-mobile {
+  display: none;
+}
+
 .home-explore-promo-button {
   width: 100%;
   padding: 0;
@@ -2021,6 +2030,11 @@
   padding: 18px;
 }
 
+.home-investor-listing.is-selected {
+  border-color: var(--home-blue);
+  box-shadow: 0 0 0 2px rgba(10, 102, 194, 0.16);
+}
+
 .home-investor-listing header {
   display: flex;
   align-items: flex-start;
@@ -2091,6 +2105,14 @@
 .home-investor-listing-dismiss:hover {
   border-color: var(--home-blue);
   color: var(--home-blue);
+}
+
+.home-investor-listing-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .home-investor-search-message {
@@ -2165,6 +2187,14 @@
 }
 
 @media (max-width: 780px) {
+  .home-explore-promo-tickets-desktop {
+    display: none;
+  }
+
+  .home-explore-promo-tickets-mobile {
+    display: block;
+  }
+
   .home-layout {
     grid-template-columns: minmax(0, 1fr);
     gap: 14px;
@@ -2331,4 +2361,24 @@
     flex-direction: column;
     gap: 8px;
   }
+}
+
+.cinemans-page.is-dark .home-page .home-explore-promo {
+  border-color: #393d45;
+  background: #202329;
+  color: #e5e7eb;
+}
+
+.cinemans-page.is-dark .home-page .home-explore-promo-copy small {
+  color: #a4aab4;
+}
+
+.cinemans-page.is-dark .home-page .home-my-posts-header h2 {
+  color: #e5e7eb;
+}
+
+.cinemans-page.is-dark .home-page .home-promotion-button {
+  border-color: #285df5;
+  background: #285df5;
+  color: #fff;
 }

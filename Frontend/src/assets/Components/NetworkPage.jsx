@@ -760,7 +760,7 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
     }
   }
 
-  function renderProfileCard(profile, isRequestView = false) {
+  function renderProfileCard(profile, isRequestView = false, isConnectedView = false) {
     const profileKey = getProfileKey(profile)
     const isConnected = connectedProfiles.includes(profileKey)
     const isPending = pendingProfiles.includes(profileKey)
@@ -847,15 +847,7 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
             </button>
           )}
           <div className="network-profile-contact-actions">
-            <button
-              className="network-profile-view-button"
-              type="button"
-              onClick={() => onProfileSelect?.(profile)}
-            >
-              <UserRound size={15} aria-hidden="true" />
-              View profile
-            </button>
-            {!isRequestView && (
+            {isConnectedView ? (
               <button
                 className="network-message-button"
                 type="button"
@@ -863,6 +855,15 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
               >
                 <MessageCircle size={15} aria-hidden="true" />
                 Message
+              </button>
+            ) : (
+              <button
+                className="network-profile-view-button"
+                type="button"
+                onClick={() => onProfileSelect?.(profile)}
+              >
+                <UserRound size={15} aria-hidden="true" />
+                View profile
               </button>
             )}
           </div>
@@ -987,7 +988,11 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
               )}
               {displayedProfiles.length > 0 ? (
                 <div className="network-profile-grid">
-                  {displayedProfiles.map((profile) => renderProfileCard(profile, activeSection === 'requests'))}
+                  {displayedProfiles.map((profile) => renderProfileCard(
+                    profile,
+                    activeSection === 'requests',
+                    activeSection === 'connections',
+                  ))}
                 </div>
               ) : (
                 <div className="network-connections-empty">

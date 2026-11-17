@@ -296,8 +296,8 @@ export const api = {
 
   // Authentication
   auth: {
-    login: async (email, password) => {
-      return requestAuth('/auth/login', { email, password });
+    login: async (identifier, password) => {
+      return requestAuth('/auth/login', { email: identifier, password });
     },
 
     sendOtp: async (destination) => {

@@ -510,3 +510,98 @@
     height: 32px;
   }
 }
+
+.cinemans-page.is-dark .opportunity-wizard {
+  --opp-ink: #e5e7eb;
+  --opp-muted: #a4aab4;
+  --opp-line: #393d45;
+  background: #202329;
+  color: #e5e7eb;
+}
+
+.cinemans-page.is-dark .opportunity-wizard :is(
+  .opportunity-progress,
+  .opportunity-form-panel,
+  .opportunity-dynamic-card,
+  .opportunity-review-card
+) {
+  border-color: #393d45;
+  background: #202329;
+}
+
+.cinemans-page.is-dark .opportunity-wizard :is(
+  h1,
+  h2,
+  h3,
+  p,
+  label,
+  strong,
+  span,
+  small,
+  .opportunity-back-link,
+  .opportunity-field-label,
+  .opportunity-choice,
+  .opportunity-info-card p,
+  .opportunity-review-description
+) {
+  color: #e5e7eb;
+}
+
+.cinemans-page.is-dark .opportunity-wizard :is(
+  .opportunity-optional,
+  .opportunity-step-labels,
+  .opportunity-progress-top span:last-child,
+  .opportunity-step-description,
+  .opportunity-dynamic-card > p,
+  .opportunity-review-card > p
+) {
+  color: #a4aab4;
+}
+
+.cinemans-page.is-dark .opportunity-wizard .opportunity-step-labels .is-complete {
+  color: #fff;
+}
+
+.cinemans-page.is-dark .opportunity-wizard .opportunity-title-icon {
+  background: #3b2b30;
+  color: #ffb4a8;
+}
+
+.cinemans-page.is-dark .opportunity-wizard .opportunity-progress-track {
+  background: #393d45;
+}
+
+.cinemans-page.is-dark .opportunity-wizard .opportunity-review-row,
+.cinemans-page.is-dark .opportunity-wizard .opportunity-review-description,
+.cinemans-page.is-dark .opportunity-wizard .opportunity-form-actions {
+  border-color: #393d45;
+}
+
+.cinemans-page.is-dark .opportunity-wizard .opportunity-review-row strong {
+  color: #a4aab4;
+}
+
+.cinemans-page.is-dark .opportunity-wizard .opportunity-publish-note {
+  background: #3b2b30;
+  color: #ffd2ca;
+}
+
+.cinemans-page.is-dark .opportunity-wizard .opportunity-form-error {
+  color: #ffaaa3;
+}
+
+.cinemans-page.is-dark .opportunity-wizard .opportunity-modal-close,
+.cinemans-page.is-dark .opportunity-wizard .opportunity-previous-button {
+  border-color: #444953;
+  background: #282c33;
+  color: #e5e7eb;
+}
+
+.cinemans-page.is-dark .opportunity-wizard .opportunity-modal-close:hover,
+.cinemans-page.is-dark .opportunity-wizard .opportunity-previous-button:hover {
+  background: #30353d;
+}
+
+.cinemans-page.is-dark .opportunity-wizard .opportunity-date-input {
+  color-scheme: dark;
+}

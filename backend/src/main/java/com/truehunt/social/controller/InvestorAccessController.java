@@ -25,7 +25,7 @@ public class InvestorAccessController {
         this.investorAccessService = investorAccessService;
     }
 
-    private String resolveCaller(UserDetails user, String userEmail, String userId) {
+    private String resolveOptionalCaller(UserDetails user, String userEmail, String userId) {
         if (user != null && user.getUsername() != null && !user.getUsername().isBlank()) {
             return user.getUsername();
         }
@@ -38,6 +38,14 @@ public class InvestorAccessController {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth != null && auth.isAuthenticated() && !"anonymousUser".equals(auth.getPrincipal())) {
             return auth.getName();
+        }
+        return null;
+    }
+
+    private String resolveCaller(UserDetails user, String userEmail, String userId) {
+        String caller = resolveOptionalCaller(user, userEmail, userId);
+        if (caller != null) {
+            return caller;
         }
         throw new UnauthorizedException("Sign in required for investor access.");
     }
@@ -67,7 +75,9 @@ public class InvestorAccessController {
             @RequestHeader(value = "X-User-Email", required = false) String userEmail,
             @RequestHeader(value = "X-User-Id", required = false) String userId
     ) {
-        return ResponseEntity.ok(ApiResponse.success(investorAccessService.getPublishedListings(resolveCaller(user, userEmail, userId))));
+        return ResponseEntity.ok(ApiResponse.success(
+                investorAccessService.getPublishedListings(resolveOptionalCaller(user, userEmail, userId))
+        ));
     }
 
     @PostMapping("/listings/{id}/interest")
