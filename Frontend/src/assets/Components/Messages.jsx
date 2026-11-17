@@ -19,7 +19,7 @@ import { websocketService } from '../../services/websocket'
 
 const categories = ['Opportunities', 'Unread', 'Connections', 'InMail', 'Starred']
 const mailboxOptions = ['Focused', 'Other', 'Archived', 'Spam']
-const emojis = ['😀', '😂', '😍', '😊', '👍', '🎉', '❤️', '🙏']
+const emojis = ['😀', '😂', '😍', '😊', '👍', '🎉', '❤️', '🙏', '🤔']
 const genericContactNames = new Set(['truehunt member', 'cinema professional', 'member'])
 
 function computeInitials(name = '') {
@@ -291,7 +291,11 @@ function Messages({
   const [isSendingMessage, setIsSendingMessage] = useState(false)
   const [messageText, setMessageText] = useState('')
   const [replyText, setReplyText] = useState('')
+  const [replyValidationError, setReplyValidationError] = useState('')
   const [replyAttachment, setReplyAttachment] = useState(null)
+  const [isConnectPromptOpen, setIsConnectPromptOpen] = useState(false)
+  const [isSendingConnectionRequest, setIsSendingConnectionRequest] = useState(false)
+  const [connectionRequestError, setConnectionRequestError] = useState('')
   const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false)
   const [expandedMessageTimeId, setExpandedMessageTimeId] = useState(null)
   const [isMobileDetailOpen, setIsMobileDetailOpen] = useState(
@@ -319,6 +323,73 @@ function Messages({
   useEffect(() => {
     const timer = window.setInterval(() => setActivityClock(Date.now()), 60000)
     return () => window.clearInterval(timer)
+  }, [])
+
+  useEffect(() => {
+    function handleConnectionChanged(event) {
+      const detail = event.detail || {}
+      const eventProfiles = [
+        detail.profile,
+        detail.senderProfile,
+        detail.receiverProfile,
+      ].filter(Boolean)
+      const connected = typeof detail.connected === 'boolean'
+        ? detail.connected
+        : detail.isConnected
+
+      if (typeof connected !== 'boolean') return
+
+      const pending = typeof detail.pending === 'boolean'
+        ? detail.pending
+        : Boolean(detail.isPending)
+      const identities = [
+        ...eventProfiles.flatMap((profile) => [
+          profile.id,
+          profile.userId,
+          profile.user_id,
+          profile.email,
+        ]),
+        detail.profileId,
+        detail.userId,
+        detail.senderId,
+        detail.receiverId,
+      ]
+        .filter(Boolean)
+        .map((identity) => String(identity).trim().toLowerCase())
+      if (!identities.length) return
+
+      setMessages((currentMessages) => currentMessages.map((message) => {
+        const messageProfile = message.profile || {}
+        const messageIdentities = [
+          messageProfile.id,
+          messageProfile.userId,
+          messageProfile.user_id,
+          messageProfile.email,
+        ]
+          .filter(Boolean)
+          .map((identity) => String(identity).trim().toLowerCase())
+        if (!messageIdentities.some((identity) => identities.includes(identity))) return message
+
+        return {
+          ...message,
+          profile: {
+            ...messageProfile,
+            isConnected: connected,
+            isPending: pending,
+            networkMessageResetAt: messageProfile.networkMessageLimit
+              ? connected
+                ? null
+                : messageProfile.isConnected
+                  ? new Date().toISOString()
+                  : messageProfile.networkMessageResetAt
+              : messageProfile.networkMessageResetAt,
+          },
+        }
+      }))
+    }
+
+    window.addEventListener('truehunt-connection-changed', handleConnectionChanged)
+    return () => window.removeEventListener('truehunt-connection-changed', handleConnectionChanged)
   }, [])
 
   const loadBackendConversations = useCallback(async (currentMailbox = 'Focused') => {
@@ -767,6 +838,8 @@ function Messages({
   }, [isActive, loadBackendConversations, mailbox])
 
   const openConversation = useCallback((conversation) => {
+    setIsConnectPromptOpen(false)
+    setConnectionRequestError('')
     const conversationId = String(conversation?.id || '')
     if (conversationId && !conversationId.startsWith('profile-') && Array.isArray(conversation.thread)) {
       const contactName = getConversationContactName(conversation, currentUser)
@@ -816,7 +889,12 @@ function Messages({
           ? {
             ...message,
             avatar: profileConversation.avatar || message.avatar,
-            profile: profileConversation.profile,
+            profile: {
+              ...profileConversation.profile,
+              networkMessageResetAt: profileConversation.profile.isConnected
+                ? null
+                : message.profile?.networkMessageResetAt,
+            },
           }
           : message
       ))
@@ -1133,6 +1211,31 @@ function Messages({
       return v === myEmail || v === myId
     }
 
+    const resetAt = Date.parse(selectedMessage.profile?.networkMessageResetAt || '')
+    const outgoingMessageCount = (selectedMessage.thread || []).filter((message) => {
+      if (!isMessageOutgoing(message, selectedMessage, currentUser)) return false
+      if (!Number.isFinite(resetAt)) return true
+
+      const sentAt = Date.parse(message.sentAt || '')
+      return Number.isFinite(sentAt) && sentAt >= resetAt
+    }).length
+    const isUnconnectedNetworkConversation = selectedMessage.profile?.networkMessageLimit
+      && !selectedMessage.profile.isConnected
+    if (isUnconnectedNetworkConversation) {
+      if (outgoingMessageCount >= 1) {
+        setReplyValidationError('')
+        setConnectionRequestError('')
+        setIsConnectPromptOpen(true)
+        return
+      }
+
+      if (content.split(/\s+/).filter(Boolean).length !== 1) {
+        setReplyValidationError('Before connecting, you can send one message containing only one word.')
+        return
+      }
+    }
+    setReplyValidationError('')
+
     let targetReceiverId = ''
     if (selectedMessage.profile?.email && !isMe(selectedMessage.profile.email)) {
       targetReceiverId = selectedMessage.profile.email
@@ -1226,6 +1329,44 @@ function Messages({
       } catch (err) {
         console.warn('REST message persist fallback note:', err)
       }
+    }
+  }
+
+  async function sendConnectionRequestForConversation() {
+    const profile = selectedMessage?.profile
+    const profileId = profile?.id || profile?.userId || profile?._id || profile?.email
+    if (!profileId) {
+      setConnectionRequestError('Could not identify this profile. Please try again from Network.')
+      return
+    }
+    if (isSendingConnectionRequest || profile?.isPending) return
+
+    setConnectionRequestError('')
+    setIsSendingConnectionRequest(true)
+    try {
+      const result = await api.sendConnectionRequest(profileId, '')
+      const connected = Boolean(result?.connected || result?.isConnected)
+      const pending = !connected
+      const updatedProfile = {
+        ...profile,
+        isConnected: connected,
+        isPending: pending,
+      }
+
+      setMessages((currentMessages) => currentMessages.map((message) => (
+        message.id === selectedMessage.id
+          ? { ...message, profile: updatedProfile }
+          : message
+      )))
+      window.dispatchEvent(new CustomEvent('truehunt-connection-changed', {
+        detail: { connected, pending, profile: updatedProfile },
+      }))
+      if (connected) setIsConnectPromptOpen(false)
+    } catch (error) {
+      console.error('Could not send connection request from Messages:', error)
+      setConnectionRequestError(error.message || 'Could not send the connection request. Please try again.')
+    } finally {
+      setIsSendingConnectionRequest(false)
     }
   }
 
@@ -1702,6 +1843,44 @@ function Messages({
                   </article>
                 )}
 
+                {isConnectPromptOpen
+                  && selectedMessage.profile?.networkMessageLimit
+                  && !selectedMessage.profile.isConnected && (
+                    <section className="message-connect-prompt" aria-label="Connect to continue messaging">
+                      <div className="message-connect-prompt-copy">
+                        <strong>Connect to keep messaging</strong>
+                        <p>
+                          {selectedMessage.profile.isPending
+                            ? 'Your connection request is pending. You can send more messages after it is accepted.'
+                            : 'You can send one message to this profile. Send a connection request to continue.'}
+                        </p>
+                        {connectionRequestError && (
+                          <p className="message-connect-prompt-error" role="alert">
+                            {connectionRequestError}
+                          </p>
+                        )}
+                      </div>
+                      <div className="message-connect-prompt-actions">
+                        {!selectedMessage.profile.isPending && (
+                          <button
+                            type="button"
+                            className="message-connect-prompt-connect"
+                            onClick={sendConnectionRequestForConversation}
+                            disabled={isSendingConnectionRequest}
+                          >
+                            {isSendingConnectionRequest ? 'Sending…' : 'Connect'}
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          className="message-connect-prompt-dismiss"
+                          onClick={() => setIsConnectPromptOpen(false)}
+                        >
+                          Not now
+                        </button>
+                      </div>
+                    </section>
+                  )}
                 <form className="message-reply" onSubmit={sendReply}>
                   <label className="message-reply-input">
                     <span className="visually-hidden">Write a message</span>
@@ -1709,7 +1888,10 @@ function Messages({
                       ref={replyInputRef}
                       placeholder="Write a message..."
                       value={replyText}
-                      onChange={(event) => setReplyText(event.target.value)}
+                      onChange={(event) => {
+                        setReplyText(event.target.value)
+                        setReplyValidationError('')
+                      }}
                       onFocus={() => {
                         if (selectedMessage?.id && selectedMessage?.unread) {
                           void markConversationRead(selectedMessage.id)
@@ -1717,6 +1899,11 @@ function Messages({
                       }}
                     />
                   </label>
+                  {replyValidationError && (
+                    <p className="message-reply-validation-error" role="alert">
+                      {replyValidationError}
+                    </p>
+                  )}
                   {replyAttachment && (
                     <div className="reply-attachment">
                       <Paperclip size={15} aria-hidden="true" />

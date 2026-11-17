@@ -2509,7 +2509,7 @@ function Home({
                 <img src="/assets/explore-filmmakers.png" alt="" />
               </span>
               <span className="home-explore-promo-copy">
-                <strong>{filmMakerVisited ? 'Manage Film' : 'Are you a filmmaker?'}</strong>
+                <strong>{filmMakerVisited ? 'Manage Films' : 'Are you a Filmmaker?'}</strong>
                 <small>{filmMakerVisited ? 'Manage your film projects' : 'Bring your story to the screen'}</small>
                 <ArrowUpRight size={16} aria-hidden="true" />
               </span>
@@ -2523,7 +2523,7 @@ function Home({
                 <img src="/assets/explore-investors.png" alt="" />
               </span>
               <span className="home-explore-promo-copy">
-                <strong>Are you an investor / producer ?</strong>
+                <strong>Are you an Investor / Producer ?</strong>
                 <small>Discover creative opportunities</small>
                 <ArrowUpRight size={16} aria-hidden="true" />
               </span>
@@ -2533,7 +2533,7 @@ function Home({
                 <img src="/assets/explore-distribution.png" alt="" />
               </span>
               <span className="home-explore-promo-copy">
-                <strong>Are you a distributor ?</strong>
+                <strong>Are you a Distributor ?</strong>
                 <small>Get stories in front of audiences</small>
                 <ArrowUpRight size={16} aria-hidden="true" />
               </span>
@@ -2543,8 +2543,9 @@ function Home({
                 <img src="/assets/explore-assets.svg" alt="" />
               </span>
               <span className="home-explore-promo-copy">
-                <strong>Are you an asset?</strong>
+                <strong>Are you an Asset manager ?</strong>
                 <small>Showcase your production assets to the film community</small>
+                <ArrowUpRight size={16} aria-hidden="true" />
               </span>
             </section>
             {activeNavigation === 'home' && (

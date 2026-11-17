@@ -837,6 +837,105 @@
   background: #fff;
 }
 
+.message-connect-prompt {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0 14px 10px;
+  padding: 12px 14px;
+  border: 1px solid #b8d5ef;
+  border-radius: 10px;
+  background: #f2f8fd;
+  color: #242424;
+}
+
+.message-connect-prompt-copy {
+  min-width: 0;
+  flex: 1 1 190px;
+}
+
+.message-connect-prompt-copy strong {
+  font-size: 14px;
+}
+
+.message-connect-prompt-copy p {
+  margin: 4px 0 0;
+  color: #515b65;
+  font-size: 13px;
+}
+
+.message-connect-prompt-copy .message-connect-prompt-error {
+  color: #b42318;
+}
+
+.message-connect-prompt-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.message-connect-prompt-actions button {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: 18px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.message-connect-prompt-connect {
+  background: #0a66c2;
+  color: #fff;
+}
+
+.message-connect-prompt-connect:hover:not(:disabled) {
+  background: #004182;
+}
+
+.message-connect-prompt-connect:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.message-connect-prompt-dismiss {
+  border-color: #b8c2cc !important;
+  background: transparent;
+  color: #344054;
+}
+
+.message-connect-prompt-dismiss:hover {
+  background: #e7eef5;
+}
+
+.cinemans-page.is-dark .message-connect-prompt {
+  border-color: #33475b;
+  background: #1b2a38;
+  color: #f3f4f6;
+}
+
+.cinemans-page.is-dark .message-connect-prompt-copy p {
+  color: #c3ced8;
+}
+
+.cinemans-page.is-dark .message-connect-prompt-copy .message-connect-prompt-error {
+  color: #ff9a90;
+}
+
+.cinemans-page.is-dark .message-connect-prompt-dismiss {
+  border-color: #526579 !important;
+  color: #e5e7eb;
+}
+
+.cinemans-page.is-dark .message-connect-prompt-dismiss:hover {
+  background: #293b4d;
+}
+
 .messages-sidebar-footer {
   display: flex;
   flex: 0 0 auto;
@@ -865,6 +964,16 @@
   color: #222;
   font: inherit;
   font-size: 14px;
+}
+
+.message-reply-validation-error {
+  margin: 0 0 8px;
+  color: #b42318;
+  font-size: 12px;
+}
+
+.cinemans-page.is-dark .message-reply-validation-error {
+  color: #ff9a90;
 }
 
 .message-reply-actions,

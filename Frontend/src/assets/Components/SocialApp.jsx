@@ -1341,7 +1341,7 @@ function Navigation({
                     onOpenInvestorRequest()
                   }}
                 >
-                  Are you an Investor / Producer ?
+                  Are you an Investor / Producer ?<span aria-hidden="true">↗</span>
                 </button>
                 <div className="profile-dropdown-divider" />
                 <a
@@ -1350,7 +1350,7 @@ function Navigation({
                   role="menuitem" target='_blank'
                   onClick={() => setIsBusinessExploreOpen(false)}
                 >
-                  Assets <span aria-hidden="true">↗</span>
+                  Are you an asset manager ? <span aria-hidden="true">↗</span>
                 </a>
                 <div className="profile-dropdown-divider" />
                 <Link

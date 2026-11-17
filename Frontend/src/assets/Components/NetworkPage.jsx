@@ -148,7 +148,13 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
 
   function openConversation(profile) {
     if (!profile?.name) return
-    onMessage?.(profile)
+    const profileKey = getProfileKey(profile)
+    const isConnected = connectedProfiles.includes(profileKey) || Boolean(profile.isConnected)
+    onMessage?.({
+      ...profile,
+      isConnected,
+      networkMessageLimit: true,
+    })
   }
 
   function findProfileByIdentity(profileOrId) {
@@ -857,14 +863,26 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
                 Message
               </button>
             ) : (
-              <button
-                className="network-profile-view-button"
-                type="button"
-                onClick={() => onProfileSelect?.(profile)}
-              >
-                <UserRound size={15} aria-hidden="true" />
-                View profile
-              </button>
+              <>
+                <button
+                  className="network-profile-view-button"
+                  type="button"
+                  onClick={() => onProfileSelect?.(profile)}
+                >
+                  <UserRound size={15} aria-hidden="true" />
+                  View profile
+                </button>
+                {!isRequestView && (
+                  <button
+                    className="network-message-button"
+                    type="button"
+                    onClick={() => openConversation(profile)}
+                  >
+                    <MessageCircle size={15} aria-hidden="true" />
+                    Message
+                  </button>
+                )}
+              </>
             )}
           </div>
         </div>
