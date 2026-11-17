@@ -307,6 +307,7 @@ function Messages({
   const [isWsConnected, setIsWsConnected] = useState(false)
   const [activityClock, setActivityClock] = useState(() => Date.now())
   const replyInputRef = useRef(null)
+  const messagesRef = useRef(messages)
   const recipientInputRef = useRef(null)
   const attachmentInputRef = useRef(null)
   const emojiPickerRef = useRef(null)
@@ -319,6 +320,8 @@ function Messages({
     () => readHiddenConversationData(hiddenConversationStorageKey),
   )
   const hiddenConversationIds = hiddenConversationData.ids
+
+  messagesRef.current = messages
 
   useEffect(() => {
     const timer = window.setInterval(() => setActivityClock(Date.now()), 60000)
@@ -347,6 +350,12 @@ function Messages({
           profile.id,
           profile.userId,
           profile.user_id,
+          profile.profileId,
+          profile.senderId,
+          profile.targetProfileId,
+          profile.publicUserId,
+          profile.referId,
+          profile._id,
           profile.email,
         ]),
         detail.profileId,
@@ -356,6 +365,10 @@ function Messages({
       ]
         .filter(Boolean)
         .map((identity) => String(identity).trim().toLowerCase())
+      identities.push(...eventProfiles
+        .map((profile) => profile.name || profile.fullName || profile.displayName)
+        .filter(Boolean)
+        .map((name) => `name:${String(name).trim().toLowerCase()}`))
       if (!identities.length) return
 
       setMessages((currentMessages) => currentMessages.map((message) => {
@@ -364,11 +377,27 @@ function Messages({
           messageProfile.id,
           messageProfile.userId,
           messageProfile.user_id,
+          messageProfile.profileId,
+          messageProfile.senderId,
+          messageProfile.targetProfileId,
+          messageProfile.publicUserId,
+          messageProfile.referId,
+          messageProfile._id,
           messageProfile.email,
         ]
           .filter(Boolean)
           .map((identity) => String(identity).trim().toLowerCase())
+        messageIdentities.push(`name:${String(messageProfile.name || message.name || '').trim().toLowerCase()}`)
         if (!messageIdentities.some((identity) => identities.includes(identity))) return message
+
+        const outgoingCount = (message.thread || [])
+          .filter((threadMessage) => isMessageOutgoing(threadMessage, message, currentUser))
+          .length
+        const resetCount = connected
+          ? 0
+          : messageProfile.isConnected
+            ? outgoingCount
+            : messageProfile.networkMessageResetCount
 
         return {
           ...message,
@@ -376,13 +405,9 @@ function Messages({
             ...messageProfile,
             isConnected: connected,
             isPending: pending,
-            networkMessageResetAt: messageProfile.networkMessageLimit
-              ? connected
-                ? null
-                : messageProfile.isConnected
-                  ? new Date().toISOString()
-                  : messageProfile.networkMessageResetAt
-              : messageProfile.networkMessageResetAt,
+            networkMessageResetCount: messageProfile.networkMessageLimit
+              ? resetCount
+              : messageProfile.networkMessageResetCount,
           },
         }
       }))
@@ -390,7 +415,7 @@ function Messages({
 
     window.addEventListener('truehunt-connection-changed', handleConnectionChanged)
     return () => window.removeEventListener('truehunt-connection-changed', handleConnectionChanged)
-  }, [])
+  }, [currentUser])
 
   const loadBackendConversations = useCallback(async (currentMailbox = 'Focused') => {
     try {
@@ -456,35 +481,61 @@ function Messages({
               : Number.isFinite(cutoff) ? 'Start a conversation' : conversation.preview,
           }
         }).filter((conversation) => !hiddenIds.has(String(conversation.id)))
-        const unreadConversation = namedConversations.find((conversation) => (
+        const conversationsWithNetworkState = namedConversations.map((conversation) => {
+          const participantIds = [
+              conversation.user1Id,
+              conversation.user2Id,
+          ]
+              .filter(Boolean)
+              .map((identity) => String(identity).trim().toLowerCase())
+          const priorNetworkConversation = messagesRef.current.find((message) => {
+              if (!message.profile?.networkMessageLimit) return false
+              const profileIds = [
+                message.profile.id,
+                message.profile.userId,
+                message.profile.user_id,
+                message.profile.profileId,
+                message.profile.publicUserId,
+                message.profile.email,
+              ]
+                .filter(Boolean)
+                .map((identity) => String(identity).trim().toLowerCase())
+              return profileIds.some((identity) => participantIds.includes(identity))
+                || message.name.trim().toLowerCase() === conversation.name.trim().toLowerCase()
+          })
+          return priorNetworkConversation
+              ? { ...conversation, profile: priorNetworkConversation.profile }
+              : conversation
+        })
+        const unreadConversation = conversationsWithNetworkState.find((conversation) => (
           getUnreadConversationCount([conversation]) > 0
         ))
         setMessages((prev) => {
           const profileConversations = prev.filter((m) => (
             String(m.id).startsWith('profile-') && !hiddenIds.has(String(m.id))
           ))
-          const backendIds = new Set(namedConversations.map((d) => String(d.id)))
+          const backendIds = new Set(conversationsWithNetworkState.map((d) => String(d.id)))
           const merged = [
-            ...namedConversations,
+            ...conversationsWithNetworkState,
             ...profileConversations.filter(
               (p) => !backendIds.has(String(p.id))
-                && !namedConversations.some((d) => d.name.toLowerCase() === p.name.toLowerCase())
+                && !conversationsWithNetworkState.some((d) => d.name.toLowerCase() === p.name.toLowerCase())
             ),
           ]
           return merged
         })
         setSelectedId((current) => {
-          const matchingConversation = namedConversations.find((conversation) => (
+          const matchingConversation = conversationsWithNetworkState.find((conversation) => (
             String(conversation.id) === String(current)
           ))
           if (matchingConversation) return matchingConversation.id
           if (current == null) {
-            return namedConversations.find((conversation) => (
+            return conversationsWithNetworkState.find((conversation) => (
               String(conversation.id) === newlyActiveIds[0]
             ))?.id || unreadConversation?.id || null
           }
           if (String(current).startsWith('profile-')) return current
-          return namedConversations[0]?.id || null
+          return conversationsWithNetworkState[0]?.id || null
         })
         if (isActive && (newlyActiveIds.length || unreadConversation)) {
           setIsMobileDetailOpen(window.innerWidth <= 740)
@@ -632,6 +683,25 @@ function Messages({
     const isSelectedConversationVisible = isActive
       && String(selectedId) === String(convId)
       && (window.innerWidth <= 740 ? isMobileDetailOpen : isDesktopChatOpen)
+    if (isOutgoing && convId != null && String(selectedId || '').startsWith('profile-')) {
+      const selectedConversation = messagesRef.current.find((message) => (
+        String(message.id) === String(selectedId)
+      ))
+      const selectedIdentities = [
+        selectedConversation?.name,
+        selectedConversation?.profile?.id,
+        selectedConversation?.profile?.userId,
+        selectedConversation?.profile?.email,
+      ]
+        .filter(Boolean)
+        .map((identity) => String(identity).trim().toLowerCase())
+      const incomingIdentities = [otherName, otherId]
+        .filter(Boolean)
+        .map((identity) => String(identity).trim().toLowerCase())
+      if (selectedIdentities.some((identity) => incomingIdentities.includes(identity))) {
+        setSelectedId(convId)
+      }
+    }
 
     const threadItem = {
       id: msgId,
@@ -891,9 +961,13 @@ function Messages({
             avatar: profileConversation.avatar || message.avatar,
             profile: {
               ...profileConversation.profile,
-              networkMessageResetAt: profileConversation.profile.isConnected
-                ? null
-                : message.profile?.networkMessageResetAt,
+              networkMessageResetCount: profileConversation.profile.isConnected
+                ? 0
+                : message.profile?.isConnected
+                  ? (message.thread || []).filter((threadMessage) => (
+                    isMessageOutgoing(threadMessage, message, currentUser)
+                  )).length
+                  : message.profile?.networkMessageResetCount,
             },
           }
           : message
@@ -1211,16 +1285,66 @@ function Messages({
       return v === myEmail || v === myId
     }
 
-    const resetAt = Date.parse(selectedMessage.profile?.networkMessageResetAt || '')
-    const outgoingMessageCount = (selectedMessage.thread || []).filter((message) => {
-      if (!isMessageOutgoing(message, selectedMessage, currentUser)) return false
-      if (!Number.isFinite(resetAt)) return true
+    const totalOutgoingMessageCount = (selectedMessage.thread || [])
+      .filter((message) => isMessageOutgoing(message, selectedMessage, currentUser))
+      .length
+    let isRecipientConnected = Boolean(selectedMessage.profile?.isConnected)
+    let resetMessageCount = Number(selectedMessage.profile?.networkMessageResetCount || 0)
+    if (selectedMessage.profile?.networkMessageLimit) {
+      try {
+        const connectedProfiles = await api.getConnectedProfiles()
+        if (!Array.isArray(connectedProfiles)) {
+          throw new Error('Connected profiles returned an invalid response.')
+        }
 
-      const sentAt = Date.parse(message.sentAt || '')
-      return Number.isFinite(sentAt) && sentAt >= resetAt
-    }).length
+        const targetIdentities = new Set([
+          selectedMessage.profile.id,
+          selectedMessage.profile.userId,
+          selectedMessage.profile.user_id,
+          selectedMessage.profile.profileId,
+          selectedMessage.profile.publicUserId,
+          selectedMessage.profile.email,
+        ]
+          .filter(Boolean)
+          .map((identity) => String(identity).trim().toLowerCase()))
+        isRecipientConnected = connectedProfiles.some((profile) => [
+          profile.id,
+          profile.userId,
+          profile.user_id,
+          profile.profileId,
+          profile.publicUserId,
+          profile.email,
+        ]
+          .filter(Boolean)
+          .some((identity) => targetIdentities.has(String(identity).trim().toLowerCase())))
+
+        if (isRecipientConnected) {
+          resetMessageCount = 0
+        } else if (selectedMessage.profile.isConnected) {
+          resetMessageCount = totalOutgoingMessageCount
+        }
+        setMessages((currentMessages) => currentMessages.map((message) => (
+          message.id === selectedMessage.id
+            ? {
+              ...message,
+              profile: {
+                ...message.profile,
+                isConnected: isRecipientConnected,
+                networkMessageResetCount: resetMessageCount,
+              },
+            }
+            : message
+        )))
+      } catch (error) {
+        console.error('Could not verify connection status before sending:', error)
+        setReplyValidationError('Could not verify this connection. Please try again.')
+        return
+      }
+    }
+
+    const outgoingMessageCount = Math.max(0, totalOutgoingMessageCount - resetMessageCount)
     const isUnconnectedNetworkConversation = selectedMessage.profile?.networkMessageLimit
-      && !selectedMessage.profile.isConnected
+      && !isRecipientConnected
     if (isUnconnectedNetworkConversation) {
       if (outgoingMessageCount >= 1) {
         setReplyValidationError('')
