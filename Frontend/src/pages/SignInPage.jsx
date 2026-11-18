@@ -46,6 +46,10 @@ export default function SignInPage() {
       const res = await login(identifier.trim(), password);
       if (res.success) {
         showNotification(`Welcome back, ${res.user.name}!`, 'success');
+        if (String(res.user.role || '').trim().toUpperCase() === 'ADMIN') {
+          navigate('/social/admin');
+          return;
+        }
         const connectTalent = location.state?.connectTalent;
         const returnTo = location.state?.returnTo;
         if (connectTalent) {

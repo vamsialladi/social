@@ -9,6 +9,8 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -40,9 +42,26 @@ public class AdminController {
         return ResponseEntity.ok(ApiResponse.success(Map.of("message", "Account deleted successfully")));
     }
 
+    @PatchMapping("/accounts/{id}/status")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> setAccountStatus(
+            @PathVariable Long id,
+            @RequestParam boolean active,
+            @AuthenticationPrincipal UserDetails admin
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(
+                adminService.setAccountActive(id, active, admin.getUsername())
+        ));
+    }
+
     @DeleteMapping("/posts/{id}")
     public ResponseEntity<ApiResponse<Map<String, String>>> deletePost(@PathVariable Long id) {
         adminService.deletePost(id);
         return ResponseEntity.ok(ApiResponse.success(Map.of("message", "Post deleted successfully")));
+    }
+
+    @DeleteMapping("/opportunities/{id}")
+    public ResponseEntity<ApiResponse<Map<String, String>>> deleteOpportunity(@PathVariable Long id) {
+        adminService.deleteOpportunity(id);
+        return ResponseEntity.ok(ApiResponse.success(Map.of("message", "Opportunity deleted successfully")));
     }
 }

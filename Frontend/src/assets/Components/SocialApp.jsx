@@ -1384,6 +1384,13 @@ export default function SocialApp() {
   const { isAuthenticated, user, logout } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
+  const isAdmin = String(user?.role || '').trim().toUpperCase() === 'ADMIN'
+
+  useEffect(() => {
+    if (isAdmin) {
+      navigate('/social/admin', { replace: true })
+    }
+  }, [isAdmin, navigate])
   const selectedOpportunityId = new URLSearchParams(location.search).get('opportunityId') || ''
   const selectedInvestorId = new URLSearchParams(location.search).get('investorId') || ''
   const profileStorageKey = getProfileStorageKey(user?.userId || user?.id || user?.email)
@@ -1732,8 +1739,14 @@ export default function SocialApp() {
             ...profile,
             userId: profile.userId || candidateId,
             profileImageUrl: profile.profileImageUrl || profile.avatar || currentProfile.profileImageUrl,
-            isConnected: typeof profile.isConnected === 'boolean' ? profile.isConnected : currentProfile.isConnected,
-            isPending: typeof profile.isPending === 'boolean' ? profile.isPending : currentProfile.isPending,
+            isConnected: Boolean(profile.isConnected || profile.connected || currentProfile.isConnected || currentProfile.connected),
+            isPending: !profile.isConnected && !profile.connected
+              && Boolean(
+                profile.isPending
+                || profile.isOutgoingPending
+                || currentProfile.isPending
+                || currentProfile.isOutgoingPending
+              ),
           }
         })
       }).catch((error) => {
@@ -1800,6 +1813,12 @@ export default function SocialApp() {
 
   useLayoutEffect(() => {
     let isCurrentAccount = true
+
+    if (isAdmin) {
+      return () => {
+        isCurrentAccount = false
+      }
+    }
 
     if (profileStorageKey) {
       try {

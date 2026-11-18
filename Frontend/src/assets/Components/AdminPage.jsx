@@ -3,6 +3,7 @@ import { api as socialApi } from '../../api'
 import { api as directoryApi } from '../../services/api'
 import {
   Activity,
+  BriefcaseBusiness,
   Check,
   FileText,
   LayoutDashboard,
@@ -20,6 +21,7 @@ const adminSections = [
   { id: 'investors', label: 'Investor requests', Icon: ShieldCheck },
   { id: 'members', label: 'Members', Icon: UsersRound },
   { id: 'posts', label: 'Posts', Icon: FileText },
+  { id: 'opportunities', label: 'Opportunities', Icon: BriefcaseBusiness },
 ]
 
 const demoAdminCredentials = import.meta.env.DEV
@@ -56,13 +58,16 @@ export default function AdminPage() {
   const [activeSection, setActiveSection] = useState('overview')
   const [profiles, setProfiles] = useState([])
   const [posts, setPosts] = useState([])
+  const [opportunities, setOpportunities] = useState([])
   const [investorRequests, setInvestorRequests] = useState([])
   const [search, setSearch] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [loadError, setLoadError] = useState('')
   const [actionError, setActionError] = useState('')
   const [deletingAccountId, setDeletingAccountId] = useState(null)
+  const [updatingAccountId, setUpdatingAccountId] = useState(null)
   const [deletingPostId, setDeletingPostId] = useState(null)
+  const [deletingOpportunityId, setDeletingOpportunityId] = useState(null)
   const [reviewingInvestorRequestId, setReviewingInvestorRequestId] = useState(null)
 
   useEffect(() => {
@@ -73,17 +78,20 @@ export default function AdminPage() {
       setIsLoading(true)
       setLoadError('')
       try {
-        const [accountData, postData, investorRequestData] = await Promise.all([
+        const [accountData, postData, opportunityData, investorRequestData] = await Promise.all([
           socialApi.getAdminAccounts(),
           socialApi.getPosts(),
+          socialApi.getOpportunities(),
           socialApi.getAdminInvestorRequests(),
         ])
-        if (!Array.isArray(accountData) || !Array.isArray(postData) || !Array.isArray(investorRequestData)) {
+        if (!Array.isArray(accountData) || !Array.isArray(postData)
+          || !Array.isArray(opportunityData) || !Array.isArray(investorRequestData)) {
           throw new Error('The admin dashboard received an invalid response.')
         }
         if (isCurrent) {
           setProfiles(accountData)
-          setPosts(postData)
+          setPosts(postData.filter((post) => String(post.type || '').toLowerCase() !== 'opportunity'))
+          setOpportunities(opportunityData)
           setInvestorRequests(investorRequestData)
         }
       } catch (error) {
@@ -121,6 +129,23 @@ export default function AdminPage() {
     }
   }
 
+  async function handleAccountStatusChange(account, active) {
+    if (!account?.id || updatingAccountId != null) return
+    setActionError('')
+    setUpdatingAccountId(account.id)
+    try {
+      const updatedAccount = await socialApi.setAdminAccountStatus(account.id, active)
+      setProfiles((current) => current.map((entry) => (
+        String(entry.id) === String(updatedAccount.id) ? updatedAccount : entry
+      )))
+    } catch (error) {
+      console.error('Could not update member account status:', error)
+      setActionError(error.message || 'Could not update this account status. Please try again.')
+    } finally {
+      setUpdatingAccountId(null)
+    }
+  }
+
   async function handleDeletePost(post) {
     if (post?.id == null) {
       setActionError('This post is missing the information required for deletion.')
@@ -138,6 +163,26 @@ export default function AdminPage() {
       setActionError(error.message || 'Could not delete this post. Please try again.')
     } finally {
       setDeletingPostId(null)
+    }
+  }
+
+  async function handleDeleteOpportunity(opportunity) {
+    if (opportunity?.id == null) {
+      setActionError('This opportunity is missing the information required for deletion.')
+      return
+    }
+    if (!window.confirm('Permanently delete this opportunity?')) return
+
+    setActionError('')
+    setDeletingOpportunityId(opportunity.id)
+    try {
+      await socialApi.deleteAdminOpportunity(opportunity.id)
+      setOpportunities((current) => current.filter((entry) => String(entry.id) !== String(opportunity.id)))
+    } catch (error) {
+      console.error('Could not delete opportunity:', error)
+      setActionError(error.message || 'Could not delete this opportunity. Please try again.')
+    } finally {
+      setDeletingOpportunityId(null)
     }
   }
 
@@ -169,6 +214,7 @@ export default function AdminPage() {
       profile.email,
       profile.userId,
       profile.primaryCraft,
+      profile.craft,
       profile.headline,
     ].some((value) => String(value || '').toLowerCase().includes(query)))
   }, [profiles, search])
@@ -181,6 +227,16 @@ export default function AdminPage() {
       || String(post.authorName || '').toLowerCase().includes(query)
     ))
   }, [posts, search])
+
+  const filteredOpportunities = useMemo(() => {
+    const query = search.trim().toLowerCase()
+    if (!query) return opportunities
+    return opportunities.filter((opportunity) => (
+      getPostText(opportunity).toLowerCase().includes(query)
+      || String(opportunity.title || '').toLowerCase().includes(query)
+      || String(opportunity.authorName || '').toLowerCase().includes(query)
+    ))
+  }, [opportunities, search])
 
   const filteredInvestorRequests = useMemo(() => {
     const query = search.trim().toLowerCase()
@@ -235,6 +291,7 @@ export default function AdminPage() {
     setAdminUser(null)
     setProfiles([])
     setPosts([])
+    setOpportunities([])
     setSearch('')
     setPassword('')
   }
@@ -290,7 +347,8 @@ export default function AdminPage() {
 
   const activeLabel = adminSections.find((section) => section.id === activeSection)?.label || 'Overview'
   const shownProfiles = activeSection === 'members' ? filteredProfiles : profiles.slice(0, 6)
-  const shownPosts = activeSection === 'posts' ? filteredPosts : posts.slice(0, 5)
+  const shownPosts = posts.slice(0, 5)
+  const shownOpportunities = opportunities.slice(0, 5)
 
   return (
     <main className="admin-app">
@@ -359,7 +417,7 @@ export default function AdminPage() {
               <div className="admin-welcome">
                 <div>
                   <h2>Social platform overview</h2>
-                  <p>Review member profiles and recent community posts.</p>
+                  <p>Review member profiles, community posts, and opportunities.</p>
                 </div>
                 <span><Activity size={17} aria-hidden="true" /> Management enabled</span>
               </div>
@@ -395,7 +453,7 @@ export default function AdminPage() {
                       return (
                         <article className="admin-member-row" key={profile.userId || profile.id || profile.email || `${name}-${index}`}>
                           <span className="admin-avatar">{getInitials(name)}</span>
-                          <span className="admin-member-info"><strong>{name}</strong><small>{profile.email || profile.headline || profile.primaryCraft || 'Member'}</small></span>
+                          <span className="admin-member-info"><strong>{name}</strong><small>{profile.primaryCraft || profile.craft || profile.headline || profile.email || 'Member'}</small></span>
                           <span className="admin-member-status">Member</span>
                         </article>
                       )
@@ -417,6 +475,21 @@ export default function AdminPage() {
                     )) : <p className="admin-empty">No community posts found.</p>}
                   </div>
                 </section>
+                <section className="admin-panel">
+                  <header className="admin-panel-header">
+                    <div><h2>Recent opportunities</h2><p>Latest opportunities shared by members</p></div>
+                    <button type="button" onClick={() => setActiveSection('opportunities')}>View all</button>
+                  </header>
+                  <div className="admin-post-list">
+                    {shownOpportunities.length ? shownOpportunities.map((opportunity, index) => (
+                      <article className="admin-post-row" key={opportunity.id || `${opportunity.authorName}-${index}`}>
+                        <strong>{opportunity.title || opportunity.authorName || 'Community opportunity'}</strong>
+                        <p>{getPostText(opportunity)}</p>
+                        <small>{formatDate(opportunity.createdAt || opportunity.timestamp || opportunity.date)}</small>
+                      </article>
+                    )) : <p className="admin-empty">No opportunities found.</p>}
+                  </div>
+                </section>
               </div>
             </>
           )}
@@ -432,7 +505,7 @@ export default function AdminPage() {
               </header>
               <div className="admin-table-wrap">
                 <table className="admin-table">
-                  <thead><tr><th>Member</th><th>Email</th><th>Craft / headline</th><th>Role</th><th>Actions</th></tr></thead>
+                  <thead><tr><th>Member</th><th>Email</th><th>Main craft</th><th>Role</th><th>Actions</th></tr></thead>
                   <tbody>
                     {filteredProfiles.map((profile, index) => {
                       const name = getDisplayName(profile)
@@ -442,20 +515,40 @@ export default function AdminPage() {
                         <tr key={profile.id || profile.userId || profile.email || `${name}-${index}`}>
                           <td><span className="admin-table-person"><span className="admin-avatar">{getInitials(name)}</span><strong>{name}</strong></span></td>
                           <td>{profile.email || '—'}</td>
-                          <td>{profile.primaryCraft || profile.role || '—'}</td>
+                          <td>{profile.primaryCraft || profile.craft || '—'}</td>
                           <td><span className="admin-pill">{profile.role || 'Member'}</span></td>
                           <td>
                             {isCurrentAdmin ? <span className="admin-current-account">Current admin</span> : (
-                              <button
-                                type="button"
-                                className="admin-delete-button"
-                                onClick={() => handleDeleteAccount(profile)}
-                                disabled={deletingAccountId === profile.id}
-                                aria-label={`Delete ${name}'s account`}
-                              >
-                                <Trash2 size={14} aria-hidden="true" />
-                                {deletingAccountId === profile.id ? 'Deleting…' : 'Delete'}
-                              </button>
+                              <span className="admin-member-actions">
+                                <button
+                                  type="button"
+                                  className="admin-status-button is-active"
+                                  onClick={() => handleAccountStatusChange(profile, true)}
+                                  disabled={profile.active !== false || updatingAccountId != null}
+                                  aria-label={`Set ${name}'s account active`}
+                                >
+                                  Active
+                                </button>
+                                <button
+                                  type="button"
+                                  className="admin-status-button is-deactive"
+                                  onClick={() => handleAccountStatusChange(profile, false)}
+                                  disabled={profile.active === false || updatingAccountId != null}
+                                  aria-label={`Deactivate ${name}'s account`}
+                                >
+                                  Deactive
+                                </button>
+                                <button
+                                  type="button"
+                                  className="admin-delete-button"
+                                  onClick={() => handleDeleteAccount(profile)}
+                                  disabled={deletingAccountId === profile.id || updatingAccountId === profile.id}
+                                  aria-label={`Delete ${name}'s account`}
+                                >
+                                  <Trash2 size={14} aria-hidden="true" />
+                                  {deletingAccountId === profile.id ? 'Deleting…' : 'Delete'}
+                                </button>
+                              </span>
                             )}
                           </td>
                         </tr>
@@ -560,7 +653,40 @@ export default function AdminPage() {
               </div>
             </section>
           )}
-          <p className="admin-footer-note">Account and post deletions are permanent. Investor access requests require administrator review.</p>
+          {activeSection === 'opportunities' && (
+            <section className="admin-panel admin-directory-panel">
+              <header className="admin-panel-header">
+                <div><h2>Member opportunities</h2><p>{filteredOpportunities.length} opportunities</p></div>
+                <label className="admin-search">
+                  <Search size={16} aria-hidden="true" />
+                  <input aria-label="Search opportunities" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search opportunities" />
+                </label>
+              </header>
+              <div className="admin-post-list admin-all-posts">
+                {filteredOpportunities.map((opportunity, index) => (
+                  <article className="admin-post-row" key={opportunity.id || `${opportunity.authorName}-${index}`}>
+                    <div className="admin-post-row-heading">
+                      <strong>{opportunity.title || opportunity.authorName || 'Community opportunity'}</strong>
+                      <button
+                        type="button"
+                        className="admin-delete-button"
+                        onClick={() => handleDeleteOpportunity(opportunity)}
+                        disabled={deletingOpportunityId === opportunity.id}
+                        aria-label={`Delete opportunity ${opportunity.title || ''}`}
+                      >
+                        <Trash2 size={14} aria-hidden="true" />
+                        {deletingOpportunityId === opportunity.id ? 'Deleting…' : 'Delete'}
+                      </button>
+                    </div>
+                    <p>{getPostText(opportunity)}</p>
+                    <small>{opportunity.authorName || 'Community member'} · {formatDate(opportunity.createdAt || opportunity.timestamp || opportunity.date)}</small>
+                  </article>
+                ))}
+                {!filteredOpportunities.length && <p className="admin-empty">No matching opportunities.</p>}
+              </div>
+            </section>
+          )}
+          <p className="admin-footer-note">Account, post, and opportunity deletions are permanent. Investor access requests require administrator review.</p>
         </div>
       </section>
     </main>

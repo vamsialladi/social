@@ -103,16 +103,19 @@ export default function ProtectProducerLandingPage() {
 
         <div className="container" style={{ position: 'relative', zIndex: 2 }}>
           <div style={{ maxWidth: '840px', margin: '0 auto' }}>
-            <img
-              src="/assets/protect-producer-banner.png"
-              alt="Protect Producer — Protecting every rupee behind every single frame"
-              style={{
-                display: 'block',
-                width: 'min(100%, 742px)',
-                height: 'auto',
-                margin: '0 auto 24px',
-              }}
-            />
+            <a href="/protect-producer" target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
+              <img
+                src="/assets/protect-producer-banner.png"
+                alt="Protect Producer — Protecting every rupee behind every single frame"
+                style={{
+                  display: 'block',
+                  width: 'min(100%, 742px)',
+                  height: 'auto',
+                  margin: '0 auto 24px',
+                  cursor: 'pointer',
+                }}
+              />
+            </a>
 
             <h1 
               style={{ 

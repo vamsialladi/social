@@ -7,6 +7,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -79,6 +80,15 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<Object>> handleAuthenticationException(org.springframework.security.core.AuthenticationException ex) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                 .body(ApiResponse.error("UNAUTHORIZED", ex.getMessage()));
+    }
+
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<ApiResponse<Object>> handleResponseStatusException(ResponseStatusException ex) {
+        HttpStatus status = HttpStatus.resolve(ex.getStatusCode().value());
+        String code = status != null ? status.name() : "HTTP_" + ex.getStatusCode().value();
+        String message = ex.getReason() != null ? ex.getReason() : ex.getStatusCode().toString();
+        return ResponseEntity.status(ex.getStatusCode())
+                .body(ApiResponse.error(code, message));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

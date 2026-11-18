@@ -81,6 +81,64 @@ export default function ProfilePage() {
     loadProfile();
   }, [loadProfile]);
 
+  useEffect(() => {
+    const normalize = (value) => String(value || '').trim().toLowerCase();
+    const profileKeys = new Set([profile?.id, profile?.userId, profile?.email].map(normalize).filter(Boolean));
+
+    function handleConnectionChanged(event) {
+      const detail = event.detail || {};
+      const candidates = [
+        detail.profile,
+        detail.senderProfile,
+        detail.receiverProfile,
+        detail.profileId,
+        detail.senderId,
+        detail.receiverId,
+      ].filter(Boolean);
+      const matchesProfile = candidates.some((candidate) => {
+        const keys = typeof candidate === 'object'
+          ? [candidate.id, candidate.userId, candidate.email].map(normalize)
+          : [normalize(candidate)];
+        return keys.some((key) => key && profileKeys.has(key));
+      });
+      if (!matchesProfile) return;
+
+      const connected = typeof detail.connected === 'boolean'
+        ? detail.connected
+        : Boolean(detail.isConnected);
+      setConnected(connected);
+      setProfile((current) => current ? { ...current, isConnected: connected, connected } : current);
+    }
+
+    window.addEventListener('truehunt-connection-changed', handleConnectionChanged);
+    return () => window.removeEventListener('truehunt-connection-changed', handleConnectionChanged);
+  }, [profile?.id, profile?.userId, profile?.email]);
+
+  useEffect(() => {
+    let isCurrent = true;
+    async function refreshConnectionState() {
+      try {
+        const data = id ? await api.profile.getById(id) : await api.profile.getMe();
+        if (!isCurrent || !data) return;
+        setProfile((current) => current ? { ...current, ...data } : current);
+        setConnected(Boolean(data.isConnected || data.connected));
+      } catch (err) {
+        console.error('Error refreshing profile connection state:', err);
+      }
+    }
+    function handleVisibilityChange() {
+      if (document.visibilityState === 'visible') refreshConnectionState();
+    }
+
+    window.addEventListener('focus', refreshConnectionState);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      isCurrent = false;
+      window.removeEventListener('focus', refreshConnectionState);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [id]);
+
   // Determine ownership
   const isOwner = Boolean(
     profile?.isOwner || 

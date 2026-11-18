@@ -40,6 +40,8 @@ public class UserAccountEntity {
     private String phoneNumber;
     private String role;
     private String craft;
+    @Column(nullable = false, columnDefinition = "boolean default true")
+    private boolean active = true;
     private String subCraft;
     private String experienceYears;
     private String companyName;
@@ -119,6 +121,14 @@ public class UserAccountEntity {
 
     public void setCraft(String craft) {
         this.craft = craft;
+    }
+
+    public boolean isActive() {
+        return active;
+    }
+
+    public void setActive(boolean active) {
+        this.active = active;
     }
 
     public String getPrimaryCraft() {

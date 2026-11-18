@@ -333,6 +333,36 @@ function getProfilePostsStorageKey(profileId) {
   return `truehunt-social-posts:${encodeURIComponent(profileId || 'me')}`
 }
 
+function getProfileIdentityKeys(value) {
+  const identityFields = [
+    'userId',
+    'id',
+    'user_id',
+    '_id',
+    'profileId',
+    'publicUserId',
+    'email',
+    'referId',
+    'senderId',
+    'receiverId',
+    'targetProfileId',
+  ]
+  const values = Array.isArray(value)
+    ? value
+    : typeof value === 'object' && value !== null
+      ? identityFields.map((field) => value[field])
+      : [value]
+  return values.filter(Boolean).map((id) => String(id).trim().toLowerCase())
+}
+
+function isProfileInList(profile, profiles) {
+  if (!Array.isArray(profiles)) return false
+  const profileKeys = new Set(getProfileIdentityKeys(profile))
+  return profiles.some((candidate) => (
+    getProfileIdentityKeys(candidate).some((key) => profileKeys.has(key))
+  ))
+}
+
 function readProfilePosts(profileId, fallbackPosts = []) {
   try {
     const savedPosts = localStorage.getItem(getProfilePostsStorageKey(profileId))
@@ -798,39 +828,21 @@ function ProfilePage({
       const connected = typeof connectedValue === 'boolean' ? connectedValue : Boolean(isConnected)
       const pending = typeof pendingValue === 'boolean' ? pendingValue
         : typeof isPending === 'boolean' ? isPending : false
-      const identityKeys = (value) => {
-        const values = Array.isArray(value)
-          ? value
-          : typeof value === 'object' && value !== null
-            ? [
-                value.userId,
-                value.id,
-                value.user_id,
-                value._id,
-                value.profileId,
-                value.publicUserId,
-                value.email,
-                value.senderId,
-                value.targetProfileId,
-              ]
-            : [value]
-        return values.filter(Boolean).map((id) => String(id).trim().toLowerCase())
-      }
-      const viewedProfileIds = new Set(identityKeys([
+      const viewedProfileIds = new Set(getProfileIdentityKeys([
         targetProfileId,
         profileDetails.userId,
         profileDetails.id,
         profileDetails.email,
         profileDetails.referId,
       ]))
-      const ownerProfileIds = new Set(identityKeys([
+      const ownerProfileIds = new Set(getProfileIdentityKeys([
         accountUserId,
         currentUserId,
         currentUser?.userId,
         currentUser?.id,
         currentUser?.email,
       ]))
-      const matchesIdentifiers = (value, identifiers) => identityKeys(value)
+      const matchesIdentifiers = (value, identifiers) => getProfileIdentityKeys(value)
         .some((id) => identifiers.has(id))
       const hasParticipants = Boolean(senderId || receiverId || senderProfile || receiverProfile)
       const relevantIdentifiers = isOwnerView ? ownerProfileIds : viewedProfileIds
@@ -859,12 +871,19 @@ function ProfilePage({
           if (!freshProfile) return
           setConnectionState({
             profileId: targetProfileId,
-            connected: Boolean(freshProfile.isConnected || freshProfile.connected),
-            pending: Boolean(freshProfile.isPending || freshProfile.isOutgoingPending),
+            connected,
+            pending: connected ? false : pending,
           })
           setProfileDetailsRef.current?.((currentProfile) => {
             if (!matchesIdentifiers(currentProfile, viewedProfileIds)) return currentProfile
-            return { ...currentProfile, ...freshProfile }
+            return {
+              ...currentProfile,
+              ...freshProfile,
+              isConnected: connected,
+              connected,
+              isPending: connected ? false : pending,
+              isOutgoingPending: connected ? false : pending,
+            }
           })
         }).catch((error) => {
           console.warn('Could not refresh viewed profile after connection change:', error)
@@ -924,10 +943,38 @@ function ProfilePage({
     let isCurrent = true
     async function loadCandidateProfileStatus() {
       try {
-        const freshProfile = await api.getProfileById(targetProfileId)
+        const [profileResult, connectionsResult] = await Promise.allSettled([
+          api.getProfileById(targetProfileId),
+          api.getConnectedProfiles(),
+        ])
+        if (profileResult.status === 'rejected') {
+          throw profileResult.reason
+        }
+        if (connectionsResult.status === 'rejected') {
+          console.warn('Could not verify candidate connection from the connections list:', connectionsResult.reason)
+        }
+        const freshProfile = profileResult.value
         if (isCurrent && freshProfile) {
-          const isConn = Boolean(freshProfile.isConnected)
-          const isPend = Boolean(freshProfile.isPending || freshProfile.isOutgoingPending)
+          const candidateIdentityKeys = new Set(getProfileIdentityKeys([
+            targetProfileId,
+            profileDetails.userId,
+            profileDetails.id,
+            profileDetails.email,
+            profileDetails.referId,
+          ]))
+          const isConn = Boolean(
+            freshProfile.isConnected
+            || freshProfile.connected
+            || (connectionsResult.status === 'fulfilled'
+              && isProfileInList([
+                targetProfileId,
+                profileDetails.userId,
+                profileDetails.id,
+                profileDetails.email,
+                profileDetails.referId,
+              ], connectionsResult.value)),
+          )
+          const isPend = !isConn && Boolean(freshProfile.isPending || freshProfile.isOutgoingPending)
           const isFoll = Boolean(freshProfile.isFollowing)
           setConnectionState({
             profileId: targetProfileId,
@@ -937,6 +984,19 @@ function ProfilePage({
           setFollowState({
             profileId: targetProfileId,
             followed: isFoll,
+          })
+          setProfileDetailsRef.current?.((currentProfile) => {
+            if (!getProfileIdentityKeys(currentProfile).some((key) => candidateIdentityKeys.has(key))) {
+              return currentProfile
+            }
+            return {
+              ...currentProfile,
+              ...freshProfile,
+              isConnected: isConn,
+              connected: isConn,
+              isPending: isPend,
+              isOutgoingPending: isPend,
+            }
           })
         }
       } catch (err) {
@@ -948,7 +1008,15 @@ function ProfilePage({
     return () => {
       isCurrent = false
     }
-  }, [isOwnerView, targetProfileId, isActive])
+  }, [
+    isOwnerView,
+    targetProfileId,
+    isActive,
+    profileDetails.userId,
+    profileDetails.id,
+    profileDetails.email,
+    profileDetails.referId,
+  ])
 
   useEffect(() => {
     if (!isOwnerView) return undefined
@@ -1218,6 +1286,9 @@ function ProfilePage({
       } catch (storageError) {
         console.warn('Could not update saved profile posts after deletion:', storageError)
       }
+      window.dispatchEvent(new CustomEvent('truehunt-social-post-deleted', {
+        detail: { postId: String(postId), profileId: profilePostOwnerId },
+      }))
     } catch (error) {
       console.error('Could not delete profile post:', error)
       setProfilePostError('Could not delete this post. Please try again.')

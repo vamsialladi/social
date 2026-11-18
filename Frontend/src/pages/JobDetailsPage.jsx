@@ -70,7 +70,7 @@ export default function JobDetailsPage() {
   const handleApplyClick = async () => {
     if (applied || submitting) return;
     if (!isAuthenticated) {
-      navigate('/sign-in?role=TALENT', {
+      navigate('/sign-in', {
         state: { returnTo: `${location.pathname}${location.search}` },
       });
       return;

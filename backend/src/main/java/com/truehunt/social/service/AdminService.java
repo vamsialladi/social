@@ -63,6 +63,7 @@ public class AdminService {
                     result.put("email", account.getEmail());
                     result.put("role", account.getRole());
                     result.put("primaryCraft", account.getCraft());
+                    result.put("active", account.isActive());
                     result.put("createdAt", account.getCreatedAt());
                     return result;
                 })
@@ -70,9 +71,46 @@ public class AdminService {
     }
 
     @Transactional
+    public Map<String, Object> setAccountActive(Long accountId, boolean active, String currentAdminEmail) {
+        UserAccountEntity account = userAccountRepository.findById(accountId)
+                .orElseThrow(() -> new ResourceNotFoundException("Account", "id", accountId));
+        if ("ADMIN".equalsIgnoreCase(account.getRole())) {
+            throw new BadRequestException("Administrator accounts cannot be managed as members.");
+        }
+        if (account.getEmail() != null && account.getEmail().equalsIgnoreCase(currentAdminEmail)) {
+            throw new BadRequestException("You cannot change the status of the administrator account you are currently using.");
+        }
+
+        account.setActive(active);
+        userAccountRepository.save(account);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("id", account.getId());
+        result.put("userId", account.getPublicUserId());
+        result.put("name", account.getName());
+        result.put("email", account.getEmail());
+        result.put("role", account.getRole());
+        result.put("primaryCraft", account.getCraft());
+        result.put("active", account.isActive());
+        result.put("createdAt", account.getCreatedAt());
+        return result;
+    }
+
+    @Transactional
     public void deletePost(Long postId) {
+        deletePost(postId, null);
+    }
+
+    @Transactional
+    public void deleteOpportunity(Long opportunityId) {
+        deletePost(opportunityId, "opportunity");
+    }
+
+    private void deletePost(Long postId, String requiredType) {
         PostEntity post = postRepository.findById(postId)
                 .orElseThrow(() -> new ResourceNotFoundException("Post", "id", postId));
+        if (requiredType != null && !requiredType.equalsIgnoreCase(post.getType())) {
+            throw new BadRequestException("This item is not an opportunity.");
+        }
         applicationRepository.deleteAllByPostIdIn(List.of(postId));
         postRepository.delete(post);
     }

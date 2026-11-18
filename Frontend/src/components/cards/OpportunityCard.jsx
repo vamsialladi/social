@@ -11,7 +11,7 @@ export default function OpportunityCard({ job }) {
       ? `/social/opportunities?opportunityId=${encodeURIComponent(job.socialPostId)}`
       : `/jobs/${job.id}`;
     if (!isAuthenticated) {
-      navigate('/sign-in?role=TALENT', { state: { returnTo } });
+      navigate('/sign-in', { state: { returnTo } });
       return;
     }
 

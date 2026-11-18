@@ -2,6 +2,7 @@ package com.truehunt.social.service;
 
 import com.truehunt.social.dto.ProfileDto;
 import com.truehunt.social.dto.ProfileUpdateRequest;
+import com.truehunt.social.exception.BadRequestException;
 import com.truehunt.social.model.ProfileEntity;
 import com.truehunt.social.model.UserAccountEntity;
 import com.truehunt.social.model.UserProfileRelationshipEntity;
@@ -21,6 +22,7 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -114,10 +116,10 @@ class ProfileServiceUpdateByPublicIdTest {
         when(userAccountRepository.findByEmail("admin@example.com")).thenReturn(Optional.of(admin));
         when(profileRepository.findByUserId("admin@example.com")).thenReturn(Optional.empty());
 
-        ProfileEntity resolved = profileService.findCurrentProfile("admin@example.com");
-
-        assertEquals("THADMIN1", resolved.getUserId());
-        assertEquals("admin@example.com", resolved.getEmail());
+        assertThrows(
+                BadRequestException.class,
+                () -> profileService.findCurrentProfile("admin@example.com")
+        );
         verify(profileRepository, never()).save(any(ProfileEntity.class));
     }
 
@@ -149,6 +151,23 @@ class ProfileServiceUpdateByPublicIdTest {
         assertNull(result.getProfessionalPhone());
         assertNull(result.getPhone());
         assertTrue(result.getIsConnected());
+    }
+
+    @Test
+    void treatsAcceptedRelationshipStatusAsConnectedWhenLoadingProfile() {
+        when(userAccountRepository.findByPublicUserId("viewer@example.com")).thenReturn(Optional.empty());
+        when(profileRepository.findByUserId("viewer@example.com")).thenReturn(Optional.empty());
+        UserProfileRelationshipEntity connection = new UserProfileRelationshipEntity();
+        connection.setOwnerUserId("viewer@example.com");
+        connection.setTargetProfileId(PUBLIC_ID);
+        connection.setConnected(false);
+        connection.setStatus("ACCEPTED");
+        when(relationshipRepository.findAll()).thenReturn(List.of(connection));
+
+        ProfileDto result = profileService.getProfileById(PUBLIC_ID, "viewer@example.com");
+
+        assertTrue(result.getIsConnected());
+        assertEquals("CONNECTED", result.getConnectionStatus());
     }
 
     @Test

@@ -296,7 +296,7 @@ public class ProfileService {
                 boolean matchesTargetToOwner = lowerTargetIds.contains(owner) && lowerOwnerIds.contains(target);
 
                 if (matchesOwnerToTarget || matchesTargetToOwner) {
-                    if (rel.isConnected()) {
+                    if (rel.isConnected() || "ACCEPTED".equalsIgnoreCase(rel.getStatus())) {
                         isConnected = true;
                     }
                     if ("PENDING".equalsIgnoreCase(rel.getStatus())) {
@@ -864,14 +864,7 @@ public class ProfileService {
         if (clean != null && !clean.isBlank() && !"me".equalsIgnoreCase(clean)) {
             Optional<UserAccountEntity> accountOpt = resolveAccount(clean);
             if (isAdminAccount(accountOpt)) {
-                UserAccountEntity account = accountOpt.orElseThrow();
-                ProfileEntity adminProfile = new ProfileEntity();
-                adminProfile.setUserId(account.getPublicUserId() == null
-                        ? String.valueOf(account.getId())
-                        : account.getPublicUserId());
-                adminProfile.setName(account.getName());
-                adminProfile.setEmail(account.getEmail());
-                return adminProfile;
+                throw new BadRequestException("Administrator accounts do not have a public social profile.");
             }
 
             // First try direct profile match by userId or email

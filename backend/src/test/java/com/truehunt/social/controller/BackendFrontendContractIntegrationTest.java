@@ -47,6 +47,13 @@ class BackendFrontendContractIntegrationTest {
     private NotificationRepository notificationRepository;
 
     @Test
+    void unauthenticatedProfileMeReturnsUnauthorized() throws Exception {
+        mockMvc.perform(get("/api/profiles/me"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error.code").value("UNAUTHORIZED"));
+    }
+
+    @Test
     void publishedInvestorListingsArePublicWithoutExposingContactDetails() throws Exception {
         MvcResult result = mockMvc.perform(get("/api/investor-access/listings"))
                 .andExpect(status().isOk())

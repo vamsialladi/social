@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowLeft, ArrowUpRight, BriefcaseBusiness, Eye, MessageCircle, MoreVertical, Search, ThumbsUp, Trash2, UsersRound, X } from 'lucide-react'
+import { ArrowLeft, ArrowUpRight, Ban, Bookmark, BriefcaseBusiness, ChevronDown, Eye, EyeOff, Flag, Globe, Link2, LockKeyhole, MessageCircle, MoreVertical, Pencil, Search, Share2, ThumbsUp, Trash2, UsersRound, X } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import './Home.css'
 import Article from './Article.jsx'
@@ -15,6 +15,29 @@ function formatInvestorBudget(value) {
   if (budget.startsWith('₹')) return budget
   const amount = budget.replace(/^(?:INR\b|Rs\.?|[$€£¥])\s*/i, '')
   return `₹${amount}`
+}
+
+const postBlockReasons = [
+  'Spam or unwanted promotion',
+  'Harassment or abusive behavior',
+  'Fake or misleading profile',
+  'Inappropriate content',
+  'Privacy or safety concern',
+  'Custom reason',
+]
+
+function postMatchesBlockedUser(post, blockedUsers) {
+  const authorIdentifiers = [post.authorId, post.authorEmail, post.authorName]
+    .filter(Boolean)
+    .map((value) => String(value).trim().toLowerCase())
+  return blockedUsers.some((blocked) => {
+    const identifiers = typeof blocked === 'string'
+      ? [blocked]
+      : [blocked.identity, blocked.email, blocked.name]
+    return identifiers
+      .filter(Boolean)
+      .some((value) => authorIdentifiers.includes(String(value).trim().toLowerCase()))
+  })
 }
 
 function ProfileAvatarPlaceholder() {
@@ -102,6 +125,20 @@ function getDismissedPostsStorageKey(userId) {
 function getDismissedInvestorListingsStorageKey(userId) {
   const accountId = String(userId || 'guest').trim().toLowerCase()
   return `truehunt-not-interested-investors:${encodeURIComponent(accountId)}`
+}
+
+function getSavedPostsStorageKey(userId) {
+  return `truehunt-social-saved-posts:${encodeURIComponent(String(userId || 'me'))}`
+}
+
+function readSavedPostIds(storageKey) {
+  try {
+    const savedPosts = JSON.parse(localStorage.getItem(storageKey) || '[]')
+    return Array.isArray(savedPosts) ? savedPosts.map((post) => String(post.id)) : []
+  } catch (error) {
+    console.warn('Could not read saved feed posts:', error)
+    return []
+  }
 }
 
 function readDismissedPostIds(storageKey) {
@@ -224,7 +261,15 @@ function Home({
   const navigate = useNavigate()
   const { isAuthenticated, loading: authLoading } = useAuth()
   const [posts, setPosts] = useState([])
+  const [savedPostIds, setSavedPostIds] = useState(() => (
+    readSavedPostIds(getSavedPostsStorageKey(currentUserId))
+  ))
   const [focusedPostId, setFocusedPostId] = useState('')
+  const [openPostMenuId, setOpenPostMenuId] = useState('')
+  const [postMenuPosition, setPostMenuPosition] = useState({ top: 0, left: 0 })
+  const [blockTarget, setBlockTarget] = useState(null)
+  const [blockReason, setBlockReason] = useState('')
+  const [customBlockReason, setCustomBlockReason] = useState('')
   const [selectedOpportunity, setSelectedOpportunity] = useState(null)
   const [dismissedPostIds, setDismissedPostIds] = useState(() => (
     readDismissedPostIds(getDismissedPostsStorageKey(currentUserId))
@@ -254,8 +299,12 @@ function Home({
   const [investorInterestStatus, setInvestorInterestStatus] = useState({})
   const [draft, setDraft] = useState('')
   const [draftType, setDraftType] = useState('post')
+  const [draftAudience, setDraftAudience] = useState('public')
   const [draftMedia, setDraftMedia] = useState(null)
+  const [editingPost, setEditingPost] = useState(null)
   const [isComposerOpen, setIsComposerOpen] = useState(false)
+  const [isAudienceMenuOpen, setIsAudienceMenuOpen] = useState(false)
+  const audienceMenuRef = useRef(null)
   const imageInputRef = useRef(null)
   const videoInputRef = useRef(null)
   const mediaUrls = useRef([])
@@ -263,6 +312,8 @@ function Home({
   const name = profileDetails.name.trim() || 'Your name'
   const dismissedPostsStorageKey = getDismissedPostsStorageKey(currentUserId)
   const dismissedInvestorListingsStorageKey = getDismissedInvestorListingsStorageKey(currentUserId)
+  const savedPostsStorageKey = getSavedPostsStorageKey(currentUserId)
+  const accountSettingsStorageKey = `truehunt-social-settings:${String(accountEmail || profileDetails.email || '').trim().toLowerCase()}`
   const languages = [
     ...profileDetails.languages.filter((language) => language !== 'Other'),
     ...(profileDetails.otherLanguage ? [profileDetails.otherLanguage] : []),
@@ -273,12 +324,53 @@ function Home({
   }, [])
 
   useEffect(() => {
+    if (!isAudienceMenuOpen) return undefined
+    function closeAudienceMenu(event) {
+      if (!audienceMenuRef.current?.contains(event.target)) {
+        setIsAudienceMenuOpen(false)
+      }
+    }
+    document.addEventListener('pointerdown', closeAudienceMenu)
+    return () => document.removeEventListener('pointerdown', closeAudienceMenu)
+  }, [isAudienceMenuOpen])
+
+  useEffect(() => {
+    if (!openPostMenuId) return undefined
+    function closePostMenu(event) {
+      if (!event.target.closest('.home-post-menu')
+        && !event.target.closest('.home-post-menu-popover')) {
+        setOpenPostMenuId('')
+      }
+    }
+    function closePostMenuOnViewportChange() {
+      setOpenPostMenuId('')
+    }
+    document.addEventListener('pointerdown', closePostMenu)
+    window.addEventListener('resize', closePostMenuOnViewportChange)
+    window.addEventListener('scroll', closePostMenuOnViewportChange, true)
+    return () => {
+      document.removeEventListener('pointerdown', closePostMenu)
+      window.removeEventListener('resize', closePostMenuOnViewportChange)
+      window.removeEventListener('scroll', closePostMenuOnViewportChange, true)
+    }
+  }, [openPostMenuId])
+
+  useEffect(() => {
     setDismissedPostIds(readDismissedPostIds(dismissedPostsStorageKey))
   }, [dismissedPostsStorageKey])
 
   useEffect(() => {
     setDismissedInvestorListingIds(readDismissedPostIds(dismissedInvestorListingsStorageKey))
   }, [dismissedInvestorListingsStorageKey])
+
+  useEffect(() => {
+    function refreshSavedPostIds() {
+      setSavedPostIds(readSavedPostIds(savedPostsStorageKey))
+    }
+    refreshSavedPostIds()
+    window.addEventListener('truehunt-saved-post-changed', refreshSavedPostIds)
+    return () => window.removeEventListener('truehunt-saved-post-changed', refreshSavedPostIds)
+  }, [savedPostsStorageKey])
 
   useEffect(() => {
     function handleSocialPostUpdated(event) {
@@ -303,10 +395,21 @@ function Home({
         if (!isCurrent || !Array.isArray(data)) return
 
         const dismissedIds = new Set(readDismissedPostIds(dismissedPostsStorageKey))
+        let blockedUsers = []
+        try {
+          const settings = JSON.parse(localStorage.getItem(accountSettingsStorageKey) || '{}')
+          blockedUsers = Array.isArray(settings.blockedUsers) ? settings.blockedUsers : []
+        } catch (error) {
+          console.warn('Could not read blocked profiles for the feed:', error)
+        }
         setDismissedPostIds([...dismissedIds])
         setPosts((current) => {
-          const localPosts = current.filter((post) => post.localOnly)
-          const refreshedPosts = data.filter((post) => !dismissedIds.has(String(post.id)))
+          const localPosts = current.filter((post) => (
+            post.localOnly && !postMatchesBlockedUser(post, blockedUsers)
+          ))
+          const refreshedPosts = data.filter((post) => (
+            !dismissedIds.has(String(post.id)) && !postMatchesBlockedUser(post, blockedUsers)
+          ))
           const refreshedIds = new Set(refreshedPosts.map((post) => String(post.id)))
           return [...localPosts.filter((post) => !refreshedIds.has(String(post.id))), ...refreshedPosts]
         })
@@ -324,7 +427,7 @@ function Home({
       isCurrent = false
       window.removeEventListener('focus', handleFocus)
     }
-  }, [activeNavigation, dismissedPostsStorageKey])
+  }, [activeNavigation, accountSettingsStorageKey, dismissedPostsStorageKey])
 
   useEffect(() => {
     if (activeNavigation !== 'opportunities' || !selectedOpportunityId) return
@@ -529,7 +632,7 @@ function Home({
     event.target.value = ''
     if (!file) return
 
-    if (draftMedia) URL.revokeObjectURL(draftMedia.url)
+    if (draftMedia?.file) URL.revokeObjectURL(draftMedia.url)
     setDraftMedia({
       file,
       url: URL.createObjectURL(file),
@@ -539,8 +642,36 @@ function Home({
   }
 
   function removeDraftMedia() {
-    if (draftMedia) URL.revokeObjectURL(draftMedia.url)
+    if (draftMedia?.file) URL.revokeObjectURL(draftMedia.url)
     setDraftMedia(null)
+  }
+
+  function startEditingPost(post) {
+    if (draftMedia?.file) URL.revokeObjectURL(draftMedia.url)
+    const media = getPostPreviewMedia(post)
+    setEditingPost(post)
+    setDraft(post.content || post.text || post.body || post.caption || post.description || '')
+    setDraftType(post.type || 'post')
+    setDraftAudience(post.audience || 'public')
+    setDraftMedia(media
+      ? { url: media.url, kind: media.isVideo ? 'video' : 'image', isExisting: true }
+      : null)
+    setIsAudienceMenuOpen(false)
+    setIsComposerOpen(true)
+    requestAnimationFrame(() => {
+      document.querySelector('.home-composer')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    })
+  }
+
+  function cancelEditingPost() {
+    if (draftMedia?.file) URL.revokeObjectURL(draftMedia.url)
+    setDraft('')
+    setDraftMedia(null)
+    setDraftType('post')
+    setDraftAudience('public')
+    setEditingPost(null)
+    setIsAudienceMenuOpen(false)
+    setIsComposerOpen(false)
   }
 
   async function publishPost(event) {
@@ -560,43 +691,106 @@ function Home({
         }
       } catch (err) {
         console.warn('Failed to upload post media:', err)
+        if (editingPost) {
+          window.alert('Could not upload the attachment. Your post was not updated.')
+          return
+        }
       }
     }
 
-    try {
-      const response = await api.createPost({
-        content,
-        type: draftType,
-        media: uploadedMedia,
-      })
-      const created = {
-        ...response,
-        authorId: response.authorId || currentUserId,
-        authorAvatar: response.authorAvatar || profilePreview,
+    if (editingPost) {
+      try {
+        const media = uploadedMedia || (draftMedia
+          ? { url: draftMedia.url, kind: draftMedia.kind }
+          : null)
+        const response = editingPost.localOnly
+          ? {}
+          : await api.updatePost(editingPost.id, {
+              content,
+              title: editingPost.title || null,
+              type: draftType,
+              media,
+              audience: draftAudience,
+            })
+        const updated = {
+          ...editingPost,
+          ...response,
+          id: editingPost.id,
+          authorId: response.authorId || editingPost.authorId || currentUserId,
+          authorAvatar: response.authorAvatar || editingPost.authorAvatar || profilePreview,
+          content,
+          type: draftType,
+          media: media || response.media || editingPost.media,
+          audience: draftAudience,
+        }
+        setPosts((currentPosts) => currentPosts.map((post) => (
+          String(post.id) === String(updated.id) ? updated : post
+        )))
+        onOwnPostCreated?.(updated)
+        window.dispatchEvent(new CustomEvent('truehunt-social-post-updated', {
+          detail: { post: updated },
+        }))
+
+        try {
+          const savedPosts = JSON.parse(localStorage.getItem(savedPostsStorageKey) || '[]')
+          if (!Array.isArray(savedPosts)) throw new Error('Saved posts are not a list.')
+          const nextSavedPosts = savedPosts.map((post) => (
+            String(post.id) === String(updated.id) ? { ...post, ...updated } : post
+          ))
+          if (nextSavedPosts.some((post, index) => post !== savedPosts[index])) {
+            localStorage.setItem(savedPostsStorageKey, JSON.stringify(nextSavedPosts))
+            window.dispatchEvent(new CustomEvent('truehunt-saved-post-changed'))
+          }
+        } catch (error) {
+          console.warn('Could not update the saved copy of this post:', error)
+        }
+      } catch (err) {
+        console.error('Could not update post:', err)
+        window.alert(err instanceof Error ? err.message : 'Could not update this post. Please try again.')
+        return
       }
-      setPosts((currentPosts) => [created, ...currentPosts])
-      onOwnPostCreated?.(created)
-    } catch (err) {
-      console.warn('Backend post creation note:', err)
-      if (draftMedia) mediaUrls.current.push(draftMedia.url)
-      const created = {
-        id: `${Date.now()}`,
-        authorId: currentUserId,
-        authorAvatar: profilePreview,
-        authorName: name,
-        localOnly: true,
-        content,
-        type: draftType,
-        media: draftMedia,
-        createdAt: new Date().toLocaleString(),
+    } else {
+      try {
+        const response = await api.createPost({
+          content,
+          type: draftType,
+          media: uploadedMedia,
+          audience: draftAudience,
+        })
+        const created = {
+          ...response,
+          authorId: response.authorId || currentUserId,
+          authorAvatar: response.authorAvatar || profilePreview,
+          audience: draftAudience,
+        }
+        setPosts((currentPosts) => [created, ...currentPosts])
+        onOwnPostCreated?.(created)
+      } catch (err) {
+        console.warn('Backend post creation note:', err)
+        if (draftMedia) mediaUrls.current.push(draftMedia.url)
+        const created = {
+          id: `${Date.now()}`,
+          authorId: currentUserId,
+          authorAvatar: profilePreview,
+          authorName: name,
+          localOnly: true,
+          content,
+          type: draftType,
+          audience: draftAudience,
+          media: draftMedia,
+          createdAt: new Date().toLocaleString(),
+        }
+        setPosts((currentPosts) => [created, ...currentPosts])
+        onOwnPostCreated?.(created)
       }
-      setPosts((currentPosts) => [created, ...currentPosts])
-      onOwnPostCreated?.(created)
     }
 
     setDraft('')
     setDraftMedia(null)
     setDraftType('post')
+    setDraftAudience('public')
+    setEditingPost(null)
+    setIsAudienceMenuOpen(false)
     setIsComposerOpen(false)
   }
 
@@ -607,11 +801,16 @@ function Home({
 
   function startPost() {
     if (isComposerOpen) {
+      setIsAudienceMenuOpen(false)
       setIsComposerOpen(false)
       return
     }
 
-    setDraftType(activeNavigation === 'opportunities' ? 'opportunity' : 'post')
+    if (!editingPost) {
+      setDraftType(activeNavigation === 'opportunities' ? 'opportunity' : 'post')
+      setDraftAudience('public')
+    }
+    setIsAudienceMenuOpen(false)
     setIsComposerOpen(true)
   }
 
@@ -1102,6 +1301,167 @@ function Home({
     }
     setDismissedPostIds([...dismissedIds])
     setPosts((current) => current.filter((post) => String(post.id) !== postIdString))
+  }
+
+  function handleSavePost(post) {
+    const postId = String(post.id)
+    try {
+      const savedPosts = JSON.parse(localStorage.getItem(savedPostsStorageKey) || '[]')
+      const existing = Array.isArray(savedPosts) ? savedPosts : []
+      const isAlreadySaved = existing.some((saved) => String(saved.id) === postId)
+      const next = isAlreadySaved
+        ? existing.filter((saved) => String(saved.id) !== postId)
+        : [post, ...existing]
+      localStorage.setItem(savedPostsStorageKey, JSON.stringify(next))
+      setSavedPostIds(next.map((saved) => String(saved.id)))
+      window.dispatchEvent(new CustomEvent('truehunt-saved-post-changed'))
+    } catch (error) {
+      console.warn('Could not save feed post:', error)
+      setOpenPostMenuId('')
+      return
+    }
+    setOpenPostMenuId('')
+  }
+
+  async function handleCopyPostLink(postId) {
+    const link = `${window.location.origin}/social/home?postId=${encodeURIComponent(String(postId))}`
+    try {
+      await navigator.clipboard.writeText(link)
+    } catch {
+      window.prompt('Copy this post link:', link)
+    }
+    setOpenPostMenuId('')
+  }
+
+  async function handleSharePost(post) {
+    const link = `${window.location.origin}/social/home?postId=${encodeURIComponent(String(post.id))}`
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: post.title || 'TrueHunt Social post',
+          text: post.content || '',
+          url: link,
+        })
+        return
+      } catch (error) {
+        if (error?.name === 'AbortError') return
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(link)
+      window.alert('Post link copied to clipboard.')
+    } catch {
+      window.prompt('Share this post link:', link)
+    }
+  }
+
+  function handleHidePostsByAuthor(post) {
+    const authorId = String(post.authorId || '').trim()
+    const authorName = String(post.authorName || '').trim().toLowerCase()
+    const dismissedIds = new Set(readDismissedPostIds(dismissedPostsStorageKey))
+    setPosts((current) => current.filter((item) => {
+      const itemAuthorId = String(item.authorId || '').trim()
+      const itemAuthorName = String(item.authorName || '').trim().toLowerCase()
+      if (authorId && itemAuthorId === authorId) {
+        dismissedIds.add(String(item.id))
+        return false
+      }
+      if (!authorId && authorName && itemAuthorName === authorName) {
+        dismissedIds.add(String(item.id))
+        return false
+      }
+      return true
+    }))
+    try {
+      localStorage.setItem(dismissedPostsStorageKey, JSON.stringify([...dismissedIds]))
+    } catch (error) {
+      console.warn('Could not save dismissed posts:', error)
+    }
+    setDismissedPostIds([...dismissedIds])
+    setOpenPostMenuId('')
+  }
+
+  function openBlockPostAuthor(post) {
+    setBlockTarget(post)
+    setBlockReason('')
+    setCustomBlockReason('')
+    setOpenPostMenuId('')
+  }
+
+  function handleConfirmBlockPostAuthor(event) {
+    event.preventDefault()
+    if (!blockTarget || !blockReason) return
+
+    const reason = blockReason === 'Custom reason'
+      ? customBlockReason.trim()
+      : blockReason
+    if (!reason) return
+
+    const identity = String(
+      blockTarget.authorId || blockTarget.authorEmail || blockTarget.authorName || '',
+    ).trim()
+    if (!identity) {
+      window.alert('Could not identify this post author to block.')
+      return
+    }
+
+    const blockedUser = {
+      identity,
+      name: blockTarget.authorName || 'TrueHunt member',
+      email: blockTarget.authorEmail || '',
+      photo: getPostAuthorAvatar(blockTarget),
+      reason,
+    }
+
+    try {
+      const settings = JSON.parse(localStorage.getItem(accountSettingsStorageKey) || '{}')
+      const existing = Array.isArray(settings.blockedUsers) ? settings.blockedUsers : []
+      const blockedUsers = [
+        ...existing.filter((blocked) => {
+          const blockedIdentity = typeof blocked === 'string' ? blocked : blocked.identity
+          return String(blockedIdentity || '').trim().toLowerCase() !== identity.toLowerCase()
+        }),
+        blockedUser,
+      ]
+      localStorage.setItem(
+        accountSettingsStorageKey,
+        JSON.stringify({ ...settings, blockedUsers }),
+      )
+    } catch (error) {
+      console.error('Could not save blocked profile:', error)
+      window.alert('Could not block this profile. Please try again.')
+      return
+    }
+
+    setPosts((current) => current.filter((post) => !postMatchesBlockedUser(post, [blockedUser])))
+    setBlockTarget(null)
+    setBlockReason('')
+    setCustomBlockReason('')
+  }
+
+  function handleReportPost(post) {
+    const reason = window.prompt('Why are you reporting this post?')
+    if (reason?.trim()) {
+      const reportsKey = `truehunt-social-reported-posts:${encodeURIComponent(String(currentUserId || 'me'))}`
+      const report = {
+        postId: String(post.id),
+        authorName: post.authorName || '',
+        title: post.title || '',
+        content: post.content || '',
+        reason: reason.trim(),
+        reportedAt: new Date().toISOString(),
+      }
+      try {
+        const reports = JSON.parse(localStorage.getItem(reportsKey) || '[]')
+        const existing = Array.isArray(reports) ? reports : []
+        localStorage.setItem(reportsKey, JSON.stringify([report, ...existing]))
+        window.dispatchEvent(new CustomEvent('truehunt-reported-post-changed'))
+      } catch (error) {
+        console.warn('Could not save post report:', error)
+      }
+      window.alert(`Report submitted: ${reason.trim()}`)
+    }
+    setOpenPostMenuId('')
   }
 
   function handleNotInterestedInvestorListing(listingId) {
@@ -1831,7 +2191,7 @@ function Home({
                 onClick={startPost}
                 aria-expanded={isComposerOpen}
               >
-                Start a post
+                {editingPost ? 'Continue editing' : 'Start a post'}
               </button>
             </div>
 
@@ -1855,18 +2215,74 @@ function Home({
                     {draftMedia.kind === 'video'
                       ? <video src={draftMedia.url} controls />
                       : <img src={draftMedia.url} alt="Selected post attachment" />}
-                    <button type="button" onClick={removeDraftMedia}>Remove attachment</button>
+                    {(!editingPost || !draftMedia.isExisting) && (
+                      <button type="button" onClick={removeDraftMedia}>Remove attachment</button>
+                    )}
                   </div>
                 )}
-                <div className="home-publish-row ">
+                <div className="home-publish-row">
                   <span>{draftType === 'opportunity' ? 'Opportunity' : 'Post'}</span>
-                  <button
-                    className="home-publish-button"
-                    type="submit"
-                    disabled={!draft.trim() && !draftMedia}
-                  >
-                    {draftType === 'opportunity' ? 'Share' : 'Post'}
-                  </button>
+                  <div className="home-publish-controls">
+                    {editingPost && (
+                      <button
+                        className="home-cancel-edit-button"
+                        type="button"
+                        onClick={cancelEditingPost}
+                      >
+                        Cancel
+                      </button>
+                    )}
+                    <div className="home-audience-selector" ref={audienceMenuRef}>
+                      <button
+                        className="home-audience-trigger"
+                        type="button"
+                        aria-haspopup="menu"
+                        aria-expanded={isAudienceMenuOpen}
+                        onClick={() => setIsAudienceMenuOpen((isOpen) => !isOpen)}
+                      >
+                        {draftAudience === 'private'
+                          ? <LockKeyhole size={15} aria-hidden="true" />
+                          : draftAudience === 'connections'
+                            ? <UsersRound size={15} aria-hidden="true" />
+                            : <Globe size={15} aria-hidden="true" />}
+                        {draftAudience === 'connections' ? 'Connections only' : draftAudience === 'private' ? 'Private' : 'Public'}
+                        <ChevronDown size={14} aria-hidden="true" />
+                      </button>
+                      {isAudienceMenuOpen && (
+                        <div className="home-audience-menu" role="menu" aria-label="Post audience">
+                          {[
+                            { value: 'public', label: 'Public', Icon: Globe },
+                            { value: 'connections', label: 'Connections only', Icon: UsersRound },
+                            { value: 'private', label: 'Private', Icon: LockKeyhole },
+                          ].map(({ value, label, Icon }) => (
+                            <button
+                              className="home-audience-option"
+                              key={value}
+                              type="button"
+                              role="menuitemradio"
+                              aria-checked={draftAudience === value}
+                              onClick={() => {
+                                setDraftAudience(value)
+                                setIsAudienceMenuOpen(false)
+                              }}
+                            >
+                              <Icon size={16} aria-hidden="true" />
+                              <span>
+                                <strong>{label}</strong>
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      className="home-publish-button"
+                      type="submit"
+                      disabled={!draft.trim() && !draftMedia}
+                    >
+                      {editingPost ? 'Save changes' : draftType === 'opportunity' ? 'Share' : 'Post'}
+                    </button>
+                  </div>
                 </div>
               </form>
             )}
@@ -1985,7 +2401,57 @@ function Home({
                       )}
                       <time>{post.createdAt}</time>
                     </div>
+                    {!isOpportunityExpanded && isOwnPost(post) && !isOwnOpportunity && (
+                      <button
+                        className="home-post-edit-trigger"
+                        type="button"
+                        aria-label="Edit post"
+                        title="Edit post"
+                        onClick={() => startEditingPost(post)}
+                      >
+                        <Pencil size={17} aria-hidden="true" />
+                      </button>
+                    )}
+                    {!isOpportunityExpanded && !isOwnPost(post) && (
+                      <div className="home-post-menu">
+                        <button
+                          className="home-post-menu-trigger"
+                          type="button"
+                          aria-label="Post options"
+                          aria-expanded={openPostMenuId === postId}
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            if (openPostMenuId === postId) {
+                              setOpenPostMenuId('')
+                              return
+                            }
+                            const rect = event.currentTarget.getBoundingClientRect()
+                            const menuWidth = 230
+                            const menuHeight = 238
+                            const viewportPadding = 12
+                            setPostMenuPosition({
+                              top: rect.bottom + menuHeight + viewportPadding <= window.innerHeight
+                                ? rect.bottom + 6
+                                : Math.max(viewportPadding, rect.top - menuHeight - 6),
+                              left: Math.max(viewportPadding, Math.min(
+                                rect.right - menuWidth,
+                                window.innerWidth - menuWidth - viewportPadding,
+                              )),
+                            })
+                            setOpenPostMenuId(postId)
+                          }}
+                        >
+                          <MoreVertical size={19} aria-hidden="true" />
+                        </button>
+                      </div>
+                    )}
                   </header>
+                  {savedPostIds.includes(postId) && (
+                    <span className="home-post-saved-badge" role="status">
+                      <Bookmark size={14} fill="currentColor" aria-hidden="true" />
+                      Saved
+                    </span>
+                  )}
                   {post.type === 'opportunity' ? (
                     <div className="home-post-opportunity-summary">
                       <button
@@ -2034,18 +2500,27 @@ function Home({
                       type="button"
                       onClick={() => handleLike(post)}
                       disabled={pendingLikePostIds.includes(String(post.id))}
+                      className="home-post-icon-action"
+                      aria-label={`${post.liked ? 'Unlike' : 'Like'} post (${post.likesCount ?? 0} likes)`}
+                      title={post.liked ? 'Unlike' : 'Like'}
                       style={{
                         background: post.liked ? '#e8f0fe' : 'transparent',
                         color: post.liked ? '#1a73e8' : 'inherit',
-                        border: '1px solid #ddd',
-                        padding: '6px 14px',
-                        borderRadius: '20px',
+                        border: 'none',
+                        width: 'auto',
+                        minWidth: '36px',
+                        height: '36px',
+                        padding: '0 8px',
                         cursor: pendingLikePostIds.includes(String(post.id)) ? 'wait' : 'pointer',
-                        fontWeight: '500',
-                        fontSize: '13px'
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px',
+                        borderRadius: '18px'
                       }}
                     >
-                      👍 {post.likesCount || 0} {post.liked ? 'Liked' : 'Like'}
+                      <ThumbsUp size={18} fill={post.liked ? 'currentColor' : 'none'} aria-hidden="true" />
+                      <span className="home-post-action-count">{post.likesCount ?? 0}</span>
                     </button>
                     {likeErrors[String(post.id)] && (
                       <span role="alert" style={{ alignSelf: 'center', color: '#b3261e', fontSize: '12px' }}>
@@ -2056,16 +2531,46 @@ function Home({
                     <button
                       type="button"
                       onClick={() => setOpenCommentsPostId(openCommentsPostId === post.id ? null : post.id)}
+                      className="home-post-icon-action"
+                      aria-label={`Comments (${post.commentsCount ?? post.comments?.length ?? 0})`}
+                      title="Comments"
                       style={{
                         background: 'transparent',
-                        border: '1px solid #ddd',
-                        padding: '6px 14px',
-                        borderRadius: '20px',
+                        border: 'none',
+                        width: 'auto',
+                        minWidth: '36px',
+                        height: '36px',
+                        padding: '0 8px',
                         cursor: 'pointer',
-                        fontSize: '13px'
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px',
+                        borderRadius: '18px'
                       }}
                     >
-                      💬 Comments ({post.commentsCount ?? post.comments?.length ?? 0})
+                      <MessageCircle size={18} aria-hidden="true" />
+                      <span className="home-post-action-count">{post.commentsCount ?? post.comments?.length ?? 0}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleSharePost(post)}
+                      className="home-post-icon-action"
+                      aria-label="Share post"
+                      title="Share"
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        width: '36px',
+                        height: '36px',
+                        cursor: 'pointer',
+                        display: 'grid',
+                        placeItems: 'center',
+                        borderRadius: '50%'
+                      }}
+                    >
+                      <Share2 size={18} aria-hidden="true" />
                     </button>
 
                     {post.type === 'opportunity' && (
@@ -2144,23 +2649,7 @@ function Home({
                       >
                         🗑️ Delete
                       </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => handleNotInterested(post.id)}
-                        style={{
-                          marginLeft: 'auto',
-                          background: 'transparent',
-                          border: 'none',
-                          color: 'var(--color-text-muted, #666)',
-                          cursor: 'pointer',
-                          fontSize: '12px'
-                        }}
-                        title="Hide this post from your feed"
-                      >
-                        Not interested
-                      </button>
-                    )}
+                    ) : null}
                   </div>
 
                   {postComments.length > 0 && (
@@ -2845,6 +3334,114 @@ function Home({
             </div>
           </form>
         </section>
+      </div>
+    )}
+    {openPostMenuId && (() => {
+      const menuPost = visiblePosts.find((post) => String(post.id) === openPostMenuId)
+      if (!menuPost) return null
+      const menuAuthorName = menuPost.authorName || name
+      const isMenuPostSaved = savedPostIds.includes(String(menuPost.id))
+      return (
+        <div
+          className="home-post-menu-popover"
+          role="menu"
+          style={{ top: `${postMenuPosition.top}px`, left: `${postMenuPosition.left}px` }}
+        >
+          <button type="button" role="menuitem" onClick={() => handleSavePost(menuPost)}>
+            <Bookmark size={18} fill={isMenuPostSaved ? 'currentColor' : 'none'} aria-hidden="true" />
+            <span>
+              <strong>{isMenuPostSaved ? 'Remove from saved' : 'Save'}</strong>
+              <small>{isMenuPostSaved ? 'Remove this post from your saved items' : 'Save for later'}</small>
+            </span>
+          </button>
+          <button type="button" role="menuitem" onClick={() => handleCopyPostLink(menuPost.id)}>
+            <Link2 size={18} aria-hidden="true" />
+            <span><strong>Copy link to post</strong></span>
+          </button>
+          <button type="button" role="menuitem" onClick={() => handleHidePostsByAuthor(menuPost)}>
+            <EyeOff size={18} aria-hidden="true" />
+            <span><strong>Hide posts </strong></span>
+          </button>
+          {!isOwnPost(menuPost) && (
+            <button type="button" role="menuitem" onClick={() => openBlockPostAuthor(menuPost)}>
+              <Ban size={18} aria-hidden="true" />
+              <span><strong>Block </strong></span>
+            </button>
+          )}
+          <button type="button" role="menuitem" onClick={() => handleNotInterested(menuPost.id)}>
+            <Ban size={18} aria-hidden="true" />
+            <span><strong>Not interested</strong></span>
+          </button>
+          <button type="button" role="menuitem" onClick={() => handleReportPost(menuPost)}>
+            <Flag size={18} aria-hidden="true" />
+            <span><strong>Report post</strong></span>
+          </button>
+        </div>
+      )
+    })()}
+    {blockTarget && (
+      <div
+        className="home-block-dialog-backdrop"
+        role="presentation"
+        onMouseDown={(event) => {
+          if (event.target === event.currentTarget) setBlockTarget(null)
+        }}
+      >
+        <form
+          className="home-block-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="home-block-dialog-title"
+          onSubmit={handleConfirmBlockPostAuthor}
+        >
+          <h2 id="home-block-dialog-title">Block {blockTarget.authorName || 'this profile'}?</h2>
+          <div className="home-block-dialog-profile">
+            <span className={`home-avatar${getPostAuthorAvatar(blockTarget) ? '' : ' is-placeholder'}`} aria-hidden="true">
+              {getPostAuthorAvatar(blockTarget)
+                ? <img src={getPostAuthorAvatar(blockTarget)} alt="" />
+                : <ProfileAvatarPlaceholder />}
+            </span>
+            <strong>{blockTarget.authorName}</strong>
+          </div>
+          <fieldset className="home-block-reasons">
+            <legend>Choose a reason</legend>
+            {postBlockReasons.map((reason) => (
+              <label className={blockReason === reason ? 'is-selected' : ''} key={reason}>
+                <input
+                  type="radio"
+                  name="post-block-reason"
+                  value={reason}
+                  checked={blockReason === reason}
+                  onChange={(event) => setBlockReason(event.target.value)}
+                />
+                <span>{reason}</span>
+              </label>
+            ))}
+          </fieldset>
+          {blockReason === 'Custom reason' && (
+            <label className="home-block-custom-reason" htmlFor="home-block-custom-reason">
+              Custom reason
+              <textarea
+                id="home-block-custom-reason"
+                value={customBlockReason}
+                onChange={(event) => setCustomBlockReason(event.target.value)}
+                placeholder="Tell us why you are blocking this profile"
+                maxLength={240}
+                required
+              />
+            </label>
+          )}
+          <div className="home-block-dialog-actions">
+            <button type="button" onClick={() => setBlockTarget(null)}>Cancel</button>
+            <button
+              className="home-block-confirm"
+              type="submit"
+              disabled={!blockReason || (blockReason === 'Custom reason' && !customBlockReason.trim())}
+            >
+              Block profile
+            </button>
+          </div>
+        </form>
       </div>
     )}
     <Article

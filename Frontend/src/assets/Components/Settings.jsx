@@ -7,10 +7,18 @@ import {
 } from '../../components/common/passwordValidation'
 import {
   ArrowRight,
+  Ban,
   Bell,
+  Bookmark,
+  Flag,
+  FileText,
+  Heart,
+  Image,
   LockKeyhole,
   Shield,
+  ShieldAlert,
   UserRound,
+  Video,
 } from 'lucide-react'
 import './Settings.css'
 
@@ -29,15 +37,51 @@ const settingsSections = [
   },
   {
     id: 'privacy',
-    label: 'Data privacy',
+    label: 'Privacy & settings',
     icon: Shield,
-    description: 'Learn about the profile data currently associated with your account.',
+    description: 'Control who can see your profile and activity.',
+  },
+  {
+    id: 'block',
+    label: 'Block',
+    icon: Ban,
+    description: 'Manage people who are blocked from contacting or viewing your profile.',
+  },
+  {
+    id: 'restricted',
+    label: 'Restricted content',
+    icon: ShieldAlert,
+    description: 'Choose the limits applied to sensitive or restricted content.',
+  },
+  {
+    id: 'photo-video-url',
+    label: 'Visibility',
+    icon: Image,
+    description: 'Manage photo, video, and external link content on your posts.',
+  },
+  {
+    id: 'like-share-counts',
+    label: 'Like & share counts',
+    icon: Heart,
+    description: 'Choose whether like and share counts are displayed.',
   },
   {
     id: 'notifications',
     label: 'Notifications',
     icon: Bell,
     description: 'Choose which notifications you receive.',
+  },
+  {
+    id: 'saved',
+    label: 'Saved',
+    icon: Bookmark,
+    description: 'Posts you saved to revisit later.',
+  },
+  {
+    id: 'reports',
+    label: 'Reports',
+    icon: Flag,
+    description: 'Posts you have reported.',
   },
 ]
 
@@ -79,8 +123,88 @@ const notificationCategories = [
   },
 ]
 
+const blockReasons = [
+  'Spam or unwanted promotion',
+  'Harassment or abusive behavior',
+  'Fake or misleading profile',
+  'Inappropriate content',
+  'Privacy or safety concern',
+  'Custom reason',
+]
+
+function getSavedPostMedia(post) {
+  let media = post.media
+  if (typeof media === 'string') {
+    try {
+      media = JSON.parse(media)
+    } catch {
+      media = { url: post.media }
+    }
+  }
+  if (!media || typeof media !== 'object' || Array.isArray(media)) media = {}
+
+  const urls = [
+    media.url,
+    media.src,
+    media.srcUrl,
+    media.fileUrl,
+    media.downloadUrl,
+    media.path,
+    media.videoUrl,
+    media.imageUrl,
+    post.mediaUrl,
+    post.imageUrl,
+    post.videoUrl,
+    post.photoUrl,
+    post.attachmentUrl,
+  ].filter((url, index, values) => (
+    typeof url === 'string' && url.trim() && values.indexOf(url) === index
+  ))
+  if (!urls.length) return null
+
+  const mediaTypes = [
+    media.kind,
+    media.type,
+    media.contentType,
+    media.mimeType,
+    post.mediaType,
+  ].map((value) => String(value || '').toLowerCase())
+  const fileNames = [media.fileName, post.mediaFileName, ...urls]
+  const isVideo = mediaTypes.some((type) => type.includes('video'))
+    || fileNames.some((fileName) => /\.(mp4|mov|webm|m4v|m3u8)(?:$|[?#])/i.test(fileName || ''))
+  return { url: urls[0], isVideo }
+}
+
 function Settings({ profileDetails, profilePreview, onEditProfile, theme, onThemeChange, onAccountDeleted }) {
   const [activeSection, setActiveSection] = useState('preferences')
+  const [blockedUserInput, setBlockedUserInput] = useState('')
+  const [blockedUsers, setBlockedUsers] = useState([])
+  const [savedPosts, setSavedPosts] = useState([])
+  const [savedPostFilter, setSavedPostFilter] = useState('images')
+  const [reportedPosts, setReportedPosts] = useState([])
+  const [profileDirectory, setProfileDirectory] = useState([])
+  const [isProfileDirectoryLoading, setIsProfileDirectoryLoading] = useState(false)
+  const [blockTarget, setBlockTarget] = useState(null)
+  const [blockReason, setBlockReason] = useState('')
+  const [customBlockReason, setCustomBlockReason] = useState('')
+  const [privacyPreferences, setPrivacyPreferences] = useState({
+    profileVisibility: true,
+    activityStatus: true,
+    searchVisibility: true,
+  })
+  const [restrictedPreferences, setRestrictedPreferences] = useState({
+    sensitiveContent: false,
+    restrictedMessages: true,
+  })
+  const [mediaPreferences, setMediaPreferences] = useState({
+    photoPosts: 'public',
+    videoPosts: 'public',
+    externalUrls: 'public',
+  })
+  const [engagementPreferences, setEngagementPreferences] = useState({
+    likeCounts: true,
+    shareCounts: true,
+  })
   const [isPasswordFormOpen, setIsPasswordFormOpen] = useState(false)
   const [isThemeOptionsOpen, setIsThemeOptionsOpen] = useState(false)
   const [expandedNotificationCategories, setExpandedNotificationCategories] = useState({})
@@ -100,6 +224,31 @@ function Settings({ profileDetails, profilePreview, onEditProfile, theme, onThem
   const phone = profileDetails.phone || 'Not added yet'
   const address = profileDetails.address || 'Not added yet'
   const selectedSection = settingsSections.find((section) => section.id === activeSection)
+  const filteredSavedPosts = savedPosts.filter((post) => {
+    const media = getSavedPostMedia(post)
+    if (savedPostFilter === 'videos') return media?.isVideo
+    if (savedPostFilter === 'text') return !media
+    return media && !media.isVideo
+  })
+  const accountStorageId = profileDetails.userId || profileDetails.id || profileDetails.email || email
+  const accountStorageKey = encodeURIComponent(String(accountStorageId || 'me'))
+  const blockedIdentitySet = new Set(
+    blockedUsers.map((blocked) => String(blocked.identity || blocked).trim().toLowerCase()),
+  )
+  const blockSearch = blockedUserInput.trim().toLowerCase()
+  const searchedProfiles = blockSearch
+    ? profileDirectory.filter((profile) => {
+        const identity = [
+          profile.name,
+          profile.email,
+          profile.userId,
+          profile.id,
+          profile.primaryCraft,
+          profile.craft,
+        ].filter(Boolean).join(' ').toLowerCase()
+        return identity.includes(blockSearch)
+      }).slice(0, 8)
+    : []
 
   useEffect(() => {
     async function loadSettings() {
@@ -114,6 +263,218 @@ function Settings({ profileDetails, profilePreview, onEditProfile, theme, onThem
     }
     loadSettings()
   }, [])
+
+  useEffect(() => {
+    const storageKey = `truehunt-social-settings:${String(email).trim().toLowerCase()}`
+    try {
+      const stored = localStorage.getItem(storageKey)
+      if (!stored) return
+      const saved = JSON.parse(stored)
+      setBlockedUsers(Array.isArray(saved.blockedUsers)
+        ? saved.blockedUsers.map((blocked) => (
+            typeof blocked === 'string'
+              ? { name: blocked, reason: 'Not specified', identity: blocked }
+              : blocked
+          ))
+        : [])
+      setPrivacyPreferences((prev) => ({ ...prev, ...saved.privacyPreferences }))
+      setRestrictedPreferences((prev) => ({ ...prev, ...saved.restrictedPreferences }))
+      if (saved.mediaPreferences) {
+        setMediaPreferences((prev) => Object.fromEntries(
+          Object.keys(prev).map((id) => {
+            const value = saved.mediaPreferences[id]
+            return [id, value === 'private' || value === false ? 'private' : 'public']
+          }),
+        ))
+      }
+      setEngagementPreferences((prev) => ({ ...prev, ...saved.engagementPreferences }))
+    } catch (err) {
+      console.warn('Could not load local Social settings:', err)
+    }
+  }, [email])
+
+  useEffect(() => {
+    if (activeSection !== 'block') return
+    let isCurrent = true
+    async function loadProfiles() {
+      setIsProfileDirectoryLoading(true)
+      try {
+        const profiles = await api.getProfileDirectory()
+        if (isCurrent && Array.isArray(profiles)) setProfileDirectory(profiles)
+      } catch (err) {
+        console.warn('Could not load profiles for the block section:', err)
+      } finally {
+        if (isCurrent) setIsProfileDirectoryLoading(false)
+      }
+    }
+    loadProfiles()
+    return () => {
+      isCurrent = false
+    }
+  }, [activeSection])
+
+  useEffect(() => {
+    let isCurrent = true
+
+    function loadSavedItems() {
+      try {
+        const saved = JSON.parse(localStorage.getItem(`truehunt-social-saved-posts:${accountStorageKey}`) || '[]')
+        const reports = JSON.parse(localStorage.getItem(`truehunt-social-reported-posts:${accountStorageKey}`) || '[]')
+        setSavedPosts(Array.isArray(saved) ? saved : [])
+        setReportedPosts(Array.isArray(reports) ? reports : [])
+      } catch (err) {
+        console.warn('Could not load saved posts and reports:', err)
+      }
+    }
+
+    async function markUnavailableSavedPosts() {
+      try {
+        const storageKey = `truehunt-social-saved-posts:${accountStorageKey}`
+        const stored = JSON.parse(localStorage.getItem(storageKey) || '[]')
+        if (!Array.isArray(stored)) {
+          throw new Error('Saved posts are not a list.')
+        }
+        if (!stored.some((post) => post && !post.localOnly && !post.ownerRemoved)) return
+
+        const currentPosts = await api.getPosts()
+        if (!Array.isArray(currentPosts)) {
+          throw new Error('The feed response is not a list.')
+        }
+        if (!isCurrent) return
+
+        const availablePostIds = new Set(currentPosts.map((post) => String(post.id)))
+        let changed = false
+        const next = stored.map((post) => {
+          if (!post || post.localOnly || post.ownerRemoved || availablePostIds.has(String(post.id))) {
+            return post
+          }
+          changed = true
+          return { ...post, ownerRemoved: true }
+        })
+        if (changed) {
+          localStorage.setItem(storageKey, JSON.stringify(next))
+          setSavedPosts(next)
+        }
+      } catch (err) {
+        console.warn('Could not check whether saved posts are still available:', err)
+      }
+    }
+
+    function markSavedPostOwnerRemoved(event) {
+      const postId = String(event.detail?.postId || '').trim()
+      if (!postId) return
+
+      try {
+        const storageKey = `truehunt-social-saved-posts:${accountStorageKey}`
+        const stored = JSON.parse(localStorage.getItem(storageKey) || '[]')
+        if (!Array.isArray(stored)) {
+          throw new Error('Saved posts are not a list.')
+        }
+
+        let changed = false
+        const next = stored.map((post) => {
+          if (String(post.id) !== postId || post.ownerRemoved) return post
+          changed = true
+          return { ...post, ownerRemoved: true }
+        })
+        if (changed) {
+          localStorage.setItem(storageKey, JSON.stringify(next))
+          setSavedPosts(next)
+        }
+      } catch (err) {
+        console.warn('Could not mark deleted saved post:', err)
+      }
+    }
+
+    loadSavedItems()
+    if (activeSection === 'saved') {
+      markUnavailableSavedPosts()
+    }
+    window.addEventListener('truehunt-saved-post-changed', loadSavedItems)
+    window.addEventListener('truehunt-reported-post-changed', loadSavedItems)
+    window.addEventListener('truehunt-social-post-deleted', markSavedPostOwnerRemoved)
+    return () => {
+      isCurrent = false
+      window.removeEventListener('truehunt-saved-post-changed', loadSavedItems)
+      window.removeEventListener('truehunt-reported-post-changed', loadSavedItems)
+      window.removeEventListener('truehunt-social-post-deleted', markSavedPostOwnerRemoved)
+    }
+  }, [accountStorageKey, activeSection])
+
+  function removeSavedPost(postId) {
+    const next = savedPosts.filter((post) => String(post.id) !== String(postId))
+    setSavedPosts(next)
+    try {
+      localStorage.setItem(`truehunt-social-saved-posts:${accountStorageKey}`, JSON.stringify(next))
+      window.dispatchEvent(new CustomEvent('truehunt-saved-post-changed'))
+    } catch (err) {
+      console.warn('Could not remove saved post:', err)
+    }
+  }
+
+  function saveLocalPreferences(next) {
+    const storageKey = `truehunt-social-settings:${String(email).trim().toLowerCase()}`
+    try {
+      const stored = JSON.parse(localStorage.getItem(storageKey) || '{}')
+      localStorage.setItem(storageKey, JSON.stringify({ ...stored, ...next }))
+    } catch (err) {
+      console.warn('Could not save local Social settings:', err)
+    }
+  }
+
+  function openBlockReason(profile) {
+    setBlockTarget(profile)
+    setBlockReason('')
+    setCustomBlockReason('')
+  }
+
+  function handleConfirmBlock(event) {
+    event.preventDefault()
+    if (!blockTarget || !blockReason) return
+    const reason = blockReason === 'Custom reason'
+      ? (customBlockReason.trim() || 'Custom reason')
+      : blockReason
+    const identity = String(
+      blockTarget.userId || blockTarget.id || blockTarget.email || blockTarget.name,
+    ).trim()
+    const blockedEntry = {
+      identity,
+      name: blockTarget.name || 'Unknown profile',
+      email: blockTarget.email || '',
+      photo: blockTarget.profileImageUrl || blockTarget.avatar || blockTarget.profileImage || '',
+      reason,
+    }
+    const next = [
+      ...blockedUsers.filter((item) => (
+        String(item.identity || item).trim().toLowerCase() !== identity.toLowerCase()
+      )),
+      blockedEntry,
+    ]
+    setBlockedUsers(next)
+    setBlockedUserInput('')
+    setBlockTarget(null)
+    setBlockReason('')
+    setCustomBlockReason('')
+    saveLocalPreferences({ blockedUsers: next })
+  }
+
+  function handleRemoveBlockedUser(identity) {
+    const next = blockedUsers.filter((item) => String(item.identity || item) !== identity)
+    setBlockedUsers(next)
+    saveLocalPreferences({ blockedUsers: next })
+  }
+
+  function updatePreference(setter, state, id, key) {
+    const next = { ...state, [id]: !state[id] }
+    setter(next)
+    saveLocalPreferences({ [key]: next })
+  }
+
+  function updateMediaVisibility(id, visibility) {
+    const next = { ...mediaPreferences, [id]: visibility }
+    setMediaPreferences(next)
+    saveLocalPreferences({ mediaPreferences: next })
+  }
 
   const isChangePasswordValid =
     currentPassword.length > 0 &&
@@ -416,16 +777,192 @@ function Settings({ profileDetails, profilePreview, onEditProfile, theme, onThem
               </form>
             )}
             {activeSection === 'privacy' && (
-              <dl className="settings-details-list">
-                <div className="settings-detail-row">
-                  <dt>Profile information</dt>
-                  <dd>Managed in your profile</dd>
+              <div className="settings-toggle-list">
+                {[
+                  ['profileVisibility', 'Public profile', 'Allow other users to view your professional profile.'],
+                  ['activityStatus', 'Activity status', 'Show when you are active on TrueHunt Social.'],
+                  ['searchVisibility', 'Search visibility', 'Allow your profile to appear in search and suggestions.'],
+                ].map(([id, label, description]) => (
+                  <div className="settings-toggle-row" key={id}>
+                    <span>
+                      <strong>{label}</strong>
+                      <small>{description}</small>
+                    </span>
+                    <button
+                      className={`settings-notification-switch${privacyPreferences[id] ? ' is-on' : ''}`}
+                      type="button"
+                      role="switch"
+                      aria-checked={privacyPreferences[id]}
+                      aria-label={label}
+                      onClick={() => updatePreference(setPrivacyPreferences, privacyPreferences, id, 'privacyPreferences')}
+                    >
+                      <span>{privacyPreferences[id] ? 'On' : 'Off'}</span>
+                      <span className="settings-notification-switch-track" aria-hidden="true"><span /></span>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {activeSection === 'block' && (
+              <div className="settings-management-section">
+                <div className="settings-block-search">
+                  <label htmlFor="settings-blocked-user">Search profiles to block</label>
+                  <input
+                    id="settings-blocked-user"
+                    type="search"
+                    value={blockedUserInput}
+                    onChange={(event) => setBlockedUserInput(event.target.value)}
+                    placeholder="Search by name, email, user ID, or craft"
+                    autoComplete="off"
+                  />
                 </div>
-                <div className="settings-detail-row">
-                  <dt>Contact information</dt>
-                  <dd>Managed in your profile</dd>
+                {isProfileDirectoryLoading && (
+                  <p className="settings-block-search-note">Loading profiles...</p>
+                )}
+                {blockSearch && !isProfileDirectoryLoading && (
+                  <div className="settings-block-results" aria-label="Profile search results">
+                    {searchedProfiles.length === 0 ? (
+                      <p className="settings-block-search-note">No matching profiles found.</p>
+                    ) : searchedProfiles.map((profile) => {
+                      const identity = String(profile.userId || profile.id || profile.email || profile.name).trim()
+                      const isBlocked = blockedIdentitySet.has(identity.toLowerCase())
+                      const photo = profile.profileImageUrl || profile.avatar || profile.profileImage || ''
+                      return (
+                        <div className="settings-profile-result" key={identity}>
+                          <span className="settings-profile-photo" aria-hidden="true">
+                            {photo
+                              ? <img src={photo} alt="" />
+                              : (profile.name || 'U').charAt(0).toUpperCase()}
+                          </span>
+                          <span className="settings-profile-result-info">
+                            <strong>{profile.name || 'Unknown profile'}</strong>
+                            <small>{profile.primaryCraft || profile.craft || profile.email || identity}</small>
+                          </span>
+                          {isBlocked ? (
+                            <span className="settings-blocked-label">Blocked</span>
+                          ) : (
+                            <button type="button" className="settings-block-button" onClick={() => openBlockReason(profile)}>
+                              <Ban size={15} aria-hidden="true" />
+                              Block
+                            </button>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+                <div className="settings-block-list">
+                  {blockedUsers.length === 0 ? (
+                    <p>You have not blocked anyone.</p>
+                  ) : blockedUsers.map((blockedUser) => {
+                    const identity = String(blockedUser.identity || blockedUser)
+                    return (
+                      <div className="settings-block-row" key={identity}>
+                        <span className="settings-blocked-profile">
+                          <span className="settings-profile-photo is-small" aria-hidden="true">
+                            {blockedUser.photo
+                              ? <img src={blockedUser.photo} alt="" />
+                              : (blockedUser.name || 'U').charAt(0).toUpperCase()}
+                          </span>
+                          <span>
+                            <strong>{blockedUser.name || identity}</strong>
+                            <small>Reason: {blockedUser.reason || 'Not specified'}</small>
+                          </span>
+                        </span>
+                        <button type="button" onClick={() => handleRemoveBlockedUser(identity)}>
+                          Unblock
+                        </button>
+                      </div>
+                    )
+                  })}
                 </div>
-              </dl>
+              </div>
+            )}
+            {activeSection === 'restricted' && (
+              <div className="settings-toggle-list">
+                {[
+                  ['sensitiveContent', 'Sensitive content', 'Filter content that may be sensitive or contain mature themes.'],
+                  ['restrictedMessages', 'Restrict messages', 'Move messages from people outside your network to a restricted list.'],
+                ].map(([id, label, description]) => (
+                  <div className="settings-toggle-row" key={id}>
+                    <span>
+                      <strong>{label}</strong>
+                      <small>{description}</small>
+                    </span>
+                    <button
+                      className={`settings-notification-switch${restrictedPreferences[id] ? ' is-on' : ''}`}
+                      type="button"
+                      role="switch"
+                      aria-checked={restrictedPreferences[id]}
+                      aria-label={label}
+                      onClick={() => updatePreference(setRestrictedPreferences, restrictedPreferences, id, 'restrictedPreferences')}
+                    >
+                      <span>{restrictedPreferences[id] ? 'On' : 'Off'}</span>
+                      <span className="settings-notification-switch-track" aria-hidden="true"><span /></span>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {activeSection === 'photo-video-url' && (
+              <div className="settings-toggle-list">
+                {[
+                  ['photoPosts', 'Photo posts', 'Choose who can view photos in your posts.'],
+                  ['videoPosts', 'Video posts', 'Choose who can view videos in your posts.'],
+                  ['externalUrls', 'URLs', 'Choose who can view links in your posts.'],
+                ].map(([id, label, description]) => (
+                  <div className="settings-toggle-row" key={id}>
+                    <span>
+                      <strong>{label}</strong>
+                      <small>{description}</small>
+                    </span>
+                    <fieldset className="settings-visibility-options">
+                      <legend className="settings-sr-only">{label} visibility</legend>
+                      {['public', 'private'].map((visibility) => (
+                        <label
+                          className={`settings-visibility-option${mediaPreferences[id] === visibility ? ' is-selected' : ''}`}
+                          key={visibility}
+                        >
+                          <input
+                            type="radio"
+                            name={`visibility-${id}`}
+                            value={visibility}
+                            checked={mediaPreferences[id] === visibility}
+                            onChange={() => updateMediaVisibility(id, visibility)}
+                          />
+                          <span>{visibility === 'public' ? 'Public' : 'Private'}</span>
+                        </label>
+                      ))}
+                    </fieldset>
+                  </div>
+                ))}
+              </div>
+            )}
+            {activeSection === 'like-share-counts' && (
+              <div className="settings-toggle-list">
+                {[
+                  ['likeCounts', 'Like counts', 'Show the number of likes on your posts.'],
+                  ['shareCounts', 'Share counts', 'Show the number of times your posts are shared.'],
+                ].map(([id, label, description]) => (
+                  <div className="settings-toggle-row" key={id}>
+                    <span>
+                      <strong>{label}</strong>
+                      <small>{description}</small>
+                    </span>
+                    <button
+                      className={`settings-notification-switch${engagementPreferences[id] ? ' is-on' : ''}`}
+                      type="button"
+                      role="switch"
+                      aria-checked={engagementPreferences[id]}
+                      aria-label={label}
+                      onClick={() => updatePreference(setEngagementPreferences, engagementPreferences, id, 'engagementPreferences')}
+                    >
+                      <span>{engagementPreferences[id] ? 'On' : 'Off'}</span>
+                      <span className="settings-notification-switch-track" aria-hidden="true"><span /></span>
+                    </button>
+                  </div>
+                ))}
+              </div>
             )}
             {activeSection === 'notifications' && (
               <ul className="settings-notification-list" aria-label="Notification categories">
@@ -479,6 +1016,125 @@ function Settings({ profileDetails, profilePreview, onEditProfile, theme, onThem
                 })}
               </ul>
             )}
+            {activeSection === 'saved' && (
+              <>
+                <div className="settings-saved-filters" aria-label="Filter saved posts">
+                  {[
+                    { id: 'images', label: 'Images', Icon: Image },
+                    { id: 'videos', label: 'Videos', Icon: Video },
+                    { id: 'text', label: 'Text posts', Icon: FileText },
+                  ].map(({ id, label, Icon }) => (
+                    <button
+                      type="button"
+                      key={id}
+                      aria-pressed={savedPostFilter === id}
+                      onClick={() => setSavedPostFilter(id)}
+                    >
+                      <Icon size={16} aria-hidden="true" />
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <div className="settings-saved-list">
+                  {savedPosts.length === 0 ? (
+                    <p className="settings-empty-state">You have no saved posts yet.</p>
+                  ) : filteredSavedPosts.length === 0 ? (
+                    <p className="settings-empty-state">
+                      No saved {savedPostFilter === 'text' ? 'text posts' : savedPostFilter} yet.
+                    </p>
+                  ) : filteredSavedPosts.map((post) => {
+                    const media = getSavedPostMedia(post)
+                    const isOwnerRemoved = Boolean(post.ownerRemoved)
+                    const authorName = post.authorName || 'TrueHunt member'
+                    const authorInitials = authorName
+                      .split(/\s+/)
+                      .filter(Boolean)
+                      .slice(0, 2)
+                      .map((part) => part[0])
+                      .join('')
+                    const authorAvatar = post.authorAvatar || post.profileImageUrl || post.avatar
+                    const postText = post.content || post.text || post.body || post.caption || post.description
+                    return (
+                      <article
+                        className={`settings-saved-item${media ? '' : ' is-text-only'}${isOwnerRemoved ? ' is-owner-removed' : ''}`}
+                        key={post.id}
+                      >
+                        {media ? (
+                          isOwnerRemoved ? (
+                            <div className="settings-saved-media settings-saved-media-removed">
+                              <span>This post is unavailable</span>
+                            </div>
+                          ) : (
+                            <div className="settings-saved-media">
+                              {media.isVideo
+                                ? <video src={media.url} controls preload="metadata" playsInline aria-label="Saved post video" />
+                                : <img src={media.url} alt="Saved post" />}
+                            </div>
+                          )
+                        ) : (
+                          <div className="settings-saved-text-post">
+                            <header className="settings-saved-text-author">
+                              {authorAvatar
+                                ? <img src={authorAvatar} alt="" />
+                                : <span aria-hidden="true">{authorInitials || 'T'}</span>}
+                              <div>
+                                <strong>{authorName}</strong>
+                                {(post.authorHeadline || post.authorRole || post.headline) && (
+                                  <small>{post.authorHeadline || post.authorRole || post.headline}</small>
+                                )}
+                                {post.createdAt && <time>{post.createdAt}</time>}
+                              </div>
+                              <button
+                                className="settings-saved-text-remove"
+                                type="button"
+                                onClick={() => removeSavedPost(post.id)}
+                              >
+                                Remove
+                              </button>
+                            </header>
+                            {isOwnerRemoved ? (
+                              <p className="settings-saved-removed-message">This post is unavailable.</p>
+                            ) : (
+                              <>
+                                {post.title && <h3>{post.title}</h3>}
+                                <p>{postText || 'Shared a post'}</p>
+                              </>
+                            )}
+                          </div>
+                        )}
+                        {media && (
+                          <div className="settings-saved-details">
+                            <strong>{authorName}</strong>
+                            <p>{isOwnerRemoved ? 'This post is unavailable.' : post.title || post.content || 'Shared a post'}</p>
+                          </div>
+                        )}
+                        {media && (
+                          <button type="button" onClick={() => removeSavedPost(post.id)}>
+                            Remove
+                          </button>
+                        )}
+                      </article>
+                    )
+                  })}
+                </div>
+              </>
+            )}
+            {activeSection === 'reports' && (
+              <div className="settings-reports-list">
+                {reportedPosts.length === 0 ? (
+                  <p className="settings-empty-state">You have not reported any posts.</p>
+                ) : reportedPosts.map((report, index) => (
+                  <article className="settings-report-item" key={report.reportedAt || `${report.postId}-${index}`}>
+                    <div>
+                      <strong>Post by {report.authorName || 'TrueHunt member'}</strong>
+                      <p>{report.title || report.content || 'Shared a post'}</p>
+                      <small>Reason: {report.reason}</small>
+                    </div>
+                    <time>{report.reportedAt ? new Date(report.reportedAt).toLocaleDateString() : ''}</time>
+                  </article>
+                ))}
+              </div>
+            )}
           </section>
           {activeSection === 'preferences' && (
             <section className="settings-card settings-display-card" aria-labelledby="settings-display-title">
@@ -531,6 +1187,66 @@ function Settings({ profileDetails, profilePreview, onEditProfile, theme, onThem
                 </button>
               </div>
             </section>
+          )}
+          {blockTarget && (
+            <div className="settings-modal-backdrop" role="presentation" onMouseDown={(event) => {
+              if (event.target === event.currentTarget) setBlockTarget(null)
+            }}>
+              <form className="settings-block-modal" role="dialog" aria-modal="true" aria-labelledby="block-profile-title" onSubmit={handleConfirmBlock}>
+                <h2 id="block-profile-title">Block {blockTarget.name || 'this profile'}?</h2>
+                <div className="settings-block-modal-profile">
+                  <span className="settings-profile-photo" aria-hidden="true">
+                    {(blockTarget.profileImageUrl || blockTarget.avatar || blockTarget.profileImage)
+                      ? <img src={blockTarget.profileImageUrl || blockTarget.avatar || blockTarget.profileImage} alt="" />
+                      : (blockTarget.name || 'U').charAt(0).toUpperCase()}
+                  </span>
+                  <span>
+                    <strong>{blockTarget.name || 'Unknown profile'}</strong>
+                    <small>{blockTarget.primaryCraft || blockTarget.craft || blockTarget.email || ''}</small>
+                  </span>
+                </div>
+                <fieldset className="settings-block-reasons">
+                  <legend>Select a reason</legend>
+                  {blockReasons.map((reason) => (
+                    <label key={reason} className={blockReason === reason ? 'is-selected' : ''}>
+                      <input
+                        type="radio"
+                        name="block-reason"
+                        value={reason}
+                        checked={blockReason === reason}
+                        onChange={(event) => setBlockReason(event.target.value)}
+                      />
+                      <span>{reason}</span>
+                    </label>
+                  ))}
+                </fieldset>
+                {blockReason === 'Custom reason' && (
+                  <label className="settings-custom-block-reason" htmlFor="custom-block-reason">
+                    Custom reason
+                    <textarea
+                      id="custom-block-reason"
+                      value={customBlockReason}
+                      onChange={(event) => setCustomBlockReason(event.target.value)}
+                      placeholder="Describe why you are blocking this profile"
+                      maxLength={240}
+                      required
+                    />
+                  </label>
+                )}
+                <div className="settings-block-modal-actions">
+                  <button type="button" className="settings-edit-button" onClick={() => setBlockTarget(null)}>
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="settings-block-confirm"
+                    disabled={!blockReason || (blockReason === 'Custom reason' && !customBlockReason.trim())}
+                  >
+                    Block profile
+                  </button>
+                </div>
+              </form>
+            </div>
           )}
         </div>
       </div>

@@ -172,12 +172,18 @@ export const api = {
     return result;
   },
   getAdminAccounts: () => fetchJson("/admin/accounts"),
+  setAdminAccountStatus: (id, active) =>
+    fetchJson(`/admin/accounts/${encodeURIComponent(id)}/status?active=${active}`, {
+      method: "PATCH",
+    }),
   deleteAdminAccount: (id) =>
     fetchJson(`/admin/accounts/${encodeURIComponent(id)}`, {
       method: "DELETE",
     }),
   deleteAdminPost: (id) =>
     fetchJson(`/admin/posts/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  deleteAdminOpportunity: (id) =>
+    fetchJson(`/admin/opportunities/${encodeURIComponent(id)}`, { method: "DELETE" }),
   getAdminInvestorRequests: () => fetchJson("/admin/investor-requests"),
   approveAdminInvestorRequest: (id) =>
     fetchJson(`/admin/investor-requests/${encodeURIComponent(id)}/approve`, {

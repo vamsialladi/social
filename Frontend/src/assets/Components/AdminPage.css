@@ -441,7 +441,7 @@
 
 .admin-content-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   align-items: start;
   gap: 14px;
 }
@@ -580,6 +580,41 @@
 .admin-delete-button:disabled {
   cursor: wait;
   opacity: 0.65;
+}
+
+.admin-member-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.admin-status-button {
+  min-height: 30px;
+  padding: 5px 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.admin-status-button.is-active {
+  border-color: #b7dfc3;
+  background: #edf8f0;
+  color: #176b35;
+}
+
+.admin-status-button.is-deactive {
+  border-color: #f0c4c0;
+  background: #fff3f2;
+  color: #a52b23;
+}
+
+.admin-status-button:disabled {
+  cursor: default;
+  opacity: 0.55;
 }
 
 .admin-current-account {
@@ -748,6 +783,12 @@
     grid-template-columns: 196px minmax(0, 1fr);
   }
 
+  .admin-content-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
   .admin-content-grid {
     grid-template-columns: 1fr;
   }

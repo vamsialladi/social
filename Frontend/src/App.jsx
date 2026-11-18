@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import MainLayout from './layouts/MainLayout';
 import HomePage from './pages/HomePage';
@@ -52,6 +52,12 @@ export default function App() {
     return false;
   });
 
+  useEffect(() => {
+    const replayIntro = () => setShowIntro(true);
+    window.addEventListener('truehunt:replay-intro', replayIntro);
+    return () => window.removeEventListener('truehunt:replay-intro', replayIntro);
+  }, []);
+
   const handleIntroComplete = () => {
     try {
       sessionStorage.setItem('truehunt_intro_seen', 'true');
@@ -66,7 +72,7 @@ export default function App() {
       <NotificationProvider>
         <AuthProvider>
           <Routes>
-            <Route path="/admin" element={<AdminPage />} />
+            <Route path="/social/admin" element={<AdminPage />} />
             <Route path="/" element={<MainLayout />}>
               <Route index element={<HomePage />} />
               <Route path="entertainments" element={<EntertainmentsPage />} />

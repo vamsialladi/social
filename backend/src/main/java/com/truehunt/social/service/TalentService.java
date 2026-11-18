@@ -95,12 +95,20 @@ public class TalentService {
     }
 
     public TalentDto getById(String id, String callerIdentifier) {
-        return getCombinedTalents(callerIdentifier).stream()
+        Optional<TalentDto> talent = getCombinedTalents(callerIdentifier).stream()
                 .filter(t -> Objects.equals(t.getId(), id)
                         || (t.getUserId() != null && t.getUserId().equalsIgnoreCase(id))
                         || (t.getEmail() != null && t.getEmail().equalsIgnoreCase(id)))
-                .findFirst()
-                .orElseThrow(() -> new ResourceNotFoundException("Talent", "id", id));
+                .findFirst();
+        if (talent.isPresent()) {
+            return talent.get();
+        }
+
+        TalentDto configuredTalent = id == null ? null : talentMap.get(id);
+        if (configuredTalent != null) {
+            return copyWithCallerState(configuredTalent, callerIdentifier);
+        }
+        throw new ResourceNotFoundException("Talent", "id", id);
     }
 
     public List<TalentDto> search(String term, String category, String location) {

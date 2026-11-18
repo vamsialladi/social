@@ -52,10 +52,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             if (StringUtils.hasText(email) && SecurityContextHolder.getContext().getAuthentication() == null) {
                 try {
                     UserDetails userDetails = customUserDetailsService.loadUserByUsername(email);
-                    UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
-                            userDetails, null, userDetails.getAuthorities());
-                    authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                    SecurityContextHolder.getContext().setAuthentication(authentication);
+                    if (userDetails.isEnabled()) {
+                        UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
+                                userDetails, null, userDetails.getAuthorities());
+                        authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                        SecurityContextHolder.getContext().setAuthentication(authentication);
+                    }
                 } catch (Exception e) {
                     // In guest/demo scenarios where user account is not yet saved, continue without breaking request
                 }

@@ -101,5 +101,43 @@ class AdminServiceDeletionTest {
         assertEquals(1, adminService.getAccounts().size());
         assertTrue(adminService.getAccounts().stream()
                 .anyMatch(account -> "member@example.com".equals(account.get("email"))));
+        assertTrue((Boolean) adminService.getAccounts().get(0).get("active"));
+    }
+
+    @Test
+    void updatesMemberActiveStatusAndRejectsAdministratorStatusChanges() {
+        UserAccountEntity member = new UserAccountEntity();
+        member.setEmail("member@example.com");
+        member.setPasswordHash("hash");
+        member.setName("Member");
+        member.setRole("USER");
+        member = userAccountRepository.saveAndFlush(member);
+
+        Long memberId = member.getId();
+        adminService.setAccountActive(memberId, false, "admin@example.com");
+        assertFalse(userAccountRepository.findById(memberId).orElseThrow().isActive());
+
+        UserAccountEntity admin = new UserAccountEntity();
+        admin.setEmail("admin@example.com");
+        admin.setPasswordHash("hash");
+        admin.setName("Admin");
+        admin.setRole("ADMIN");
+        admin = userAccountRepository.saveAndFlush(admin);
+
+        Long adminId = admin.getId();
+        assertThrows(BadRequestException.class,
+                () -> adminService.setAccountActive(adminId, false, "admin@example.com"));
+        assertTrue(userAccountRepository.findById(adminId).orElseThrow().isActive());
+    }
+
+    @Test
+    void opportunityDeletionRejectsRegularPosts() {
+        PostEntity post = new PostEntity();
+        post.setType("post");
+        post = postRepository.saveAndFlush(post);
+
+        Long postId = post.getId();
+        assertThrows(BadRequestException.class, () -> adminService.deleteOpportunity(postId));
+        assertTrue(postRepository.findById(postId).isPresent());
     }
 }
