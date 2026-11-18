@@ -87,7 +87,7 @@ export default function Footer() {
               </li>
               <li>
                 <Link to="/lcm-app" style={{ color: '#94A3B8', fontSize: '14px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                  <span>LCM Production App</span>
+                  <span>Zine Wood</span>
                 </Link>
               </li>
               <li>
