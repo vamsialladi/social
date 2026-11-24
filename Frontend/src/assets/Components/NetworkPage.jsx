@@ -2097,8 +2097,7 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
             </section>
             )
           ) : activeSection === 'banner' ? (
-            <section className="network-banner-empty" aria-label="Banner section">
-              <ProfileBanner variant="profile" />
+            <section>
             </section>
           ) : activeSection === 'connections' || activeSection === 'following' || activeSection === 'requests' ? (
             <section className="network-suggestions" aria-labelledby="network-connections-title">
@@ -2442,7 +2441,7 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
             {getGroupFollowers(viewingConnectionGroup).length ? (
               <ul className="network-group-followers-list">
                 {getGroupFollowers(viewingConnectionGroup).map((follower) => {
-                  const name = getProfileName(follower) || 'Group member'
+                  const name = getProfileName(follower)
                   const image = follower.profileImageUrl || follower.avatar || ''
                   return (
                     <li key={getProfileKey(follower)}>
