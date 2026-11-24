@@ -43,6 +43,8 @@ public class TalentService {
     private final PostRepository postRepository;
     private final UserProfileRelationshipRepository relationshipRepository;
     private final ObjectProvider<ConnectionService> connectionServiceProvider;
+    @Autowired(required = false)
+    private SettingsService settingsService;
 
     public TalentService(ProfileRepository profileRepository) {
         this(profileRepository, null, null, null);
@@ -249,6 +251,7 @@ public class TalentService {
                             authorKeys.add(String.valueOf(p.getId()));
                         }
                         List<Map<String, Object>> matchingPosts = allPosts.stream()
+                                .filter(post -> !"casting".equalsIgnoreCase(post.getType()))
                                 .filter(post -> post.getAuthorId() != null && authorKeys.contains(post.getAuthorId().trim().toLowerCase(Locale.ROOT)))
                                 .map(PostEntity::toDto)
                                 .collect(Collectors.toList());
@@ -341,6 +344,19 @@ public class TalentService {
             dto.setIsIncomingPending(incomingPending);
             dto.setIsPending(outgoingPending || incomingPending);
             dto.setConnectionStatus(connected ? "CONNECTED" : (outgoingPending ? "PENDING_OUTGOING" : (incomingPending ? "PENDING_INCOMING" : "NONE")));
+        }
+        if (settingsService != null) {
+            String targetKey = (dto.getEmail() != null && !dto.getEmail().isBlank()) ? dto.getEmail() : dto.getUserId();
+            if (!settingsService.isConnectingWithOthersEnabled(targetKey)) {
+                dto.setConnectionsCount(0);
+                dto.setConnectionsVisible(false);
+                if (!Boolean.TRUE.equals(dto.getIsConnected())) {
+                    dto.setConnectionStatus("NONE");
+                    dto.setIsPending(false);
+                    dto.setIsOutgoingPending(false);
+                    dto.setIsIncomingPending(false);
+                }
+            }
         }
     }
 

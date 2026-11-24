@@ -1,0 +1,51 @@
+.media-safety {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #d5e6dc;
+  border-radius: 7px;
+  background: #f3fbf6;
+  color: #17653a;
+  font-size: 13px;
+}
+
+.media-safety.is-rejected {
+  border-color: #f0caca;
+  background: #fff3f3;
+  color: #b3261e;
+}
+
+.media-safety p {
+  margin: 0;
+  font-weight: 600;
+}
+
+.media-safety-breakdown {
+  display: grid;
+  gap: 8px;
+  color: #25232a;
+}
+
+.media-safety-score > div:first-child {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.media-safety-track {
+  height: 7px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: #e0e5e2;
+}
+
+.media-safety-track > div {
+  height: 100%;
+  border-radius: inherit;
+  background: #28a745;
+}
+
+.media-safety-track > div.is-explicit {
+  background: #dc3545;
+}

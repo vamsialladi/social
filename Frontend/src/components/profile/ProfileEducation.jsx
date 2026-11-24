@@ -1,4 +1,4 @@
-import React from 'react';
+
 import { Plus, GraduationCap, Pencil, Trash2, Calendar } from 'lucide-react';
 import { useNotification } from '../../context/NotificationContext';
 
@@ -10,7 +10,7 @@ export default function ProfileEducation({ educations = [], isOwner, onAdd, onEd
       try {
         await onDelete(id);
         showNotification('Education record removed successfully', 'info');
-      } catch (e) {
+      } catch {
         showNotification('Failed to delete education', 'error');
       }
     }

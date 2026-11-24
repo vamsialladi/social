@@ -1,18 +1,15 @@
-import React, { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { 
   HelpCircle, 
   ChevronDown, 
   ChevronUp, 
-  Send, 
   CheckCircle2, 
-  MessageSquare, 
   Mail, 
   Phone,
   Building2,
   MapPin,
   ExternalLink,
-  ShieldCheck 
 } from 'lucide-react';
 import { FAQS_DATA } from '../services/mockData';
 import { api } from '../services/api';
@@ -20,8 +17,20 @@ import { useNotification } from '../context/NotificationContext';
 import { OFFICIAL_CONTACT } from '../constants/contactInfo';
 
 export default function GetSupportPage() {
-  const [faqs] = useState(FAQS_DATA);
+  const [faqs, setFaqs] = useState(FAQS_DATA);
   const [openFaqIndex, setOpenFaqIndex] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    api.support.getFaqs().then((list) => {
+      if (active && Array.isArray(list) && list.length > 0) {
+        setFaqs(list);
+      }
+    }).catch((error) => {
+      console.warn('Could not load support FAQs:', error);
+    });
+    return () => { active = false; };
+  }, []);
 
   // Form State
   const [fullName, setFullName] = useState('');
@@ -47,7 +56,7 @@ export default function GetSupportPage() {
       });
       setSubmitted(true);
       showNotification('Your support request has been registered! Ticket ID generated (Demo Sync).', 'success');
-    } catch (err) {
+    } catch {
       showNotification('Unable to submit support ticket', 'error');
     } finally {
       setSubmitting(false);

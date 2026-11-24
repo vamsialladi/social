@@ -5,6 +5,8 @@ import {
   Activity,
   BriefcaseBusiness,
   Check,
+  Eye,
+  EyeOff,
   FileText,
   LayoutDashboard,
   LogOut,
@@ -53,6 +55,7 @@ export default function AdminPage() {
   const [adminUser, setAdminUser] = useState(null)
   const [email, setEmail] = useState(demoAdminCredentials?.email || '')
   const [password, setPassword] = useState(demoAdminCredentials?.password || '')
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false)
   const [loginError, setLoginError] = useState('')
   const [isSigningIn, setIsSigningIn] = useState(false)
   const [activeSection, setActiveSection] = useState('overview')
@@ -315,30 +318,36 @@ export default function AdminPage() {
               onChange={(event) => setEmail(event.target.value)}
             />
             <label htmlFor="admin-password">Password</label>
-            <input
-              id="admin-password"
-              type="password"
-              autoComplete="current-password"
-              required
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-            />
-            {demoAdminCredentials && (
-              <div className="admin-demo-credentials">
-                <strong>Demo credentials (development only)</strong>
-                <span>Email: {demoAdminCredentials.email}</span>
-                <span>Password: {demoAdminCredentials.password}</span>
-              </div>
-            )}
+            <div className="admin-password-field">
+              <input
+                id="admin-password"
+                type={isPasswordVisible ? 'text' : 'password'}
+                autoComplete="current-password"
+                required
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+              />
+              <button
+                type="button"
+                className="admin-password-toggle"
+                onClick={() => setIsPasswordVisible((visible) => !visible)}
+                aria-label={isPasswordVisible ? 'Hide password' : 'Show password'}
+                aria-pressed={isPasswordVisible}
+                title={isPasswordVisible ? 'Hide password' : 'Show password'}
+              >
+                {isPasswordVisible
+                  ? <EyeOff size={18} aria-hidden="true" />
+                  : <Eye size={18} aria-hidden="true" />}
+              </button>
+            </div>
             {loginError && <p className="admin-error" role="alert">{loginError}</p>}
             <button type="submit" disabled={isSigningIn}>
               {isSigningIn ? 'Signing in…' : 'Sign in'}
             </button>
           </form>
           <p className="admin-login-note">
-            {demoAdminCredentials
-              ? 'The development admin account is created when the backend starts with the dev profile. Use npm run backend or mvn spring-boot:run.'
-              : 'Administrator access is verified by the sign-in service.'}
+            Administrator access is separate from Social and Production Team accounts.
+            {' '}Local demo credentials:<p>Email : <strong>truehunt@gmail.com</strong></p><p>Password : <strong>truehunt@2026</strong></p>
           </p>
         </section>
       </main>
@@ -607,6 +616,19 @@ export default function AdminPage() {
                               >
                                 <X size={14} aria-hidden="true" />
                                 Reject
+                              </button>
+                            </span>
+                          ) : request.status === 'PUBLISHED' ? (
+                            <span className="admin-investor-review-actions">
+                              <span className="admin-pill">{request.status}</span>
+                              <button
+                                type="button"
+                                className="admin-investor-review-button is-reject"
+                                onClick={() => handleInvestorRequestReview(request, 'reject')}
+                                disabled={reviewingInvestorRequestId != null}
+                              >
+                                <X size={14} aria-hidden="true" />
+                                Revoke
                               </button>
                             </span>
                           ) : <span className="admin-pill">{request.status}</span>}

@@ -1,5 +1,4 @@
-import React from 'react';
-import { Shield, Lock, Eye, FileText, ArrowLeft, Mail, Phone, MapPin, Building2, ExternalLink } from 'lucide-react';
+import { Shield, ArrowLeft } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { OFFICIAL_CONTACT } from '../constants/contactInfo';
 

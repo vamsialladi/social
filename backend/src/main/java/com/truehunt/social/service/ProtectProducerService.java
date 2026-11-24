@@ -394,6 +394,20 @@ public class ProtectProducerService {
         return getProjectById(projectId).getRecentActivity();
     }
 
+    // Checklists
+    public ProtectProjectDto updateChecklists(String projectId, Map<String, Object> checklists) {
+        ProtectProjectDto project = getProjectById(projectId);
+        Map<String, Object> merged = project.getChecklists() != null
+                ? new LinkedHashMap<>(project.getChecklists())
+                : new LinkedHashMap<>();
+        if (checklists != null) {
+            merged.putAll(checklists);
+        }
+        project.setChecklists(merged);
+        project.setUpdatedAt(LocalDateTime.now().toString());
+        return saveProject(project);
+    }
+
     private String normalizeCategory(String category) {
         return normalizeCategory(category, "");
     }
@@ -542,6 +556,7 @@ public class ProtectProducerService {
         entity.setRisksJson(writeJson(dto.getRisks()));
         entity.setEpisodesJson(writeJson(dto.getEpisodes()));
         entity.setRecentActivityJson(writeJson(dto.getRecentActivity()));
+        entity.setChecklistsJson(writeMapJson(dto.getChecklists()));
         return entity;
     }
 
@@ -574,7 +589,30 @@ public class ProtectProducerService {
         dto.setRisks(readJson(entity.getRisksJson(), new TypeReference<>() {}));
         dto.setEpisodes(readJson(entity.getEpisodesJson(), new TypeReference<>() {}));
         dto.setRecentActivity(readJson(entity.getRecentActivityJson(), new TypeReference<>() {}));
+        Map<String, Object> checklists = readMapJson(entity.getChecklistsJson());
+        if (!checklists.isEmpty()) {
+            dto.setChecklists(checklists);
+        }
         return dto;
+    }
+
+    private String writeMapJson(Map<String, Object> value) {
+        try {
+            return MAPPER.writeValueAsString(value != null ? value : Map.of());
+        } catch (Exception e) {
+            return "{}";
+        }
+    }
+
+    private Map<String, Object> readMapJson(String json) {
+        if (json == null || json.isBlank()) {
+            return new LinkedHashMap<>();
+        }
+        try {
+            return MAPPER.readValue(json, new TypeReference<Map<String, Object>>() {});
+        } catch (Exception e) {
+            return new LinkedHashMap<>();
+        }
     }
 
     private String writeJson(Object value) {

@@ -24,7 +24,9 @@ export default class ErrorBoundary extends React.Component {
   handleReload = () => {
     try {
       sessionStorage.removeItem('truehunt_intro_seen');
-    } catch {}
+    } catch (error) {
+      console.warn('Could not clear the intro state before reload:', error);
+    }
     window.location.reload();
   };
 
@@ -33,7 +35,9 @@ export default class ErrorBoundary extends React.Component {
       sessionStorage.clear();
       localStorage.removeItem('truehunt_token');
       localStorage.removeItem('truehunt_user');
-    } catch {}
+    } catch (error) {
+      console.warn('Could not clear browser storage during recovery:', error);
+    }
     window.location.href = '/';
   };
 

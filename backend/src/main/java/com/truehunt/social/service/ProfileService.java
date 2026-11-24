@@ -1,6 +1,7 @@
 package com.truehunt.social.service;
 
 import com.truehunt.social.dto.*;
+import com.truehunt.social.exception.ApiException;
 import com.truehunt.social.exception.BadRequestException;
 import com.truehunt.social.exception.ConflictException;
 import com.truehunt.social.exception.ResourceNotFoundException;
@@ -10,6 +11,8 @@ import com.truehunt.social.model.PostEntity;
 import com.truehunt.social.model.ProfileViewEntity;
 import com.truehunt.social.model.UserAccountEntity;
 import com.truehunt.social.model.UserProfileRelationshipEntity;
+import com.truehunt.social.model.NotificationEntity;
+import com.truehunt.social.repository.NotificationRepository;
 import com.truehunt.social.repository.PostRepository;
 import com.truehunt.social.repository.ProfileRepository;
 import com.truehunt.social.repository.ProfileViewRepository;
@@ -17,6 +20,8 @@ import com.truehunt.social.repository.UserAccountRepository;
 import com.truehunt.social.repository.UserProfileRelationshipRepository;
 import com.truehunt.social.validation.PhoneNumberPolicy;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -35,6 +40,8 @@ public class ProfileService {
     private final ProfileViewRepository profileViewRepository;
     private final UserProfileRelationshipRepository relationshipRepository;
     private final ObjectProvider<TalentService> talentServiceProvider;
+    private final SettingsService settingsService;
+    private final NotificationRepository notificationRepository;
 
     public ProfileService(
             ProfileRepository profileRepository,
@@ -42,14 +49,41 @@ public class ProfileService {
             PostRepository postRepository,
             ProfileViewRepository profileViewRepository,
             UserProfileRelationshipRepository relationshipRepository,
-            ObjectProvider<TalentService> talentServiceProvider
-    ) {
+            ObjectProvider<TalentService> talentServiceProvider) {
+        this(profileRepository, userAccountRepository, postRepository, profileViewRepository,
+                relationshipRepository, talentServiceProvider, null, null);
+    }
+
+    public ProfileService(
+            ProfileRepository profileRepository,
+            UserAccountRepository userAccountRepository,
+            PostRepository postRepository,
+            ProfileViewRepository profileViewRepository,
+            UserProfileRelationshipRepository relationshipRepository,
+            ObjectProvider<TalentService> talentServiceProvider,
+            SettingsService settingsService) {
+        this(profileRepository, userAccountRepository, postRepository, profileViewRepository,
+                relationshipRepository, talentServiceProvider, settingsService, null);
+    }
+
+    @Autowired
+    public ProfileService(
+            ProfileRepository profileRepository,
+            UserAccountRepository userAccountRepository,
+            PostRepository postRepository,
+            ProfileViewRepository profileViewRepository,
+            UserProfileRelationshipRepository relationshipRepository,
+            ObjectProvider<TalentService> talentServiceProvider,
+            SettingsService settingsService,
+            @Autowired(required = false) NotificationRepository notificationRepository) {
         this.profileRepository = profileRepository;
         this.userAccountRepository = userAccountRepository;
         this.postRepository = postRepository;
         this.profileViewRepository = profileViewRepository;
         this.relationshipRepository = relationshipRepository;
         this.talentServiceProvider = talentServiceProvider;
+        this.settingsService = settingsService;
+        this.notificationRepository = notificationRepository;
     }
 
     public List<Map<String, Object>> getPublicDirectory() {
@@ -57,16 +91,27 @@ public class ProfileService {
         for (ProfileEntity profile : profileRepository.findAll()) {
             Optional<UserAccountEntity> account = findAccountByEmail(profile.getEmail())
                     .or(() -> findAccountByPublicUserId(profile.getUserId()));
-            if (isAdminAccount(account)) continue;
+            if (isAdminAccount(account))
+                continue;
 
             String name = profile.getName();
-            if (name == null || name.isBlank()) {
-                name = account.map(UserAccountEntity::getName).orElse(null);
+            if (isGenericProfileName(name)) {
+                name = account.map(UserAccountEntity::getName)
+                        .filter(accountName -> !isGenericProfileName(accountName))
+                        .orElse(name);
             }
             String publicUserId = account.map(UserAccountEntity::getPublicUserId)
                     .filter(id -> id != null && !id.isBlank())
                     .orElse(profile.getUserId());
-            if (name == null || name.isBlank() || publicUserId == null || publicUserId.isBlank()) continue;
+            if (isGenericProfileName(name) || publicUserId == null || publicUserId.isBlank())
+                continue;
+
+            String checkIdentity = profile.getEmail() != null && !profile.getEmail().isBlank()
+                    ? profile.getEmail()
+                    : publicUserId;
+            if (settingsService != null && !settingsService.isPublicProfileEnabled(checkIdentity)) {
+                continue;
+            }
 
             directory.put(publicUserId.toLowerCase(Locale.ROOT),
                     toDirectoryProfile(profile, publicUserId, name));
@@ -74,18 +119,27 @@ public class ProfileService {
 
         for (UserAccountEntity account : userAccountRepository.findAll()) {
             if ("ADMIN".equalsIgnoreCase(account.getRole())
-                    || account.getName() == null || account.getName().isBlank()) {
+                    || isGenericProfileName(account.getName())) {
                 continue;
             }
             String publicUserId = account.getPublicUserId() != null && !account.getPublicUserId().isBlank()
                     ? account.getPublicUserId()
                     : String.valueOf(account.getId());
-            if (directory.containsKey(publicUserId.toLowerCase(Locale.ROOT))) continue;
+            if (directory.containsKey(publicUserId.toLowerCase(Locale.ROOT)))
+                continue;
+
+            String checkIdentity = account.getEmail() != null && !account.getEmail().isBlank()
+                    ? account.getEmail()
+                    : publicUserId;
+            if (settingsService != null && !settingsService.isPublicProfileEnabled(checkIdentity)) {
+                continue;
+            }
 
             ProfileEntity profile = profileRepository.findByEmail(account.getEmail()).orElseGet(ProfileEntity::new);
             profile.setUserId(publicUserId);
             profile.setEmail(account.getEmail());
-            if (profile.getName() == null || profile.getName().isBlank()) profile.setName(account.getName());
+            if (isGenericProfileName(profile.getName()))
+                profile.setName(account.getName());
             if ((profile.getPrimaryCraft() == null || profile.getPrimaryCraft().isBlank())
                     && account.getPrimaryCraft() != null) {
                 profile.setPrimaryCraft(account.getPrimaryCraft());
@@ -127,9 +181,11 @@ public class ProfileService {
         directoryProfile.put("skills", skills);
 
         String primaryCraft = profile.getPrimaryCraft() != null && !profile.getPrimaryCraft().isBlank()
-                ? profile.getPrimaryCraft() : (skills.isEmpty() ? "Cast (Actors)" : skills.get(0));
+                ? profile.getPrimaryCraft()
+                : (skills.isEmpty() ? "Cast (Actors)" : skills.get(0));
         String subCraft = profile.getSubCraft() != null && !profile.getSubCraft().isBlank()
-                ? profile.getSubCraft() : (primaryCraft.toLowerCase(Locale.ROOT).contains("act") ? "Lead Actor" : primaryCraft);
+                ? profile.getSubCraft()
+                : (primaryCraft.toLowerCase(Locale.ROOT).contains("act") ? "Lead Actor" : primaryCraft);
 
         directoryProfile.put("category", primaryCraft);
         directoryProfile.put("primaryCraft", primaryCraft);
@@ -139,14 +195,15 @@ public class ProfileService {
         directoryProfile.put("secondarySubCrafts", profile.getSecondarySubCrafts());
 
         String role = profile.getSubCraft() != null && !profile.getSubCraft().isBlank()
-                ? profile.getSubCraft() : primaryCraft;
+                ? profile.getSubCraft()
+                : primaryCraft;
         directoryProfile.put("role", role);
 
         String headline = profile.getHeadline() != null && !profile.getHeadline().isBlank()
                 ? profile.getHeadline()
                 : (profile.getSubCraft() != null && !profile.getSubCraft().isBlank()
-                    ? profile.getSubCraft() + " • " + primaryCraft
-                    : primaryCraft);
+                        ? profile.getSubCraft() + " • " + primaryCraft
+                        : primaryCraft);
         directoryProfile.put("headline", headline);
 
         directoryProfile.put("bio", profile.getHighlights() != null ? profile.getHighlights() : "");
@@ -230,6 +287,9 @@ public class ProfileService {
 
         if (account.isPresent()) {
             UserAccountEntity user = account.get();
+            if (dto.getEmail() == null || dto.getEmail().isBlank()) {
+                dto.setEmail(user.getEmail());
+            }
             if (user.getPublicUserId() != null && !user.getPublicUserId().isBlank()) {
                 dto.setId(user.getPublicUserId());
                 dto.setUserId(user.getPublicUserId());
@@ -255,29 +315,83 @@ public class ProfileService {
         Set<String> lowerOwnerIds = ownerIds.stream().map(s -> s.toLowerCase(Locale.ROOT)).collect(Collectors.toSet());
 
         Set<String> targetIds = new HashSet<>();
-        if (id != null && !id.isBlank()) targetIds.add(id.trim());
-        if (dto.getId() != null && !dto.getId().isBlank()) targetIds.add(dto.getId().trim());
-        if (dto.getUserId() != null && !dto.getUserId().isBlank()) targetIds.add(dto.getUserId().trim());
-        if (dto.getEmail() != null && !dto.getEmail().isBlank()) targetIds.add(dto.getEmail().trim());
+        if (id != null && !id.isBlank() && !id.matches("^\\d+$"))
+            targetIds.add(id.trim());
+        if (dto.getId() != null && !dto.getId().isBlank() && !dto.getId().matches("^\\d+$"))
+            targetIds.add(dto.getId().trim());
+        if (dto.getUserId() != null && !dto.getUserId().isBlank())
+            targetIds.add(dto.getUserId().trim());
+        if (dto.getEmail() != null && !dto.getEmail().isBlank())
+            targetIds.add(dto.getEmail().trim());
         if (dto.getEmail() != null && !dto.getEmail().isBlank()) {
             userAccountRepository.findByEmail(dto.getEmail().trim().toLowerCase(Locale.ROOT)).ifPresent(acc -> {
-                if (acc.getPublicUserId() != null) targetIds.add(acc.getPublicUserId());
-                targetIds.add(String.valueOf(acc.getId()));
+                if (acc.getPublicUserId() != null)
+                    targetIds.add(acc.getPublicUserId());
             });
         }
         if (dto.getUserId() != null && !dto.getUserId().isBlank()) {
             userAccountRepository.findByPublicUserId(dto.getUserId().trim()).ifPresent(acc -> {
-                if (acc.getEmail() != null) targetIds.add(acc.getEmail());
-                targetIds.add(String.valueOf(acc.getId()));
+                if (acc.getEmail() != null)
+                    targetIds.add(acc.getEmail());
             });
             profileRepository.findByUserId(dto.getUserId().trim()).ifPresent(p -> {
-                if (p.getEmail() != null) targetIds.add(p.getEmail());
-                if (p.getId() != null) targetIds.add(String.valueOf(p.getId()));
+                if (p.getEmail() != null)
+                    targetIds.add(p.getEmail());
             });
         }
-        Set<String> lowerTargetIds = targetIds.stream().map(s -> s.toLowerCase(Locale.ROOT)).collect(Collectors.toSet());
+        account.ifPresent(acc -> {
+            if (acc.getEmail() != null)
+                targetIds.add(acc.getEmail());
+            if (acc.getPublicUserId() != null)
+                targetIds.add(acc.getPublicUserId());
+        });
+        opt.ifPresent(p -> {
+            if (p.getEmail() != null)
+                targetIds.add(p.getEmail());
+            if (p.getUserId() != null)
+                targetIds.add(p.getUserId());
+        });
+        Set<String> lowerTargetIds = targetIds.stream().map(s -> s.toLowerCase(Locale.ROOT))
+                .collect(Collectors.toSet());
 
-        boolean isOwner = lowerTargetIds.stream().anyMatch(lowerOwnerIds::contains);
+        boolean isOwner = false;
+        if (userEmail != null && !userEmail.isBlank()) {
+            Set<String> callerIdentities = new HashSet<>();
+            callerIdentities.add(userEmail.trim().toLowerCase(Locale.ROOT));
+            userAccountRepository.findByEmail(userEmail.trim().toLowerCase(Locale.ROOT)).ifPresent(acc -> {
+                if (acc.getPublicUserId() != null)
+                    callerIdentities.add(acc.getPublicUserId().trim().toLowerCase(Locale.ROOT));
+            });
+            userAccountRepository.findByPublicUserId(userEmail.trim()).ifPresent(acc -> {
+                if (acc.getEmail() != null)
+                    callerIdentities.add(acc.getEmail().trim().toLowerCase(Locale.ROOT));
+            });
+
+            Set<String> targetIdentities = new HashSet<>();
+            if (dto.getEmail() != null && !dto.getEmail().isBlank()) {
+                targetIdentities.add(dto.getEmail().trim().toLowerCase(Locale.ROOT));
+            }
+            if (dto.getUserId() != null && !dto.getUserId().isBlank()) {
+                targetIdentities.add(dto.getUserId().trim().toLowerCase(Locale.ROOT));
+            }
+            if (dto.getId() != null && !dto.getId().isBlank() && !dto.getId().matches("^\\d+$")) {
+                targetIdentities.add(dto.getId().trim().toLowerCase(Locale.ROOT));
+            }
+            account.ifPresent(acc -> {
+                if (acc.getEmail() != null)
+                    targetIdentities.add(acc.getEmail().trim().toLowerCase(Locale.ROOT));
+                if (acc.getPublicUserId() != null)
+                    targetIdentities.add(acc.getPublicUserId().trim().toLowerCase(Locale.ROOT));
+            });
+            opt.ifPresent(p -> {
+                if (p.getEmail() != null)
+                    targetIdentities.add(p.getEmail().trim().toLowerCase(Locale.ROOT));
+                if (p.getUserId() != null)
+                    targetIdentities.add(p.getUserId().trim().toLowerCase(Locale.ROOT));
+            });
+
+            isOwner = callerIdentities.stream().anyMatch(targetIdentities::contains);
+        }
         dto.setIsOwner(isOwner);
         boolean isConnected = false;
 
@@ -289,8 +403,11 @@ public class ProfileService {
 
             for (UserProfileRelationshipEntity rel : relationshipRepository.findAll()) {
                 String owner = rel.getOwnerUserId() != null ? rel.getOwnerUserId().trim().toLowerCase(Locale.ROOT) : "";
-                String target = rel.getTargetProfileId() != null ? rel.getTargetProfileId().trim().toLowerCase(Locale.ROOT) : "";
-                String sender = rel.getSenderUserId() != null ? rel.getSenderUserId().trim().toLowerCase(Locale.ROOT) : "";
+                String target = rel.getTargetProfileId() != null
+                        ? rel.getTargetProfileId().trim().toLowerCase(Locale.ROOT)
+                        : "";
+                String sender = rel.getSenderUserId() != null ? rel.getSenderUserId().trim().toLowerCase(Locale.ROOT)
+                        : "";
 
                 boolean matchesOwnerToTarget = lowerOwnerIds.contains(owner) && lowerTargetIds.contains(target);
                 boolean matchesTargetToOwner = lowerTargetIds.contains(owner) && lowerOwnerIds.contains(target);
@@ -318,7 +435,8 @@ public class ProfileService {
             dto.setIsPending(isPending);
             dto.setIsOutgoingPending(isOutgoingPending);
             dto.setIsIncomingPending(isIncomingPending);
-            dto.setConnectionStatus(isConnected ? "CONNECTED" : (isPending ? (isOutgoingPending ? "PENDING_OUTGOING" : "PENDING_INCOMING") : "NONE"));
+            dto.setConnectionStatus(isConnected ? "CONNECTED"
+                    : (isPending ? (isOutgoingPending ? "PENDING_OUTGOING" : "PENDING_INCOMING") : "NONE"));
         } else {
             dto.setIsConnected(false);
             dto.setIsFollowing(false);
@@ -329,9 +447,64 @@ public class ProfileService {
         }
 
         if (!isOwner) {
+            final String ownerEmail = dto.getEmail();
+            final String ownerId = dto.getUserId() != null && !dto.getUserId().isBlank() ? dto.getUserId()
+                    : dto.getId();
+            final String ownerIdentity = (ownerEmail != null && !ownerEmail.isBlank()) ? ownerEmail : ownerId;
+
+            boolean isMutualConnection = false;
+            if (!isConnected && !lowerOwnerIds.isEmpty()) {
+                isMutualConnection = hasMutualConnection(lowerOwnerIds, lowerTargetIds);
+            }
+            dto.setIsMutualConnection(isMutualConnection);
+
+            boolean isPublicProfile = settingsService == null || settingsService.isPublicProfileEnabled(ownerIdentity);
+            if (!isPublicProfile && !isConnected && !isMutualConnection) {
+                throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN",
+                        "This profile is private. Only connections and mutual connections can view this profile.");
+            }
+
             dto.setPhone(null);
             dto.setEmail(null);
             dto.setProfessionalPhone(null);
+            if (settingsService != null && ownerIdentity != null && !ownerIdentity.isBlank()) {
+                if (!settingsService.isConnectingWithOthersEnabled(ownerIdentity)) {
+                    dto.setConnectionsCount(0);
+                    dto.setConnectionsVisible(false);
+                    if (!Boolean.TRUE.equals(dto.getIsConnected())) {
+                        dto.setConnectionStatus("NONE");
+                        dto.setIsPending(false);
+                        dto.setIsOutgoingPending(false);
+                        dto.setIsIncomingPending(false);
+                    }
+                }
+                Map<String, Object> ownerMediaPrefs = settingsService.getMediaPreferencesForUser(ownerIdentity);
+                if ("private".equalsIgnoreCase(String.valueOf(ownerMediaPrefs.get("videoPosts")))) {
+                    dto.setVideos(Collections.emptyList());
+                    dto.setVideoUrls(Collections.emptyList());
+                    dto.setShowreel(null);
+                }
+                if ("private".equalsIgnoreCase(String.valueOf(ownerMediaPrefs.get("externalUrls")))) {
+                    dto.setVideoUrls(Collections.emptyList());
+                    dto.setWebsiteUrl(null);
+                }
+            }
+            if (dto.getPosts() != null && !dto.getPosts().isEmpty()) {
+                final boolean viewerConnected = Boolean.TRUE.equals(dto.getIsConnected());
+                List<Map<String, Object>> visiblePosts = dto.getPosts().stream()
+                        .filter(postDto -> {
+                            String audience = postDto.get("audience") != null
+                                    ? String.valueOf(postDto.get("audience")).trim().toLowerCase(Locale.ROOT)
+                                    : "public";
+                            if ("private".equals(audience))
+                                return false;
+                            if ("connections".equals(audience) && !viewerConnected)
+                                return false;
+                            return true;
+                        })
+                        .collect(Collectors.toList());
+                dto.setPosts(visiblePosts);
+            }
         }
 
         return dto;
@@ -374,10 +547,13 @@ public class ProfileService {
             try {
                 Long accId = Long.parseLong(clean);
                 userAccountRepository.findById(accId).ifPresent(acc -> {
-                    if (acc.getEmail() != null) ids.add(acc.getEmail().toLowerCase(Locale.ROOT));
-                    if (acc.getPublicUserId() != null) ids.add(acc.getPublicUserId().toLowerCase(Locale.ROOT));
+                    if (acc.getEmail() != null)
+                        ids.add(acc.getEmail().toLowerCase(Locale.ROOT));
+                    if (acc.getPublicUserId() != null)
+                        ids.add(acc.getPublicUserId().toLowerCase(Locale.ROOT));
                 });
-            } catch (NumberFormatException ignored) {}
+            } catch (NumberFormatException ignored) {
+            }
             profileRepository.findByUserId(clean).ifPresent(p -> {
                 if (p.getEmail() != null && !p.getEmail().isBlank()) {
                     ids.add(p.getEmail().toLowerCase(Locale.ROOT));
@@ -435,8 +611,8 @@ public class ProfileService {
                     fallback.setEmail(userIdentifier != null && userIdentifier.contains("@")
                             ? userIdentifier
                             : (req.getEmail() != null && !req.getEmail().isBlank()
-                                ? req.getEmail().trim().toLowerCase(Locale.ROOT)
-                                : "pro@truehunt.in"));
+                                    ? req.getEmail().trim().toLowerCase(Locale.ROOT)
+                                    : "pro@truehunt.in"));
                     fallback.setName(profile.getName() != null ? profile.getName() : "Cinema Professional");
                     fallback.setPublicUserId(profile.getUserId() != null ? profile.getUserId() : "1000001");
                     fallback.setCreatedAt(LocalDateTime.now());
@@ -444,7 +620,7 @@ public class ProfileService {
                 });
         String oldUserId = currentAccount.getPublicUserId();
         String newUserId = req.getUserId() == null ? oldUserId : req.getUserId().trim().toUpperCase(Locale.ROOT);
-        if (newUserId == null || !newUserId.matches("[A-Z0-9_-]{3,14}")) {
+        if (newUserId == null || !newUserId.matches("(?i)[A-Z0-9_-]{3,14}")) {
             throw new BadRequestException("User ID must be 3 to 14 letters, numbers, underscores, or hyphens.");
         }
         if (!newUserId.equalsIgnoreCase(oldUserId)) {
@@ -462,52 +638,96 @@ public class ProfileService {
             profile.setUserId(newUserId);
         }
 
-        if (req.getName() != null) profile.setName(req.getName());
-        else if (req.getFullName() != null) profile.setName(req.getFullName());
-        if (req.getHeadline() != null) profile.setHeadline(req.getHeadline());
-        if (req.getRole() != null) profile.setRole(req.getRole());
-        if (req.getCategory() != null) profile.setCategory(req.getCategory());
-        if (req.getCompany() != null) profile.setCompany(req.getCompany());
-        else if (req.getCompanyName() != null) profile.setCompany(req.getCompanyName());
-        if (req.getIndustry() != null) profile.setIndustry(req.getIndustry());
-        if (req.getWebsiteUrl() != null) profile.setWebsiteUrl(req.getWebsiteUrl());
-        if (req.getAvailability() != null) profile.setAvailability(req.getAvailability());
-        if (req.getPhone() != null) profile.setPhone(req.getPhone());
-        else if (req.getPhoneNumber() != null) profile.setPhone(req.getPhoneNumber());
-        if (req.getProfessionalPhone() != null) profile.setProfessionalPhone(req.getProfessionalPhone());
-        if (req.getEmail() != null) profile.setEmail(req.getEmail());
-        if (req.getExperience() != null) profile.setExperience(req.getExperience());
-        else if (req.getExperienceYears() != null) profile.setExperience(req.getExperienceYears());
-        if (req.getPrimaryCraft() != null) profile.setPrimaryCraft(req.getPrimaryCraft());
-        else if (req.getCraft() != null) profile.setPrimaryCraft(req.getCraft());
-        if (req.getSubCraft() != null) profile.setSubCraft(req.getSubCraft());
-        if (req.getDateOfBirth() != null) profile.setDateOfBirth(req.getDateOfBirth());
-        if (req.getHeight() != null) profile.setHeight(req.getHeight());
-        if (req.getWeight() != null) profile.setWeight(req.getWeight());
-        if (req.getBodyBuild() != null) profile.setBodyBuild(req.getBodyBuild());
-        if (req.getGender() != null) profile.setGender(req.getGender());
-        if (req.getFacialHair() != null) profile.setFacialHair(req.getFacialHair());
-        if (req.getSkinTone() != null) profile.setSkinTone(req.getSkinTone());
-        if (req.getAddress() != null) profile.setAddress(req.getAddress());
-        else if (req.getLocation() != null) profile.setAddress(req.getLocation());
-        else if (req.getHeadquarters() != null) profile.setAddress(req.getHeadquarters());
+        if (req.getName() != null)
+            profile.setName(req.getName());
+        else if (req.getFullName() != null)
+            profile.setName(req.getFullName());
+        if (req.getHeadline() != null)
+            profile.setHeadline(req.getHeadline());
+        if (req.getRole() != null)
+            profile.setRole(req.getRole());
+        if (req.getCategory() != null)
+            profile.setCategory(req.getCategory());
+        if (req.getCompany() != null)
+            profile.setCompany(req.getCompany());
+        else if (req.getCompanyName() != null)
+            profile.setCompany(req.getCompanyName());
+        if (req.getIndustry() != null)
+            profile.setIndustry(req.getIndustry());
+        if (req.getWebsiteUrl() != null)
+            profile.setWebsiteUrl(req.getWebsiteUrl());
+        if (req.getAvailability() != null)
+            profile.setAvailability(req.getAvailability());
+        if (req.getPhone() != null)
+            profile.setPhone(req.getPhone());
+        else if (req.getPhoneNumber() != null)
+            profile.setPhone(req.getPhoneNumber());
+        if (req.getProfessionalPhone() != null)
+            profile.setProfessionalPhone(req.getProfessionalPhone());
+        if (req.getEmail() != null)
+            profile.setEmail(req.getEmail());
+        if (req.getExperience() != null)
+            profile.setExperience(req.getExperience());
+        else if (req.getExperienceYears() != null)
+            profile.setExperience(req.getExperienceYears());
+        if (req.getPrimaryCraft() != null)
+            profile.setPrimaryCraft(req.getPrimaryCraft());
+        else if (req.getCraft() != null)
+            profile.setPrimaryCraft(req.getCraft());
+        if (req.getSubCraft() != null)
+            profile.setSubCraft(req.getSubCraft());
+        if (req.getDateOfBirth() != null)
+            profile.setDateOfBirth(req.getDateOfBirth());
+        if (req.getHeight() != null)
+            profile.setHeight(req.getHeight());
+        if (req.getWeight() != null)
+            profile.setWeight(req.getWeight());
+        if (req.getBodyBuild() != null)
+            profile.setBodyBuild(req.getBodyBuild());
+        if (req.getGender() != null)
+            profile.setGender(req.getGender());
+        if (req.getFacialHair() != null)
+            profile.setFacialHair(req.getFacialHair());
+        if (req.getSkinTone() != null)
+            profile.setSkinTone(req.getSkinTone());
+        if (req.getAddress() != null)
+            profile.setAddress(req.getAddress());
+        else if (req.getLocation() != null)
+            profile.setAddress(req.getLocation());
+        else if (req.getHeadquarters() != null)
+            profile.setAddress(req.getHeadquarters());
         String updatedBio = req.getBio() != null ? req.getBio() : req.getHighlights();
         if (updatedBio != null) {
             profile.setBio(updatedBio);
             profile.setHighlights(updatedBio);
         }
-        if (req.getOtherLanguage() != null) profile.setOtherLanguage(req.getOtherLanguage());
-        if (req.getProfileImageUrl() != null) profile.setProfileImageUrl(req.getProfileImageUrl());
-        else if (req.getAvatar() != null) profile.setProfileImageUrl(req.getAvatar());
-        if (req.getCoverImageUrl() != null) profile.setCoverImageUrl(req.getCoverImageUrl());
-        else if (req.getCoverImage() != null) profile.setCoverImageUrl(req.getCoverImage());
+        if (req.getOtherLanguage() != null)
+            profile.setOtherLanguage(req.getOtherLanguage());
+        if (req.getProfileImageUrl() != null)
+            profile.setProfileImageUrl(req.getProfileImageUrl());
+        else if (req.getAvatar() != null)
+            profile.setProfileImageUrl(req.getAvatar());
+        if (req.getCoverImageUrl() != null)
+            profile.setCoverImageUrl(req.getCoverImageUrl());
+        else if (req.getCoverImage() != null)
+            profile.setCoverImageUrl(req.getCoverImage());
+        if (req.getShowreel() != null)
+            profile.setShowreel(req.getShowreel());
+        if (req.getAcceptedTerms() != null)
+            profile.setAcceptedTerms(req.getAcceptedTerms());
 
-        if (req.getLanguages() != null) profile.setLanguages(req.getLanguages());
-        if (req.getSecondaryCrafts() != null) profile.setSecondaryCrafts(req.getSecondaryCrafts());
-        if (req.getSecondarySubCrafts() != null) profile.setSecondarySubCrafts(req.getSecondarySubCrafts());
-        if (req.getWorkTypes() != null) profile.setWorkTypes(req.getWorkTypes());
-        if (req.getVideoUrls() != null) profile.setVideoUrls(req.getVideoUrls());
-        if (req.getVideos() != null) profile.setVideos(req.getVideos());
+        if (req.getLanguages() != null)
+            profile.setLanguages(req.getLanguages());
+        if (req.getSecondaryCrafts() != null)
+            profile.setSecondaryCrafts(req.getSecondaryCrafts());
+        if (req.getSecondarySubCrafts() != null)
+            profile.setSecondarySubCrafts(req.getSecondarySubCrafts());
+        if (req.getWorkTypes() != null)
+            profile.setWorkTypes(req.getWorkTypes());
+        if (req.getVideoUrls() != null)
+            profile.setVideoUrls(req.getVideoUrls());
+        if (req.getVideos() != null)
+            profile.setVideos(req.getVideos());
 
         if (req.getTalents() != null) {
             profile.setTalents(req.getTalents());
@@ -557,16 +777,25 @@ public class ProfileService {
         ProfileEntity saved = profileRepository.save(profile);
 
         // Synchronize with UserAccountEntity if present
-        if (profile.getName() != null) currentAccount.setName(profile.getName());
-        if (profile.getPhone() != null) currentAccount.setPhone(profile.getPhone());
-        if (profile.getPrimaryCraft() != null) currentAccount.setPrimaryCraft(profile.getPrimaryCraft());
-        if (profile.getSubCraft() != null) currentAccount.setSubCraft(profile.getSubCraft());
-        if (profile.getExperience() != null) currentAccount.setExperience(profile.getExperience());
-        if (profile.getCompany() != null) currentAccount.setCompanyName(profile.getCompany());
-        if (req.getHeadquarters() != null) currentAccount.setHeadquarters(req.getHeadquarters());
-        else if (profile.getAddress() != null) currentAccount.setHeadquarters(profile.getAddress());
+        if (profile.getName() != null)
+            currentAccount.setName(profile.getName());
+        if (profile.getPhone() != null)
+            currentAccount.setPhone(profile.getPhone());
+        if (profile.getPrimaryCraft() != null)
+            currentAccount.setPrimaryCraft(profile.getPrimaryCraft());
+        if (profile.getSubCraft() != null)
+            currentAccount.setSubCraft(profile.getSubCraft());
+        if (profile.getExperience() != null)
+            currentAccount.setExperience(profile.getExperience());
+        if (profile.getCompany() != null)
+            currentAccount.setCompanyName(profile.getCompany());
+        if (req.getHeadquarters() != null)
+            currentAccount.setHeadquarters(req.getHeadquarters());
+        else if (profile.getAddress() != null)
+            currentAccount.setHeadquarters(profile.getAddress());
         userAccountRepository.save(currentAccount);
 
+        notifyConnectionsOfProfileUpdate(saved, userEmail);
         ProfileDto dto = mapEntityToDto(saved);
         dto.setIsOwner(true);
         return dto;
@@ -580,16 +809,20 @@ public class ProfileService {
         List<ProfileViewEntity> views = profileViewRepository
                 .findAllByOwnerUserIdOrViewerUserId(oldUserId, oldUserId);
         for (ProfileViewEntity view : views) {
-            if (oldUserId.equals(view.getOwnerUserId())) view.setOwnerUserId(newUserId);
-            if (oldUserId.equals(view.getViewerUserId())) view.setViewerUserId(newUserId);
+            if (oldUserId.equals(view.getOwnerUserId()))
+                view.setOwnerUserId(newUserId);
+            if (oldUserId.equals(view.getViewerUserId()))
+                view.setViewerUserId(newUserId);
         }
         profileViewRepository.saveAll(views);
 
         List<UserProfileRelationshipEntity> relationships = relationshipRepository
                 .findAllByOwnerUserIdOrTargetProfileId(oldUserId, oldUserId);
         for (UserProfileRelationshipEntity relationship : relationships) {
-            if (oldUserId.equals(relationship.getOwnerUserId())) relationship.setOwnerUserId(newUserId);
-            if (oldUserId.equals(relationship.getTargetProfileId())) relationship.setTargetProfileId(newUserId);
+            if (oldUserId.equals(relationship.getOwnerUserId()))
+                relationship.setOwnerUserId(newUserId);
+            if (oldUserId.equals(relationship.getTargetProfileId()))
+                relationship.setTargetProfileId(newUserId);
         }
         relationshipRepository.saveAll(relationships);
     }
@@ -609,6 +842,7 @@ public class ProfileService {
         profile.setExperiences(experiences);
         profile.setUpdatedAt(LocalDateTime.now());
         profileRepository.save(profile);
+        notifyConnectionsOfProfileUpdate(profile, userEmail);
 
         return exp;
     }
@@ -622,20 +856,34 @@ public class ProfileService {
             Map<String, Object> item = experiences.get(i);
             if (Objects.equals(item.get("id"), id)) {
                 Map<String, Object> updated = new HashMap<>(item);
-                if (exp.getTitle() != null) updated.put("title", exp.getTitle());
-                if (exp.getCompany() != null) updated.put("company", exp.getCompany());
-                if (exp.getEmploymentType() != null) updated.put("employmentType", exp.getEmploymentType());
-                if (exp.getLocation() != null) updated.put("location", exp.getLocation());
-                if (exp.getStartDate() != null) updated.put("startDate", exp.getStartDate());
-                if (exp.getEndDate() != null) updated.put("endDate", exp.getEndDate());
-                if (exp.getDuration() != null) updated.put("duration", exp.getDuration());
-                if (exp.getIsCurrent() != null) updated.put("isCurrent", exp.getIsCurrent());
-                if (exp.getDescription() != null) updated.put("description", exp.getDescription());
-                if (exp.getHighlights() != null) updated.put("highlights", exp.getHighlights());
-                if (exp.getProjectName() != null) updated.put("projectName", exp.getProjectName());
-                if (exp.getMovieName() != null) updated.put("movieName", exp.getMovieName());
-                if (exp.getOrganizationName() != null) updated.put("organizationName", exp.getOrganizationName());
-                if (exp.getWorkedAs() != null) updated.put("workedAs", exp.getWorkedAs());
+                if (exp.getTitle() != null)
+                    updated.put("title", exp.getTitle());
+                if (exp.getCompany() != null)
+                    updated.put("company", exp.getCompany());
+                if (exp.getEmploymentType() != null)
+                    updated.put("employmentType", exp.getEmploymentType());
+                if (exp.getLocation() != null)
+                    updated.put("location", exp.getLocation());
+                if (exp.getStartDate() != null)
+                    updated.put("startDate", exp.getStartDate());
+                if (exp.getEndDate() != null)
+                    updated.put("endDate", exp.getEndDate());
+                if (exp.getDuration() != null)
+                    updated.put("duration", exp.getDuration());
+                if (exp.getIsCurrent() != null)
+                    updated.put("isCurrent", exp.getIsCurrent());
+                if (exp.getDescription() != null)
+                    updated.put("description", exp.getDescription());
+                if (exp.getHighlights() != null)
+                    updated.put("highlights", exp.getHighlights());
+                if (exp.getProjectName() != null)
+                    updated.put("projectName", exp.getProjectName());
+                if (exp.getMovieName() != null)
+                    updated.put("movieName", exp.getMovieName());
+                if (exp.getOrganizationName() != null)
+                    updated.put("organizationName", exp.getOrganizationName());
+                if (exp.getWorkedAs() != null)
+                    updated.put("workedAs", exp.getWorkedAs());
                 if (exp.getOrganizationLogoUrl() != null) {
                     updated.put("organizationLogoUrl", exp.getOrganizationLogoUrl());
                     updated.put("companyLogoUrl", exp.getOrganizationLogoUrl());
@@ -643,8 +891,10 @@ public class ProfileService {
                     updated.put("companyLogoUrl", exp.getCompanyLogoUrl());
                     updated.put("organizationLogoUrl", exp.getCompanyLogoUrl());
                 }
-                if (exp.getFeaturedOnProfile() != null) updated.put("featuredOnProfile", exp.getFeaturedOnProfile());
-                if (exp.getAttachment() != null) updated.put("attachment", exp.getAttachment());
+                if (exp.getFeaturedOnProfile() != null)
+                    updated.put("featuredOnProfile", exp.getFeaturedOnProfile());
+                if (exp.getAttachment() != null)
+                    updated.put("attachment", exp.getAttachment());
                 experiences.set(i, updated);
                 found = true;
                 break;
@@ -657,6 +907,7 @@ public class ProfileService {
         profile.setExperiences(experiences);
         profile.setUpdatedAt(LocalDateTime.now());
         profileRepository.save(profile);
+        notifyConnectionsOfProfileUpdate(profile, userEmail);
         exp.setId(id);
         return exp;
     }
@@ -670,6 +921,7 @@ public class ProfileService {
         profile.setExperiences(filtered);
         profile.setUpdatedAt(LocalDateTime.now());
         profileRepository.save(profile);
+        notifyConnectionsOfProfileUpdate(profile, userEmail);
 
         Map<String, Object> res = new HashMap<>();
         res.put("message", "Experience deleted successfully");
@@ -692,6 +944,7 @@ public class ProfileService {
         profile.setEducations(educations);
         profile.setUpdatedAt(LocalDateTime.now());
         profileRepository.save(profile);
+        notifyConnectionsOfProfileUpdate(profile, userEmail);
 
         return edu;
     }
@@ -705,14 +958,22 @@ public class ProfileService {
             Map<String, Object> item = educations.get(i);
             if (Objects.equals(item.get("id"), id)) {
                 Map<String, Object> updated = new HashMap<>(item);
-                if (edu.getInstitution() != null) updated.put("institution", edu.getInstitution());
-                if (edu.getDegree() != null) updated.put("degree", edu.getDegree());
-                if (edu.getFieldOfStudy() != null) updated.put("fieldOfStudy", edu.getFieldOfStudy());
-                if (edu.getStartDate() != null) updated.put("startDate", edu.getStartDate());
-                if (edu.getEndDate() != null) updated.put("endDate", edu.getEndDate());
-                if (edu.getGrade() != null) updated.put("grade", edu.getGrade());
-                if (edu.getActivities() != null) updated.put("activities", edu.getActivities());
-                if (edu.getDescription() != null) updated.put("description", edu.getDescription());
+                if (edu.getInstitution() != null)
+                    updated.put("institution", edu.getInstitution());
+                if (edu.getDegree() != null)
+                    updated.put("degree", edu.getDegree());
+                if (edu.getFieldOfStudy() != null)
+                    updated.put("fieldOfStudy", edu.getFieldOfStudy());
+                if (edu.getStartDate() != null)
+                    updated.put("startDate", edu.getStartDate());
+                if (edu.getEndDate() != null)
+                    updated.put("endDate", edu.getEndDate());
+                if (edu.getGrade() != null)
+                    updated.put("grade", edu.getGrade());
+                if (edu.getActivities() != null)
+                    updated.put("activities", edu.getActivities());
+                if (edu.getDescription() != null)
+                    updated.put("description", edu.getDescription());
                 educations.set(i, updated);
                 found = true;
                 break;
@@ -725,6 +986,7 @@ public class ProfileService {
         profile.setEducations(educations);
         profile.setUpdatedAt(LocalDateTime.now());
         profileRepository.save(profile);
+        notifyConnectionsOfProfileUpdate(profile, userEmail);
         edu.setId(id);
         return edu;
     }
@@ -738,6 +1000,7 @@ public class ProfileService {
         profile.setEducations(filtered);
         profile.setUpdatedAt(LocalDateTime.now());
         profileRepository.save(profile);
+        notifyConnectionsOfProfileUpdate(profile, userEmail);
 
         Map<String, Object> res = new HashMap<>();
         res.put("message", "Education deleted successfully");
@@ -767,6 +1030,7 @@ public class ProfileService {
         profile.setProjects(projects);
         profile.setUpdatedAt(LocalDateTime.now());
         profileRepository.save(profile);
+        notifyConnectionsOfProfileUpdate(profile, userEmail);
 
         return project;
     }
@@ -780,12 +1044,18 @@ public class ProfileService {
             Map<String, Object> item = projects.get(i);
             if (Objects.equals(item.get("id"), id)) {
                 Map<String, Object> updated = new HashMap<>(item);
-                if (project.getTitle() != null) updated.put("title", project.getTitle());
-                if (project.getDescription() != null) updated.put("description", project.getDescription());
-                if (project.getTechnologies() != null) updated.put("technologies", project.getTechnologies());
-                if (project.getProjectUrl() != null) updated.put("projectUrl", project.getProjectUrl());
-                if (project.getStartDate() != null) updated.put("startDate", project.getStartDate());
-                if (project.getEndDate() != null) updated.put("endDate", project.getEndDate());
+                if (project.getTitle() != null)
+                    updated.put("title", project.getTitle());
+                if (project.getDescription() != null)
+                    updated.put("description", project.getDescription());
+                if (project.getTechnologies() != null)
+                    updated.put("technologies", project.getTechnologies());
+                if (project.getProjectUrl() != null)
+                    updated.put("projectUrl", project.getProjectUrl());
+                if (project.getStartDate() != null)
+                    updated.put("startDate", project.getStartDate());
+                if (project.getEndDate() != null)
+                    updated.put("endDate", project.getEndDate());
                 projects.set(i, updated);
                 found = true;
                 break;
@@ -798,6 +1068,7 @@ public class ProfileService {
         profile.setProjects(projects);
         profile.setUpdatedAt(LocalDateTime.now());
         profileRepository.save(profile);
+        notifyConnectionsOfProfileUpdate(profile, userEmail);
         project.setId(id);
         return project;
     }
@@ -811,6 +1082,7 @@ public class ProfileService {
         profile.setProjects(filtered);
         profile.setUpdatedAt(LocalDateTime.now());
         profileRepository.save(profile);
+        notifyConnectionsOfProfileUpdate(profile, userEmail);
 
         Map<String, Object> res = new HashMap<>();
         res.put("message", "Project deleted successfully");
@@ -828,6 +1100,7 @@ public class ProfileService {
             profile.setTalents(skills);
             profile.setUpdatedAt(LocalDateTime.now());
             profileRepository.save(profile);
+            notifyConnectionsOfProfileUpdate(profile, userEmail);
         }
         return mapEntityToDto(profile);
     }
@@ -841,6 +1114,7 @@ public class ProfileService {
         profile.setTalents(skills);
         profile.setUpdatedAt(LocalDateTime.now());
         profileRepository.save(profile);
+        notifyConnectionsOfProfileUpdate(profile, userEmail);
         return mapEntityToDto(profile);
     }
 
@@ -889,13 +1163,16 @@ public class ProfileService {
                 final String pid = publicUserId;
                 ProfileEntity profile = profileRepository.findByUserId(pid)
                         .or(() -> (account.getEmail() != null && !account.getEmail().isBlank())
-                                ? profileRepository.findByEmail(account.getEmail()).filter(p -> !"me".equalsIgnoreCase(p.getUserId()))
+                                ? profileRepository.findByEmail(account.getEmail())
+                                        .filter(p -> !"me".equalsIgnoreCase(p.getUserId()))
                                 : Optional.empty())
                         .orElseGet(ProfileEntity::new);
                 profile.setUserId(pid);
                 syncProfileWithAccount(profile, account);
                 return profileRepository.save(profile);
             }
+
+            throw new ResourceNotFoundException("Profile", "user", clean);
         }
 
         // Fallback to 1000001 / pro@truehunt.in only if not found
@@ -928,11 +1205,28 @@ public class ProfileService {
         return profileRepository.save(fallback);
     }
 
+    public ProfileEntity findCurrentProfileForPost(String userEmail) {
+        try {
+            return findCurrentProfile(userEmail);
+        } catch (ResourceNotFoundException exception) {
+            String clean = resolveUserEmail(userEmail);
+            if (clean == null || !clean.matches("[^\\s@]+@[^\\s@]+")) {
+                throw exception;
+            }
+
+            ProfileEntity sessionProfile = new ProfileEntity();
+            sessionProfile.setUserId(clean);
+            sessionProfile.setEmail(clean);
+            sessionProfile.setName("Cinema Professional");
+            return sessionProfile;
+        }
+    }
+
     private void syncProfileWithAccount(ProfileEntity profile, UserAccountEntity account) {
-        if (account == null) return;
+        if (account == null)
+            return;
         if (account.getName() != null && !account.getName().isBlank()) {
-            if (profile.getName() == null || profile.getName().isBlank()
-                    || "Cinema Professional".equalsIgnoreCase(profile.getName())) {
+            if (isGenericProfileName(profile.getName())) {
                 profile.setName(account.getName());
             }
         }
@@ -941,6 +1235,7 @@ public class ProfileService {
                 profile.setEmail(account.getEmail());
             }
         }
+
         if (account.getPhone() != null && !account.getPhone().isBlank()) {
             if (profile.getPhone() == null || profile.getPhone().isBlank()) {
                 profile.setPhone(account.getPhone());
@@ -990,6 +1285,17 @@ public class ProfileService {
         }
     }
 
+    private boolean isGenericProfileName(String name) {
+        if (name == null || name.isBlank()) {
+            return true;
+        }
+        String normalizedName = name.trim().toLowerCase(Locale.ROOT);
+        return "truehunt member".equals(normalizedName)
+                || "cinema professional".equals(normalizedName)
+                || "member".equals(normalizedName)
+                || "profile".equals(normalizedName);
+    }
+
     private ProfileEntity findEditableProfile(String userEmail) {
         String identifier = resolveUserEmail(userEmail);
         Optional<UserAccountEntity> account = resolveAccount(identifier);
@@ -1000,7 +1306,8 @@ public class ProfileService {
     }
 
     private boolean isAdminProfile(ProfileEntity profile) {
-        if (profile == null) return false;
+        if (profile == null)
+            return false;
         Optional<UserAccountEntity> account = resolveAccount(profile.getEmail())
                 .or(() -> resolveAccount(profile.getUserId()));
         return isAdminAccount(account);
@@ -1072,7 +1379,8 @@ public class ProfileService {
         dto.setProfessionalPhone(entity.getProfessionalPhone() != null ? entity.getProfessionalPhone() : "");
         dto.setEmail(entity.getEmail());
         dto.setAddress(entity.getAddress());
-        dto.setLocation(entity.getAddress() != null && !entity.getAddress().isBlank() ? entity.getAddress() : "Hyderabad, India");
+        dto.setLocation(entity.getAddress() != null && !entity.getAddress().isBlank() ? entity.getAddress()
+                : "Hyderabad, India");
         String bioVal = entity.getBio() != null ? entity.getBio() : entity.getHighlights();
         dto.setBio(bioVal != null ? bioVal : "");
         dto.setHighlights(dto.getBio());
@@ -1082,11 +1390,12 @@ public class ProfileService {
         dto.setSubCraft(entity.getSubCraft());
         dto.setHeadline(entity.getHeadline() != null && !entity.getHeadline().isBlank()
                 ? entity.getHeadline()
-                : (entity.getPrimaryCraft() != null ? entity.getPrimaryCraft() + " | Cinema Industry Professional" : "Cinema Professional"));
-        dto.setRole(entity.getRole() != null ? entity.getRole() :
-                (entity.getPrimaryCraft() != null ? entity.getPrimaryCraft() : "Cinema Professional"));
-        dto.setCategory(entity.getCategory() != null ? entity.getCategory() :
-                (entity.getPrimaryCraft() != null ? entity.getPrimaryCraft() : "Film Industry"));
+                : (entity.getPrimaryCraft() != null ? entity.getPrimaryCraft() + " | Cinema Industry Professional"
+                        : "Cinema Professional"));
+        dto.setRole(entity.getRole() != null ? entity.getRole()
+                : (entity.getPrimaryCraft() != null ? entity.getPrimaryCraft() : "Cinema Professional"));
+        dto.setCategory(entity.getCategory() != null ? entity.getCategory()
+                : (entity.getPrimaryCraft() != null ? entity.getPrimaryCraft() : "Film Industry"));
         dto.setCompany(entity.getCompany());
         dto.setIndustry(entity.getIndustry());
         dto.setWebsiteUrl(entity.getWebsiteUrl());
@@ -1108,8 +1417,10 @@ public class ProfileService {
         if (entity.getUserId() != null && !entity.getUserId().isBlank()) {
             profileIds.add(entity.getUserId().trim().toLowerCase(Locale.ROOT));
             userAccountRepository.findByPublicUserId(entity.getUserId().trim()).ifPresent(acc -> {
-                if (acc.getEmail() != null) profileIds.add(acc.getEmail().trim().toLowerCase(Locale.ROOT));
-                if (acc.getId() != null) profileIds.add(String.valueOf(acc.getId()));
+                if (acc.getEmail() != null)
+                    profileIds.add(acc.getEmail().trim().toLowerCase(Locale.ROOT));
+                if (acc.getId() != null)
+                    profileIds.add(String.valueOf(acc.getId()));
             });
         }
         if (entity.getId() != null) {
@@ -1132,24 +1443,31 @@ public class ProfileService {
         int followerCount = 0;
         try {
             for (UserProfileRelationshipEntity rel : relationshipRepository.findAll()) {
-                if (rel.isConnected()) {
-                    String owner = rel.getOwnerUserId() != null ? rel.getOwnerUserId().trim().toLowerCase(Locale.ROOT) : "";
-                    String target = rel.getTargetProfileId() != null ? rel.getTargetProfileId().trim().toLowerCase(Locale.ROOT) : "";
+                if (rel.isConnected() || "ACCEPTED".equalsIgnoreCase(rel.getStatus())) {
+                    String owner = rel.getOwnerUserId() != null ? rel.getOwnerUserId().trim().toLowerCase(Locale.ROOT)
+                            : "";
+                    String target = rel.getTargetProfileId() != null
+                            ? rel.getTargetProfileId().trim().toLowerCase(Locale.ROOT)
+                            : "";
                     if (profileIds.contains(owner) && !profileIds.contains(target) && !isInvalidTarget(target)) {
-                        distinctConnected.add(target);
+                        distinctConnected.add(resolvePrimaryCanonicalKey(target));
                     } else if (profileIds.contains(target) && !profileIds.contains(owner) && !isInvalidTarget(owner)) {
-                        distinctConnected.add(owner);
+                        distinctConnected.add(resolvePrimaryCanonicalKey(owner));
                     }
                 }
                 if (rel.isFollowing()) {
-                    String owner = rel.getOwnerUserId() != null ? rel.getOwnerUserId().trim().toLowerCase(Locale.ROOT) : "";
-                    String target = rel.getTargetProfileId() != null ? rel.getTargetProfileId().trim().toLowerCase(Locale.ROOT) : "";
+                    String owner = rel.getOwnerUserId() != null ? rel.getOwnerUserId().trim().toLowerCase(Locale.ROOT)
+                            : "";
+                    String target = rel.getTargetProfileId() != null
+                            ? rel.getTargetProfileId().trim().toLowerCase(Locale.ROOT)
+                            : "";
                     if (profileIds.contains(target) && !profileIds.contains(owner)) {
                         followerCount++;
                     }
                 }
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
         dto.setConnectionsCount(distinctConnected.size());
         dto.setFollowersCount(followerCount);
 
@@ -1165,13 +1483,21 @@ public class ProfileService {
         dto.setWorkTypes(entity.getWorkTypes());
         dto.setVideoUrls(entity.getVideoUrls());
         dto.setVideos(entity.getVideos());
+        if (entity.getShowreel() != null && !entity.getShowreel().isBlank()) {
+            dto.setShowreel(entity.getShowreel());
+        }
+        List<Map<String, Object>> storedCredits = entity.getCredits();
+        if (storedCredits != null && !storedCredits.isEmpty()) {
+            dto.setCredits(storedCredits);
+        }
 
         // Map experiences
         List<ExperienceDto> expDtos = new ArrayList<>();
         for (Map<String, Object> expMap : entity.getExperiences()) {
             ExperienceDto exp = new ExperienceDto();
             exp.setId((String) expMap.get("id"));
-            String title = (String) expMap.getOrDefault("title", expMap.getOrDefault("workedAs", expMap.get("projectName")));
+            String title = (String) expMap.getOrDefault("title",
+                    expMap.getOrDefault("workedAs", expMap.get("projectName")));
             String comp = (String) expMap.getOrDefault("company", expMap.get("organizationName"));
             exp.setTitle(title);
             exp.setCompany(comp);
@@ -1184,7 +1510,9 @@ public class ProfileService {
             exp.setEndDate((String) expMap.get("endDate"));
             exp.setDuration((String) expMap.get("duration"));
             Object isCurrent = expMap.get("isCurrent");
-            exp.setIsCurrent(isCurrent == null ? null : (isCurrent instanceof Boolean ? (Boolean) isCurrent : Boolean.parseBoolean(String.valueOf(isCurrent))));
+            exp.setIsCurrent(isCurrent == null ? null
+                    : (isCurrent instanceof Boolean ? (Boolean) isCurrent
+                            : Boolean.parseBoolean(String.valueOf(isCurrent))));
             exp.setDescription((String) expMap.getOrDefault("description", expMap.get("highlights")));
             exp.setHighlights((String) expMap.getOrDefault("highlights", expMap.get("description")));
             exp.setEmploymentType((String) expMap.get("employmentType"));
@@ -1192,7 +1520,8 @@ public class ProfileService {
             exp.setOrganizationLogoUrl(logo);
             exp.setCompanyLogoUrl(logo);
             Object featured = expMap.get("featuredOnProfile");
-            exp.setFeaturedOnProfile(featured instanceof Boolean ? (Boolean) featured : Boolean.parseBoolean(String.valueOf(featured)));
+            exp.setFeaturedOnProfile(
+                    featured instanceof Boolean ? (Boolean) featured : Boolean.parseBoolean(String.valueOf(featured)));
             if (expMap.get("attachment") instanceof Map) {
                 exp.setAttachment((Map<String, Object>) expMap.get("attachment"));
             }
@@ -1232,10 +1561,31 @@ public class ProfileService {
         }
         dto.setProjects(projDtos);
 
+        String ownerEngagementKey = entity.getEmail() != null && !entity.getEmail().isBlank()
+                ? entity.getEmail()
+                : entity.getUserId();
+        boolean likeCountEnabled = settingsService == null
+                || settingsService.isLikeCountEnabledForAuthor(ownerEngagementKey);
+        boolean shareCountEnabled = settingsService == null
+                || settingsService.isShareCountEnabledForAuthor(ownerEngagementKey);
+
         List<Map<String, Object>> profilePosts = postRepository.findAllByOrderByCreatedAtDesc().stream()
+                .filter(post -> !"casting".equalsIgnoreCase(post.getType()))
                 .filter(post -> post.getAuthorId() != null
                         && profileIds.contains(post.getAuthorId().trim().toLowerCase(Locale.ROOT)))
-                .map(PostEntity::toDto)
+                .map(post -> {
+                    Map<String, Object> postDto = post.toDto();
+                    if (!likeCountEnabled) {
+                        postDto.put("likesCount", 0);
+                        postDto.put("liked", false);
+                        postDto.put("likeCountDisabled", true);
+                    }
+                    if (!shareCountEnabled) {
+                        postDto.put("sharesCount", 0);
+                        postDto.put("shareCountDisabled", true);
+                    }
+                    return postDto;
+                })
                 .collect(Collectors.toList());
         dto.setPosts(profilePosts);
 
@@ -1259,7 +1609,8 @@ public class ProfileService {
         m.put("movieName", e.getMovieName());
         m.put("organizationName", e.getOrganizationName());
         m.put("workedAs", e.getWorkedAs());
-        m.put("organizationLogoUrl", e.getOrganizationLogoUrl() != null ? e.getOrganizationLogoUrl() : e.getCompanyLogoUrl());
+        m.put("organizationLogoUrl",
+                e.getOrganizationLogoUrl() != null ? e.getOrganizationLogoUrl() : e.getCompanyLogoUrl());
         m.put("companyLogoUrl", e.getCompanyLogoUrl() != null ? e.getCompanyLogoUrl() : e.getOrganizationLogoUrl());
         m.put("featuredOnProfile", e.getFeaturedOnProfile() != null ? e.getFeaturedOnProfile() : false);
         if (e.getAttachment() != null) {
@@ -1309,7 +1660,8 @@ public class ProfileService {
             if (byId.isPresent()) {
                 return byId;
             }
-        } catch (NumberFormatException ignored) {}
+        } catch (NumberFormatException ignored) {
+        }
 
         return Optional.empty();
     }
@@ -1327,9 +1679,262 @@ public class ProfileService {
     }
 
     private boolean isInvalidTarget(String target) {
-        if (target == null || target.isBlank()) return true;
+        if (target == null || target.isBlank())
+            return true;
         String lower = target.toLowerCase(Locale.ROOT);
         return lower.endsWith(".jpg") || lower.endsWith(".png") || lower.endsWith(".jpeg")
                 || lower.endsWith(".webp") || lower.contains("uploads/");
+    }
+
+    private Set<String> resolveTargetUserIdentities(String identifier, ProfileEntity profile) {
+        Set<String> set = new HashSet<>();
+        if (identifier != null && !identifier.isBlank()) {
+            set.add(identifier.trim().toLowerCase(Locale.ROOT));
+        }
+        ProfileEntity p = profile;
+        if (p == null && identifier != null && !identifier.isBlank() && profileRepository != null) {
+            try {
+                String clean = identifier.trim().toLowerCase(Locale.ROOT);
+                p = profileRepository.findByEmail(clean)
+                        .or(() -> profileRepository.findByUserId(clean))
+                        .orElse(null);
+            } catch (Exception ignored) {
+            }
+        }
+        if (p != null) {
+            if (p.getUserId() != null && !p.getUserId().isBlank()) {
+                set.add(p.getUserId().trim().toLowerCase(Locale.ROOT));
+            }
+            if (p.getEmail() != null && !p.getEmail().isBlank()) {
+                set.add(p.getEmail().trim().toLowerCase(Locale.ROOT));
+            }
+        }
+        if (identifier != null && !identifier.isBlank() && userAccountRepository != null) {
+            String clean = identifier.trim().toLowerCase(Locale.ROOT);
+            userAccountRepository.findByEmail(clean).ifPresent(acc -> {
+                if (acc.getPublicUserId() != null)
+                    set.add(acc.getPublicUserId().trim().toLowerCase(Locale.ROOT));
+                if (acc.getEmail() != null)
+                    set.add(acc.getEmail().trim().toLowerCase(Locale.ROOT));
+            });
+            userAccountRepository.findByPublicUserId(clean).ifPresent(acc -> {
+                if (acc.getPublicUserId() != null)
+                    set.add(acc.getPublicUserId().trim().toLowerCase(Locale.ROOT));
+                if (acc.getEmail() != null)
+                    set.add(acc.getEmail().trim().toLowerCase(Locale.ROOT));
+            });
+        }
+        return set;
+    }
+
+    private boolean isProfileUpdatingAllowed(String userIdentifier, ProfileEntity profile) {
+        if (settingsService == null) {
+            return true;
+        }
+        if (userIdentifier != null && !userIdentifier.isBlank()) {
+            if (!settingsService.isProfileUpdatingEnabled(userIdentifier)) {
+                return false;
+            }
+        }
+        Set<String> identities = resolveTargetUserIdentities(userIdentifier, profile);
+        for (String id : identities) {
+            if (id != null && !id.isBlank()) {
+                if (!settingsService.isProfileUpdatingEnabled(id)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    public boolean hasMutualConnection(Set<String> viewerIdentities, Set<String> targetIdentities) {
+        if (relationshipRepository == null || viewerIdentities == null || targetIdentities == null) {
+            return false;
+        }
+        Set<String> lowerViewer = viewerIdentities.stream()
+                .filter(Objects::nonNull)
+                .map(s -> s.trim().toLowerCase(Locale.ROOT))
+                .collect(Collectors.toSet());
+        Set<String> lowerTarget = targetIdentities.stream()
+                .filter(Objects::nonNull)
+                .map(s -> s.trim().toLowerCase(Locale.ROOT))
+                .collect(Collectors.toSet());
+
+        Set<String> targetConnectionKeys = new HashSet<>();
+        Set<String> viewerConnectionKeys = new HashSet<>();
+
+        for (UserProfileRelationshipEntity rel : relationshipRepository.findAll()) {
+            if (rel == null || (!rel.isConnected() && !"ACCEPTED".equalsIgnoreCase(rel.getStatus()))) {
+                continue;
+            }
+            String owner = rel.getOwnerUserId() != null ? rel.getOwnerUserId().trim().toLowerCase(Locale.ROOT) : "";
+            String target = rel.getTargetProfileId() != null ? rel.getTargetProfileId().trim().toLowerCase(Locale.ROOT)
+                    : "";
+            if (owner.isBlank() || target.isBlank())
+                continue;
+
+            if (lowerTarget.contains(owner) && !lowerTarget.contains(target) && !lowerViewer.contains(target)
+                    && !isInvalidTarget(target)) {
+                targetConnectionKeys.addAll(resolveCanonicalUserKeys(target));
+            } else if (lowerTarget.contains(target) && !lowerTarget.contains(owner) && !lowerViewer.contains(owner)
+                    && !isInvalidTarget(owner)) {
+                targetConnectionKeys.addAll(resolveCanonicalUserKeys(owner));
+            }
+
+            if (lowerViewer.contains(owner) && !lowerViewer.contains(target) && !lowerTarget.contains(target)
+                    && !isInvalidTarget(target)) {
+                viewerConnectionKeys.addAll(resolveCanonicalUserKeys(target));
+            } else if (lowerViewer.contains(target) && !lowerViewer.contains(owner) && !lowerTarget.contains(owner)
+                    && !isInvalidTarget(owner)) {
+                viewerConnectionKeys.addAll(resolveCanonicalUserKeys(owner));
+            }
+        }
+
+        return targetConnectionKeys.stream().anyMatch(viewerConnectionKeys::contains);
+    }
+
+    private Set<String> resolveCanonicalUserKeys(String identifier) {
+        Set<String> keys = new HashSet<>();
+        if (identifier == null || identifier.isBlank())
+            return keys;
+        String clean = identifier.trim().toLowerCase(Locale.ROOT);
+        keys.add(clean);
+        if (userAccountRepository != null) {
+            userAccountRepository.findByEmail(clean).ifPresent(acc -> {
+                if (acc.getEmail() != null)
+                    keys.add(acc.getEmail().trim().toLowerCase(Locale.ROOT));
+                if (acc.getPublicUserId() != null)
+                    keys.add(acc.getPublicUserId().trim().toLowerCase(Locale.ROOT));
+                if (acc.getId() != null)
+                    keys.add(String.valueOf(acc.getId()));
+            });
+            userAccountRepository.findByPublicUserId(clean).ifPresent(acc -> {
+                if (acc.getEmail() != null)
+                    keys.add(acc.getEmail().trim().toLowerCase(Locale.ROOT));
+                if (acc.getPublicUserId() != null)
+                    keys.add(acc.getPublicUserId().trim().toLowerCase(Locale.ROOT));
+                if (acc.getId() != null)
+                    keys.add(String.valueOf(acc.getId()));
+            });
+        }
+        if (profileRepository != null) {
+            profileRepository.findByUserId(clean).ifPresent(p -> {
+                if (p.getUserId() != null)
+                    keys.add(p.getUserId().trim().toLowerCase(Locale.ROOT));
+                if (p.getEmail() != null)
+                    keys.add(p.getEmail().trim().toLowerCase(Locale.ROOT));
+            });
+            profileRepository.findByEmail(clean).ifPresent(p -> {
+                if (p.getUserId() != null)
+                    keys.add(p.getUserId().trim().toLowerCase(Locale.ROOT));
+                if (p.getEmail() != null)
+                    keys.add(p.getEmail().trim().toLowerCase(Locale.ROOT));
+            });
+        }
+        return keys;
+    }
+
+    private String resolvePrimaryCanonicalKey(String identifier) {
+        if (identifier == null || identifier.isBlank()) return "";
+        String clean = identifier.trim().toLowerCase(Locale.ROOT);
+        if (userAccountRepository != null) {
+            Optional<UserAccountEntity> acc = userAccountRepository.findByEmail(clean)
+                    .or(() -> userAccountRepository.findByPublicUserId(clean));
+            if (acc.isEmpty()) {
+                try {
+                    acc = userAccountRepository.findById(Long.parseLong(clean));
+                } catch (NumberFormatException ignored) {}
+            }
+            if (acc.isPresent()) {
+                if (acc.get().getPublicUserId() != null && !acc.get().getPublicUserId().isBlank()) {
+                    return acc.get().getPublicUserId().trim().toLowerCase(Locale.ROOT);
+                }
+                if (acc.get().getEmail() != null && !acc.get().getEmail().isBlank()) {
+                    return acc.get().getEmail().trim().toLowerCase(Locale.ROOT);
+                }
+            }
+        }
+        if (profileRepository != null) {
+            Optional<ProfileEntity> p = profileRepository.findByUserId(clean)
+                    .or(() -> profileRepository.findByEmail(clean));
+            if (p.isEmpty()) {
+                try {
+                    p = profileRepository.findById(Long.parseLong(clean));
+                } catch (NumberFormatException ignored) {}
+            }
+            if (p.isPresent()) {
+                if (p.get().getUserId() != null && !p.get().getUserId().isBlank()) {
+                    return p.get().getUserId().trim().toLowerCase(Locale.ROOT);
+                }
+                if (p.get().getEmail() != null && !p.get().getEmail().isBlank()) {
+                    return p.get().getEmail().trim().toLowerCase(Locale.ROOT);
+                }
+            }
+        }
+        return clean;
+    }
+
+    private Set<String> findConnectedUserIds(ProfileEntity profile, String userEmail) {
+        if (relationshipRepository == null) {
+            return Collections.emptySet();
+        }
+        Set<String> profileIds = resolveTargetUserIdentities(userEmail, profile);
+        Set<String> connectedRecipients = new LinkedHashSet<>();
+        for (UserProfileRelationshipEntity rel : relationshipRepository.findAll()) {
+            if (rel == null || (!rel.isConnected() && !"ACCEPTED".equalsIgnoreCase(rel.getStatus()))) {
+                continue;
+            }
+            String owner = rel.getOwnerUserId() != null ? rel.getOwnerUserId().trim().toLowerCase(Locale.ROOT) : "";
+            String target = rel.getTargetProfileId() != null ? rel.getTargetProfileId().trim().toLowerCase(Locale.ROOT)
+                    : "";
+            if (profileIds.contains(owner) && !profileIds.contains(target) && !isInvalidTarget(target)) {
+                connectedRecipients.add(rel.getTargetProfileId().trim());
+            } else if (profileIds.contains(target) && !profileIds.contains(owner) && !isInvalidTarget(owner)) {
+                connectedRecipients.add(rel.getOwnerUserId().trim());
+            }
+        }
+        return connectedRecipients;
+    }
+
+    private void notifyConnectionsOfProfileUpdate(ProfileEntity profile, String userEmail) {
+        if (notificationRepository == null || profile == null) {
+            return;
+        }
+        if (!isProfileUpdatingAllowed(userEmail, profile)) {
+            return;
+        }
+
+        Set<String> ownIdentities = resolveTargetUserIdentities(userEmail, profile);
+        Set<String> connections = findConnectedUserIds(profile, userEmail);
+        if (connections == null || connections.isEmpty()) {
+            return;
+        }
+
+        String updaterName = profile.getName() != null && !profile.getName().isBlank()
+                ? profile.getName().trim()
+                : "A connection";
+        String notifTitle = "Profile Update";
+        String notifMsg = updaterName + " updated their profile.";
+        String notifType = "profile";
+
+        Set<String> alreadyNotified = new HashSet<>();
+        for (String connId : connections) {
+            if (connId == null || connId.isBlank())
+                continue;
+            String normalizedConn = connId.trim().toLowerCase(Locale.ROOT);
+            if (ownIdentities.contains(normalizedConn) || alreadyNotified.contains(normalizedConn)) {
+                continue;
+            }
+            Set<String> connIdentities = resolveTargetUserIdentities(connId, null);
+            if (connIdentities.stream().anyMatch(alreadyNotified::contains)
+                    || connIdentities.stream().anyMatch(ownIdentities::contains)) {
+                continue;
+            }
+            if (isProfileUpdatingAllowed(connId, null)) {
+                notificationRepository.save(new NotificationEntity(connId, notifTitle, notifMsg, notifType));
+                alreadyNotified.add(normalizedConn);
+                alreadyNotified.addAll(connIdentities);
+            }
+        }
     }
 }

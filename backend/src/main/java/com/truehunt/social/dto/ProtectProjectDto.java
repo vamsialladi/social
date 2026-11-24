@@ -35,6 +35,7 @@ public class ProtectProjectDto {
     private List<RiskDto> risks = new ArrayList<>();
     private List<EpisodeDto> episodes = new ArrayList<>();
     private List<Map<String, Object>> recentActivity = new ArrayList<>();
+    private Map<String, Object> checklists;
 
     public ProtectProjectDto() {}
 
@@ -276,6 +277,14 @@ public class ProtectProjectDto {
 
     public void setRecentActivity(List<Map<String, Object>> recentActivity) {
         this.recentActivity = recentActivity;
+    }
+
+    public Map<String, Object> getChecklists() {
+        return checklists;
+    }
+
+    public void setChecklists(Map<String, Object> checklists) {
+        this.checklists = checklists;
     }
 }
 

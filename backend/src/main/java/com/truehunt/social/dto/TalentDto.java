@@ -37,6 +37,7 @@ public class TalentDto {
     private Boolean isIncomingPending = false;
     private String connectionStatus;
     private Integer connectionsCount = 0;
+    private Boolean connectionsVisible = true;
     private Integer followersCount = 0;
     private String headline;
     private String company;
@@ -233,6 +234,14 @@ public class TalentDto {
 
     public void setConnectionsCount(Integer connectionsCount) {
         this.connectionsCount = connectionsCount;
+    }
+
+    public Boolean getConnectionsVisible() {
+        return connectionsVisible;
+    }
+
+    public void setConnectionsVisible(Boolean connectionsVisible) {
+        this.connectionsVisible = connectionsVisible;
     }
 
     public Integer getFollowersCount() {

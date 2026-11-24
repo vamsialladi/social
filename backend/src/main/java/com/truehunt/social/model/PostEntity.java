@@ -29,6 +29,11 @@ public class PostEntity {
     @Column(nullable = false)
     private String type = "post"; // "post", "article", "opportunity"
 
+    @Column(length = 32)
+    private String audience = "public"; // "public", "connections", "private"
+
+    private Boolean audienceOverride = false;
+
     private String title;
 
     @Lob
@@ -50,6 +55,7 @@ public class PostEntity {
 
     private int likesCount = 0;
     private int commentsCount = 0;
+    private int sharesCount = 0;
     private int applicationsCount = 0;
     private boolean likedByMe = false;
     private boolean appliedByMe = false;
@@ -87,6 +93,12 @@ public class PostEntity {
     public String getType() { return type; }
     public void setType(String type) { this.type = type; }
 
+    public String getAudience() { return (audience != null && !audience.isBlank()) ? audience : "public"; }
+    public void setAudience(String audience) { this.audience = (audience != null && !audience.isBlank()) ? audience : "public"; }
+
+    public boolean isAudienceOverride() { return Boolean.TRUE.equals(audienceOverride); }
+    public void setAudienceOverride(boolean audienceOverride) { this.audienceOverride = audienceOverride; }
+
     public String getTitle() { return title; }
     public void setTitle(String title) { this.title = title; }
 
@@ -104,6 +116,9 @@ public class PostEntity {
 
     public int getCommentsCount() { return commentsCount; }
     public void setCommentsCount(int commentsCount) { this.commentsCount = commentsCount; }
+
+    public int getSharesCount() { return sharesCount; }
+    public void setSharesCount(int sharesCount) { this.sharesCount = sharesCount; }
 
     public int getApplicationsCount() { return applicationsCount; }
     public void setApplicationsCount(int applicationsCount) { this.applicationsCount = applicationsCount; }
@@ -146,6 +161,10 @@ public class PostEntity {
         } catch (Exception e) {
             throw new IllegalStateException("Could not read post likes.", e);
         }
+    }
+
+    public List<String> likedByUserIdentities() {
+        return new ArrayList<>(getLikedByUsers());
     }
 
     private String normalizeLikeIdentity(String userIdentity) {
@@ -408,6 +427,9 @@ public class PostEntity {
         dto.put("authorHeadline", authorHeadline != null ? authorHeadline : "");
         dto.put("authorRole", authorHeadline != null ? authorHeadline : "");
         dto.put("type", type != null ? type : "post");
+        dto.put("audience", getAudience());
+        dto.put("audienceOverride", isAudienceOverride());
+        dto.put("audienceOverride", isAudienceOverride());
         dto.put("title", title != null ? title : "");
         String resolvedContent = content != null ? content : "";
         dto.put("content", resolvedContent);
@@ -426,6 +448,7 @@ public class PostEntity {
         dto.put("investorProfileId", investorProfileId);
         dto.put("likesCount", likesCount);
         dto.put("commentsCount", commentsCount);
+        dto.put("sharesCount", sharesCount);
         dto.put("applicationsCount", applicationsCount);
         dto.put("liked", likedByMe);
         dto.put("applied", appliedByMe);

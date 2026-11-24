@@ -1447,6 +1447,17 @@
   color: #a4aab4;
 }
 
+.cinemans-page.is-dark .settings-edit-button {
+  border-color: #444953;
+  background: #282c33;
+  color: #a8d4ff;
+}
+
+.cinemans-page.is-dark .settings-edit-button:hover {
+  border-color: #59616d;
+  background: #30353d;
+}
+
 .cinemans-page.is-dark .settings-display-toggle strong {
   color: #e5e7eb;
 }

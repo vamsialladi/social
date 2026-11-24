@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import './Endorsement.css'
+import './Notification.css'
 import api from '../../api'
 import ProfileBanner from './ProfileBanner.jsx'
 
@@ -7,10 +7,11 @@ function Notifications({
   profileDetails,
   profilePreview,
   onViewProfile,
+  onViewConnection,
   onManageNotifications,
   isActive,
 }) {
-  const [endorsements, setEndorsements] = useState([])
+  const [notifications, setNotifications] = useState([])
   const [contactRequests, setContactRequests] = useState([])
   const [requestError, setRequestError] = useState('')
   const [respondingToRequestId, setRespondingToRequestId] = useState('')
@@ -25,7 +26,7 @@ function Notifications({
     if (!isActive) return undefined
 
     let isCurrent = true
-    async function loadEndorsements() {
+    async function loadNotifications() {
       const [notificationsResult, requestsResult] = await Promise.allSettled([
         api.getNotifications(),
         api.getIncomingContactAccessRequests(),
@@ -33,7 +34,7 @@ function Notifications({
       if (!isCurrent) return
 
       if (notificationsResult.status === 'fulfilled' && Array.isArray(notificationsResult.value)) {
-        setEndorsements(notificationsResult.value)
+        setNotifications(notificationsResult.value)
       } else if (notificationsResult.status === 'rejected') {
         console.warn('Backend notifications load error:', notificationsResult.reason)
       }
@@ -45,16 +46,18 @@ function Notifications({
         setRequestError('Could not load contact requests. Please try again later.')
       }
     }
-    loadEndorsements()
+    loadNotifications()
     const refreshOnFocus = () => {
-      if (!document.hidden) loadEndorsements()
+      if (!document.hidden) loadNotifications()
     }
-    const intervalId = window.setInterval(loadEndorsements, 30_000)
+    const intervalId = window.setInterval(loadNotifications, 30_000)
     window.addEventListener('focus', refreshOnFocus)
+    window.addEventListener('truehunt-settings-updated', loadNotifications)
     return () => {
       isCurrent = false
       window.clearInterval(intervalId)
       window.removeEventListener('focus', refreshOnFocus)
+      window.removeEventListener('truehunt-settings-updated', loadNotifications)
     }
   }, [isActive])
 
@@ -71,6 +74,29 @@ function Notifications({
     } finally {
       setRespondingToRequestId('')
     }
+  }
+
+  async function openNotificationProfile(item) {
+    if (item.type !== 'endorsement_request' || !item.senderProfileId || !onViewConnection) return
+
+    if (item.id && !item.read) {
+      try {
+        await api.markNotificationAsRead(item.id)
+        setNotifications((current) => current.map((notification) => (
+          notification.id === item.id ? { ...notification, read: true } : notification
+        )))
+      } catch (error) {
+        console.warn('Could not mark endorsement request as read:', error)
+      }
+    }
+
+    const senderProfileId = String(item.senderProfileId)
+    onViewConnection({
+      id: senderProfileId,
+      userId: senderProfileId,
+      profileId: senderProfileId,
+      name: item.senderName || 'Connection',
+    })
   }
 
   return (
@@ -160,7 +186,7 @@ function Notifications({
       <section className="notifications-content" aria-labelledby="notifications-heading">
         <h2 id="notifications-heading">Notifications</h2>
         {requestError && <p className="notifications-request-error" role="alert">{requestError}</p>}
-        {endorsements.length > 0 || contactRequests.length > 0 ? (
+        {notifications.length > 0 || contactRequests.length > 0 ? (
           <div className="notifications-list">
             {contactRequests.map((request) => (
               <article className="notification-card contact-access-notification" key={`contact-${request.id}`}>
@@ -185,8 +211,27 @@ function Notifications({
                 </div>
               </article>
             ))}
-            {endorsements.map((item) => (
-              <article className="notification-card" key={`notification-${item.id}`}>
+            {notifications.map((item) => (
+              <article
+                className={`notification-card${item.type === 'endorsement_request' && item.senderProfileId ? ' is-actionable' : ''}`}
+                key={`notification-${item.id}`}
+                role={item.type === 'endorsement_request' && item.senderProfileId ? 'button' : undefined}
+                tabIndex={item.type === 'endorsement_request' && item.senderProfileId ? 0 : undefined}
+                onClick={() => openNotificationProfile(item)}
+                onKeyDown={(event) => {
+                  if (
+                    (event.key === 'Enter' || event.key === ' ')
+                    && item.type === 'endorsement_request'
+                    && item.senderProfileId
+                  ) {
+                    event.preventDefault()
+                    openNotificationProfile(item)
+                  }
+                }}
+                aria-label={item.type === 'endorsement_request'
+                  ? `Open profile of the connection who sent this request: ${item.message}`
+                  : undefined}
+              >
                 <div className="notification-card-heading">
                   <strong>{item.title}</strong>
                   {item.createdAt && <small>{item.createdAt}</small>}
@@ -196,8 +241,8 @@ function Notifications({
             ))}
           </div>
         ) : (
-          <div className="notifications-empty-space" aria-label="No endorsements yet">
-            <p>No endorsements or contact requests yet.</p>
+          <div className="notifications-empty-space" aria-label="No notifications yet">
+            <p>No notifications or contact requests yet.</p>
           </div>
         )}
       </section>

@@ -4,17 +4,21 @@ import com.truehunt.social.dto.ChatMessageDto;
 import com.truehunt.social.dto.ConnectionRequestDto;
 import com.truehunt.social.dto.TalentDto;
 import com.truehunt.social.exception.BadRequestException;
+import com.truehunt.social.exception.UnauthorizedException;
 import com.truehunt.social.model.NetworkProfileEntity;
 import com.truehunt.social.model.NotificationEntity;
+import com.truehunt.social.model.PostEntity;
 import com.truehunt.social.model.ProfileEntity;
 import com.truehunt.social.model.UserAccountEntity;
 import com.truehunt.social.model.UserProfileRelationshipEntity;
 import com.truehunt.social.repository.NetworkProfileRepository;
 import com.truehunt.social.repository.NotificationRepository;
+import com.truehunt.social.repository.PostRepository;
 import com.truehunt.social.repository.ProfileRepository;
 import com.truehunt.social.repository.UserAccountRepository;
 import com.truehunt.social.repository.UserProfileRelationshipRepository;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -39,6 +43,8 @@ public class ConnectionService {
     private final MessageService messageService;
     private final ObjectProvider<TalentService> talentServiceProvider;
     private final ObjectProvider<SimpMessagingTemplate> messagingTemplateProvider;
+    private final PostRepository postRepository;
+    private final SettingsService settingsService;
 
     public ConnectionService(NetworkProfileRepository networkProfileRepository,
             NotificationRepository notificationRepository,
@@ -48,6 +54,21 @@ public class ConnectionService {
             MessageService messageService,
             ObjectProvider<TalentService> talentServiceProvider,
             ObjectProvider<SimpMessagingTemplate> messagingTemplateProvider) {
+        this(networkProfileRepository, notificationRepository, profileRepository, userAccountRepository,
+                relationshipRepository, messageService, talentServiceProvider, messagingTemplateProvider, null, null);
+    }
+
+    @Autowired
+    public ConnectionService(NetworkProfileRepository networkProfileRepository,
+            NotificationRepository notificationRepository,
+            ProfileRepository profileRepository,
+            UserAccountRepository userAccountRepository,
+            UserProfileRelationshipRepository relationshipRepository,
+            MessageService messageService,
+            ObjectProvider<TalentService> talentServiceProvider,
+            ObjectProvider<SimpMessagingTemplate> messagingTemplateProvider,
+            PostRepository postRepository,
+            SettingsService settingsService) {
         this.networkProfileRepository = networkProfileRepository;
         this.notificationRepository = notificationRepository;
         this.profileRepository = profileRepository;
@@ -56,6 +77,8 @@ public class ConnectionService {
         this.messageService = messageService;
         this.talentServiceProvider = talentServiceProvider;
         this.messagingTemplateProvider = messagingTemplateProvider;
+        this.postRepository = postRepository;
+        this.settingsService = settingsService;
     }
 
     private void broadcastConnectionEvent(String action, String senderId, String receiverId, boolean isConnected, boolean isPending) {
@@ -122,31 +145,70 @@ public class ConnectionService {
         ids.add(clean.toLowerCase(Locale.ROOT));
         ids.add(clean.toUpperCase(Locale.ROOT));
         try {
-            userAccountRepository.findByEmail(clean).ifPresent(acc -> {
+            Optional<UserAccountEntity> account = userAccountRepository.findByEmail(clean)
+                    .or(() -> userAccountRepository.findByPublicUserId(clean));
+            if (account.isEmpty()) {
+                try {
+                    account = userAccountRepository.findById(Long.parseLong(clean));
+                } catch (NumberFormatException ignored) {}
+            }
+            account.ifPresent(acc -> {
                 if (acc.getPublicUserId() != null) {
                     ids.add(acc.getPublicUserId());
                     ids.add(acc.getPublicUserId().toLowerCase(Locale.ROOT));
                 }
-                ids.add(String.valueOf(acc.getId()));
-                if (acc.getEmail() != null) ids.add(acc.getEmail().toLowerCase(Locale.ROOT));
+                if (acc.getEmail() != null) {
+                    ids.add(acc.getEmail());
+                    ids.add(acc.getEmail().toLowerCase(Locale.ROOT));
+                }
+                if (acc.getId() != null) {
+                    ids.add(String.valueOf(acc.getId()));
+                }
             });
-            userAccountRepository.findByPublicUserId(clean).ifPresent(acc -> {
-                if (acc.getEmail() != null) ids.add(acc.getEmail().toLowerCase(Locale.ROOT));
-                ids.add(String.valueOf(acc.getId()));
-            });
-            profileRepository.findByEmail(clean).ifPresent(p -> {
+
+            Optional<ProfileEntity> profile = profileRepository.findByEmail(clean)
+                    .or(() -> profileRepository.findByUserId(clean));
+            if (profile.isEmpty()) {
+                try {
+                    profile = profileRepository.findById(Long.parseLong(clean));
+                } catch (NumberFormatException ignored) {}
+            }
+            if (profile.isEmpty() && account.isPresent()) {
+                UserAccountEntity acc = account.get();
+                profile = profileRepository.findByEmail(acc.getEmail())
+                        .or(() -> profileRepository.findByUserId(acc.getPublicUserId()));
+            }
+            profile.ifPresent(p -> {
                 if (p.getUserId() != null) {
                     ids.add(p.getUserId());
                     ids.add(p.getUserId().toLowerCase(Locale.ROOT));
                 }
-                if (p.getEmail() != null) ids.add(p.getEmail().toLowerCase(Locale.ROOT));
-                if (p.getId() != null) ids.add(String.valueOf(p.getId()));
+                if (p.getEmail() != null) {
+                    ids.add(p.getEmail());
+                    ids.add(p.getEmail().toLowerCase(Locale.ROOT));
+                }
+                if (p.getId() != null) {
+                    ids.add(String.valueOf(p.getId()));
+                }
             });
-            profileRepository.findByUserId(clean).ifPresent(p -> {
-                if (p.getEmail() != null) ids.add(p.getEmail().toLowerCase(Locale.ROOT));
-                if (p.getUserId() != null) ids.add(p.getUserId().toLowerCase(Locale.ROOT));
-                if (p.getId() != null) ids.add(String.valueOf(p.getId()));
-            });
+            if (account.isEmpty() && profile.isPresent()) {
+                ProfileEntity p = profile.get();
+                account = userAccountRepository.findByEmail(p.getEmail())
+                        .or(() -> userAccountRepository.findByPublicUserId(p.getUserId()));
+                account.ifPresent(acc -> {
+                    if (acc.getPublicUserId() != null) {
+                        ids.add(acc.getPublicUserId());
+                        ids.add(acc.getPublicUserId().toLowerCase(Locale.ROOT));
+                    }
+                    if (acc.getEmail() != null) {
+                        ids.add(acc.getEmail());
+                        ids.add(acc.getEmail().toLowerCase(Locale.ROOT));
+                    }
+                    if (acc.getId() != null) {
+                        ids.add(String.valueOf(acc.getId()));
+                    }
+                });
+            }
         } catch (Exception ignored) {
         }
         return ids;
@@ -223,6 +285,9 @@ public class ConnectionService {
     }
 
     public List<Map<String, Object>> getSuggestions(String userEmail) {
+        if (settingsService != null && !settingsService.isConnectingWithOthersEnabled(userEmail)) {
+            return Collections.emptyList();
+        }
         Set<String> ownerIds = getOwnerUserIdentifiers(userEmail);
         Set<String> lowerOwnerIds = ownerIds.stream().map(s -> s.toLowerCase(Locale.ROOT)).collect(Collectors.toSet());
         List<UserProfileRelationshipEntity> allRels = relationshipRepository.findAll();
@@ -232,8 +297,11 @@ public class ConnectionService {
             if (profile.getId() != null && lowerOwnerIds.contains(profile.getId().toLowerCase(Locale.ROOT))) {
                 continue;
             }
-            Map<String, Object> dto = profile.toDto();
             String profileId = profile.getId();
+            if (settingsService != null && !settingsService.isConnectingWithOthersEnabled(profileId)) {
+                continue;
+            }
+            Map<String, Object> dto = profile.toDto();
             Set<String> targetIds = resolveAllUserIdentifiers(profileId);
             UserProfileRelationshipEntity relationship = findRelationshipBetween(ownerIds, targetIds, allRels);
             boolean isConnected = relationship != null && (relationship.isConnected() || "ACCEPTED".equalsIgnoreCase(relationship.getStatus()));
@@ -267,6 +335,9 @@ public class ConnectionService {
                 candidateId = owner;
             }
             if (candidateId != null) {
+                if (settingsService != null && !settingsService.isConnectingWithOthersEnabled(candidateId)) {
+                    continue;
+                }
                 final String finalCandidateId = candidateId;
                 profiles.computeIfAbsent(
                         finalCandidateId,
@@ -301,6 +372,9 @@ public class ConnectionService {
             String candidateId = p.getUserId();
             if (candidateId == null || candidateId.isBlank() || isInvalidTarget(candidateId)
                     || lowerOwnerIds.contains(candidateId.toLowerCase(Locale.ROOT))) {
+                continue;
+            }
+            if (settingsService != null && !settingsService.isConnectingWithOthersEnabled(candidateId)) {
                 continue;
             }
             final String finalCandidateId = candidateId;
@@ -339,6 +413,9 @@ public class ConnectionService {
                     || lowerOwnerIds.contains(candidateId.toLowerCase(Locale.ROOT))) {
                 continue;
             }
+            if (settingsService != null && !settingsService.isConnectingWithOthersEnabled(candidateId)) {
+                continue;
+            }
             final String finalCandidateId = candidateId;
             profiles.computeIfAbsent(
                     finalCandidateId,
@@ -370,6 +447,9 @@ public class ConnectionService {
     }
 
     public List<Map<String, Object>> getInvitations(String userEmail) {
+        if (settingsService != null && !settingsService.isConnectingWithOthersEnabled(userEmail)) {
+            return Collections.emptyList();
+        }
         Set<String> ownerIds = getOwnerUserIdentifiers(userEmail);
         Set<String> lowerOwnerIds = ownerIds.stream().map(s -> s.toLowerCase(Locale.ROOT)).collect(Collectors.toSet());
 
@@ -398,6 +478,10 @@ public class ConnectionService {
                     : (lowerOwnerIds.contains(owner) ? rel.getTargetProfileId().trim() : rel.getOwnerUserId().trim());
 
             if (isInvalidTarget(senderProfileId) || lowerOwnerIds.contains(senderProfileId.toLowerCase(Locale.ROOT))) {
+                continue;
+            }
+
+            if (settingsService != null && !settingsService.isConnectingWithOthersEnabled(senderProfileId)) {
                 continue;
             }
 
@@ -441,15 +525,167 @@ public class ConnectionService {
 
             if (lowerOwnerIds.contains(owner.toLowerCase(Locale.ROOT))) {
                 if (!lowerOwnerIds.contains(target.toLowerCase(Locale.ROOT)) && !isInvalidTarget(target)) {
-                    connectedMap.putIfAbsent(target.toLowerCase(Locale.ROOT), getProfileDto(target, true, rel.isFollowing()));
+                    Map<String, Object> dto = getProfileDto(target, true, rel.isFollowing());
+                    String canonicalKey = resolveCanonicalUserKey(target, dto);
+                    connectedMap.putIfAbsent(canonicalKey, dto);
                 }
             } else if (lowerOwnerIds.contains(target.toLowerCase(Locale.ROOT))) {
                 if (!lowerOwnerIds.contains(owner.toLowerCase(Locale.ROOT)) && !isInvalidTarget(owner)) {
-                    connectedMap.putIfAbsent(owner.toLowerCase(Locale.ROOT), getProfileDto(owner, true, rel.isFollowing()));
+                    Map<String, Object> dto = getProfileDto(owner, true, rel.isFollowing());
+                    String canonicalKey = resolveCanonicalUserKey(owner, dto);
+                    connectedMap.putIfAbsent(canonicalKey, dto);
                 }
             }
         }
         return new ArrayList<>(connectedMap.values());
+    }
+
+    @Transactional(readOnly = true)
+    public int getMutualConnectionsCount(String viewerIdentifier, String targetProfileId) {
+        return getProfileMutualConnections(viewerIdentifier, targetProfileId).size();
+    }
+
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> getProfileMutualConnections(
+            String viewerIdentifier,
+            String targetProfileId
+    ) {
+        if (viewerIdentifier == null || viewerIdentifier.isBlank()) {
+            throw new UnauthorizedException("Sign in to view mutual connections.");
+        }
+
+        String cleanTargetId = requireProfileId(targetProfileId);
+        if (settingsService != null
+                && (!settingsService.isConnectingWithOthersEnabled(viewerIdentifier)
+                || !settingsService.isConnectingWithOthersEnabled(cleanTargetId))) {
+            return Collections.emptyList();
+        }
+
+        Set<String> viewerIds = getOwnerUserIdentifiers(viewerIdentifier);
+        Set<String> targetIds = resolveAllUserIdentifiers(cleanTargetId);
+        Set<String> lowerViewerIds = viewerIds.stream()
+                .map(id -> id.toLowerCase(Locale.ROOT))
+                .collect(Collectors.toSet());
+        Set<String> lowerTargetIds = targetIds.stream()
+                .map(id -> id.toLowerCase(Locale.ROOT))
+                .collect(Collectors.toSet());
+        if (lowerViewerIds.stream().anyMatch(lowerTargetIds::contains)) {
+            return Collections.emptyList();
+        }
+
+        List<UserProfileRelationshipEntity> relationships = relationshipRepository.findAll();
+        Map<String, Map<String, Object>> viewerConnections =
+                getConnectedProfilesByCanonicalKey(viewerIds, relationships);
+        Map<String, Map<String, Object>> targetConnections =
+                getConnectedProfilesByCanonicalKey(targetIds, relationships);
+        return viewerConnections.entrySet().stream()
+                .filter(entry -> targetConnections.containsKey(entry.getKey()))
+                .map(Map.Entry::getValue)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> getProfileFollowers(String profileIdentifier) {
+        String cleanProfileId = requireProfileId(profileIdentifier);
+        Set<String> profileIds = resolveAllUserIdentifiers(cleanProfileId);
+        Set<String> lowerProfileIds = profileIds.stream()
+                .map(id -> id.toLowerCase(Locale.ROOT))
+                .collect(Collectors.toSet());
+        Map<String, Map<String, Object>> followers = new LinkedHashMap<>();
+
+        for (UserProfileRelationshipEntity relationship : relationshipRepository.findAll()) {
+            if (!relationship.isFollowing()) {
+                continue;
+            }
+            String target = relationship.getTargetProfileId() == null
+                    ? ""
+                    : relationship.getTargetProfileId().trim();
+            String follower = relationship.getOwnerUserId() == null
+                    ? ""
+                    : relationship.getOwnerUserId().trim();
+            if (follower.isBlank()
+                    || !lowerProfileIds.contains(target.toLowerCase(Locale.ROOT))
+                    || lowerProfileIds.contains(follower.toLowerCase(Locale.ROOT))
+                    || isInvalidTarget(follower)) {
+                continue;
+            }
+
+            Map<String, Object> profile = getProfileDto(follower, false, false);
+            profile.put("isFollower", true);
+            String canonicalKey = resolveCanonicalUserKey(follower, profile);
+            if (!canonicalKey.isBlank()) {
+                followers.putIfAbsent(canonicalKey, profile);
+            }
+        }
+        return new ArrayList<>(followers.values());
+    }
+
+    private Map<String, Map<String, Object>> getConnectedProfilesByCanonicalKey(
+            Set<String> ownerIdentifiers,
+            List<UserProfileRelationshipEntity> relationships
+    ) {
+        Set<String> lowerOwnerIds = ownerIdentifiers.stream()
+                .map(id -> id.toLowerCase(Locale.ROOT))
+                .collect(Collectors.toSet());
+        Map<String, Map<String, Object>> connectedProfiles = new LinkedHashMap<>();
+
+        for (UserProfileRelationshipEntity relationship : relationships) {
+            if (!relationship.isConnected()
+                    && !"ACCEPTED".equalsIgnoreCase(relationship.getStatus())) {
+                continue;
+            }
+
+            String owner = relationship.getOwnerUserId() == null
+                    ? ""
+                    : relationship.getOwnerUserId().trim();
+            String target = relationship.getTargetProfileId() == null
+                    ? ""
+                    : relationship.getTargetProfileId().trim();
+            String candidateId = null;
+            if (lowerOwnerIds.contains(owner.toLowerCase(Locale.ROOT))) {
+                candidateId = target;
+            } else if (lowerOwnerIds.contains(target.toLowerCase(Locale.ROOT))) {
+                candidateId = owner;
+            }
+
+            if (candidateId == null
+                    || lowerOwnerIds.contains(candidateId.toLowerCase(Locale.ROOT))
+                    || isInvalidTarget(candidateId)) {
+                continue;
+            }
+
+            Map<String, Object> profile = getProfileDto(candidateId, true, false);
+            String canonicalKey = resolveCanonicalUserKey(candidateId, profile);
+            if (!canonicalKey.isBlank()) {
+                connectedProfiles.putIfAbsent(canonicalKey, profile);
+            }
+        }
+        return connectedProfiles;
+    }
+
+    private String resolveCanonicalUserKey(String identifier, Map<String, Object> dto) {
+        if (dto != null) {
+            Object publicUserId = dto.get("publicUserId");
+            if (publicUserId != null && !String.valueOf(publicUserId).isBlank()) {
+                return String.valueOf(publicUserId).trim().toLowerCase(Locale.ROOT);
+            }
+            Object userId = dto.get("userId");
+            if (userId != null && !String.valueOf(userId).isBlank()) {
+                return String.valueOf(userId).trim().toLowerCase(Locale.ROOT);
+            }
+            Object email = dto.get("email");
+            if (email != null && !String.valueOf(email).isBlank()) {
+                return String.valueOf(email).trim().toLowerCase(Locale.ROOT);
+            }
+            Object id = dto.get("id");
+            if (id != null && !String.valueOf(id).isBlank()) {
+                return String.valueOf(id).trim().toLowerCase(Locale.ROOT);
+            }
+        }
+        if (identifier != null && !identifier.isBlank()) {
+            return identifier.trim().toLowerCase(Locale.ROOT);
+        }
+        return "";
     }
 
     @Transactional
@@ -465,6 +701,15 @@ public class ConnectionService {
 
         if (lowerOwnerIds.contains(targetProfileId.toLowerCase(Locale.ROOT))) {
             throw new BadRequestException("You cannot connect with your own profile");
+        }
+
+        if (settingsService != null) {
+            if (!settingsService.isConnectingWithOthersEnabled(userEmail)) {
+                throw new BadRequestException("You have turned off connecting with others in your settings.");
+            }
+            if (!settingsService.isConnectingWithOthersEnabled(targetProfileId)) {
+                throw new BadRequestException("This user is not accepting connection requests at this time.");
+            }
         }
 
         String primaryOwnerId = getPrimaryOwnerUserId(userEmail);
@@ -495,17 +740,21 @@ public class ConnectionService {
         String targetName = getProfileName(targetProfileId);
         String ownerName = getProfileName(primaryOwnerId);
 
-        notificationRepository.save(new NotificationEntity(
-                targetProfileId,
-                "New Connection Request",
-                ownerName + " sent you an invitation to connect on TrueHunt.",
-                "connection_request"));
+        if (settingsService == null || settingsService.isConnectingWithOthersEnabled(targetProfileId)) {
+            notificationRepository.save(new NotificationEntity(
+                    targetProfileId,
+                    "New Connection Request",
+                    ownerName + " sent you an invitation to connect on TrueHunt.",
+                    "connection_request"));
+        }
 
-        notificationRepository.save(new NotificationEntity(
-                primaryOwnerId,
-                "Invitation Sent",
-                "You sent a connection invitation to " + targetName + ".",
-                "connection_request"));
+        if (settingsService == null || settingsService.isConnectingWithOthersEnabled(primaryOwnerId)) {
+            notificationRepository.save(new NotificationEntity(
+                    primaryOwnerId,
+                    "Invitation Sent",
+                    "You sent a connection invitation to " + targetName + ".",
+                    "connection_request"));
+        }
 
         broadcastConnectionEvent("REQUEST_SENT", primaryOwnerId, targetProfileId, false, true);
 
@@ -532,6 +781,15 @@ public class ConnectionService {
             throw new BadRequestException("You cannot connect with your own profile");
         }
 
+        if (settingsService != null) {
+            if (!settingsService.isConnectingWithOthersEnabled(userEmail)) {
+                throw new BadRequestException("You have turned off connecting with others in your settings.");
+            }
+            if (!settingsService.isConnectingWithOthersEnabled(requesterProfileId)) {
+                throw new BadRequestException("This user is not accepting connection requests at this time.");
+            }
+        }
+
         String primaryOwnerId = getPrimaryOwnerUserId(userEmail);
         List<UserProfileRelationshipEntity> allRels = relationshipRepository.findAll();
         UserProfileRelationshipEntity invitation = findRelationshipBetween(ownerIds, requesterIds, allRels);
@@ -556,17 +814,21 @@ public class ConnectionService {
             messageService.processAndSendMessage(invitationMessage, () -> senderId);
         }
 
-        notificationRepository.save(new NotificationEntity(
-                requesterProfileId,
-                "Connection Request Accepted",
-                ownerName + " accepted your connection request on TrueHunt.",
-                "connection_accepted"));
+        if (settingsService == null || settingsService.isConnectingWithOthersEnabled(requesterProfileId)) {
+            notificationRepository.save(new NotificationEntity(
+                    requesterProfileId,
+                    "Connection Request Accepted",
+                    ownerName + " accepted your connection request on TrueHunt.",
+                    "connection_accepted"));
+        }
 
-        notificationRepository.save(new NotificationEntity(
-                primaryOwnerId,
-                "New Connection Established",
-                "You are now connected with " + requesterName + " on TrueHunt.",
-                "connection"));
+        if (settingsService == null || settingsService.isConnectingWithOthersEnabled(primaryOwnerId)) {
+            notificationRepository.save(new NotificationEntity(
+                    primaryOwnerId,
+                    "New Connection Established",
+                    "You are now connected with " + requesterName + " on TrueHunt.",
+                    "connection"));
+        }
 
         broadcastConnectionEvent("REQUEST_ACCEPTED", requesterProfileId, primaryOwnerId, true, false);
 
@@ -591,6 +853,15 @@ public class ConnectionService {
         List<UserProfileRelationshipEntity> allRels = relationshipRepository.findAll();
         updateAllRelationshipsBetween(ownerIds, requesterIds, false, "REJECTED", null, allRels);
 
+        String ownerName = getProfileName(primaryOwnerId);
+        if (settingsService == null || settingsService.isConnectingWithOthersEnabled(requesterProfileId)) {
+            notificationRepository.save(new NotificationEntity(
+                    requesterProfileId,
+                    "Connection Request Rejected",
+                    ownerName + " rejected your connection request on TrueHunt.",
+                    "connection_rejected"));
+        }
+
         broadcastConnectionEvent("REQUEST_REJECTED", requesterProfileId, primaryOwnerId, false, false);
 
         Map<String, Object> res = new HashMap<>();
@@ -610,9 +881,37 @@ public class ConnectionService {
         String primaryOwnerId = getPrimaryOwnerUserId(userEmail);
         Set<String> ownerIds = getOwnerUserIdentifiers(userEmail);
         Set<String> targetIds = resolveAllUserIdentifiers(targetProfileId);
+        Set<String> lowerOwnerIds = ownerIds.stream()
+                .map(id -> id.toLowerCase(Locale.ROOT))
+                .collect(Collectors.toSet());
+        Set<String> lowerTargetIds = targetIds.stream()
+                .map(id -> id.toLowerCase(Locale.ROOT))
+                .collect(Collectors.toSet());
 
         List<UserProfileRelationshipEntity> allRels = relationshipRepository.findAll();
-        updateAllRelationshipsBetween(ownerIds, targetIds, false, null, null, allRels);
+        java.time.LocalDateTime now = java.time.LocalDateTime.now();
+        for (UserProfileRelationshipEntity relationship : allRels) {
+            if (relationship == null || !"PENDING".equalsIgnoreCase(relationship.getStatus())) {
+                continue;
+            }
+            String owner = relationship.getOwnerUserId() == null
+                    ? ""
+                    : relationship.getOwnerUserId().trim().toLowerCase(Locale.ROOT);
+            String target = relationship.getTargetProfileId() == null
+                    ? ""
+                    : relationship.getTargetProfileId().trim().toLowerCase(Locale.ROOT);
+            boolean ownerToTarget = lowerOwnerIds.contains(owner) && lowerTargetIds.contains(target);
+            boolean targetToOwner = lowerTargetIds.contains(owner) && lowerOwnerIds.contains(target);
+            if (!ownerToTarget && !targetToOwner) {
+                continue;
+            }
+            relationship.setConnected(false);
+            relationship.setStatus(null);
+            relationship.setSenderUserId(null);
+            relationship.setConnectionNote(null);
+            relationship.setUpdatedAt(now);
+            relationshipRepository.save(relationship);
+        }
 
         broadcastConnectionEvent("REQUEST_CANCELLED", primaryOwnerId, targetProfileId, false, false);
 
@@ -683,16 +982,35 @@ public class ConnectionService {
         String targetProfileId = requireProfileId(profileId);
         Set<String> ownerIds = getOwnerUserIdentifiers(userEmail);
         Set<String> lowerOwnerIds = ownerIds.stream().map(s -> s.toLowerCase(Locale.ROOT)).collect(Collectors.toSet());
+        Set<String> targetIds = resolveAllUserIdentifiers(targetProfileId);
+        Set<String> lowerTargetIds = targetIds.stream().map(s -> s.toLowerCase(Locale.ROOT)).collect(Collectors.toSet());
 
-        if (lowerOwnerIds.contains(targetProfileId.toLowerCase(Locale.ROOT))) {
+        if (lowerTargetIds.stream().anyMatch(lowerOwnerIds::contains)) {
             throw new BadRequestException("You cannot follow your own profile");
         }
 
         String primaryOwnerId = getPrimaryOwnerUserId(userEmail);
-        UserProfileRelationshipEntity relationship = getOrCreateRelationship(primaryOwnerId, targetProfileId);
-        boolean newStatus = !relationship.isFollowing();
-        relationship.setFollowing(newStatus);
-        relationshipRepository.save(relationship);
+        List<UserProfileRelationshipEntity> relationships = relationshipRepository.findAll();
+        List<UserProfileRelationshipEntity> matchingRelationships = relationships.stream()
+                .filter(relationship -> relationship != null
+                        && lowerOwnerIds.contains(relationship.getOwnerUserId() == null
+                                ? ""
+                                : relationship.getOwnerUserId().trim().toLowerCase(Locale.ROOT))
+                        && lowerTargetIds.contains(relationship.getTargetProfileId() == null
+                                ? ""
+                                : relationship.getTargetProfileId().trim().toLowerCase(Locale.ROOT)))
+                .toList();
+        boolean newStatus = matchingRelationships.stream().noneMatch(UserProfileRelationshipEntity::isFollowing);
+        if (matchingRelationships.isEmpty()) {
+            UserProfileRelationshipEntity relationship = getOrCreateRelationship(primaryOwnerId, targetProfileId);
+            relationship.setFollowing(newStatus);
+            relationshipRepository.save(relationship);
+        } else {
+            matchingRelationships.forEach(relationship -> {
+                relationship.setFollowing(newStatus);
+                relationshipRepository.save(relationship);
+            });
+        }
 
         Map<String, Object> res = new HashMap<>();
         res.put("id", targetProfileId);
@@ -853,6 +1171,13 @@ public class ConnectionService {
             dto.put("profileImageUrl", entity.getProfileImageUrl() != null ? entity.getProfileImageUrl() : "");
             dto.put("avatar", entity.getProfileImageUrl() != null ? entity.getProfileImageUrl() : "");
             dto.put("initials", getInitials(name));
+            if (entity.getEmail() != null && !entity.getEmail().isBlank()) {
+                dto.put("email", entity.getEmail());
+            } else if (linkedAccount.isPresent() && linkedAccount.get().getEmail() != null) {
+                dto.put("email", linkedAccount.get().getEmail());
+            }
+            dto.put("publicUserId", canonicalId);
+            dto.put("profileId", canonicalId);
         } else {
             // Check UserAccountEntity if registered user without full profile
             Optional<UserAccountEntity> account = findUserAccountByIdentifier(cleanId);
@@ -868,6 +1193,11 @@ public class ConnectionService {
                 dto.put("profileImageUrl", "");
                 dto.put("avatar", "");
                 dto.put("initials", getInitials(accName));
+                if (acc.getEmail() != null && !acc.getEmail().isBlank()) {
+                    dto.put("email", acc.getEmail());
+                }
+                dto.put("publicUserId", canonicalId);
+                dto.put("profileId", canonicalId);
             } else {
                 Optional<NetworkProfileEntity> networkProfile = networkProfileRepository.findById(cleanId)
                         .or(() -> networkProfileRepository.findById(upperId))
@@ -903,6 +1233,8 @@ public class ConnectionService {
         }
         dto.put("id", canonicalId);
         dto.put("userId", canonicalId);
+        dto.putIfAbsent("publicUserId", canonicalId);
+        dto.putIfAbsent("profileId", canonicalId);
         dto.put("isConnected", connected);
         dto.put("connected", connected);
         dto.put("isFollowing", following);
@@ -1000,6 +1332,15 @@ public class ConnectionService {
             throw new BadRequestException("You cannot connect with your own profile");
         }
 
+        if (settingsService != null) {
+            if (!settingsService.isConnectingWithOthersEnabled(userEmail)) {
+                throw new BadRequestException("You have turned off connecting with others in your settings.");
+            }
+            if (!settingsService.isConnectingWithOthersEnabled(targetProfileId)) {
+                throw new BadRequestException("This user is not accepting connection requests at this time.");
+            }
+        }
+
         String primaryOwnerId = getPrimaryOwnerUserId(userEmail);
         Set<String> targetIds = resolveAllUserIdentifiers(targetProfileId);
         List<UserProfileRelationshipEntity> allRels = relationshipRepository.findAll();
@@ -1008,16 +1349,20 @@ public class ConnectionService {
         String targetName = getProfileName(targetProfileId);
         String ownerName = getProfileName(primaryOwnerId);
 
-        notificationRepository.save(new NotificationEntity(
-                primaryOwnerId,
-                "Connection Established",
-                "You are now connected with " + targetName + " on TrueHunt.",
-                "connection"));
-        notificationRepository.save(new NotificationEntity(
-                targetProfileId,
-                "New Connection Established",
-                ownerName + " connected with you on TrueHunt.",
-                "connection"));
+        if (settingsService == null || settingsService.isConnectingWithOthersEnabled(primaryOwnerId)) {
+            notificationRepository.save(new NotificationEntity(
+                    primaryOwnerId,
+                    "Connection Established",
+                    "You are now connected with " + targetName + " on TrueHunt.",
+                    "connection"));
+        }
+        if (settingsService == null || settingsService.isConnectingWithOthersEnabled(targetProfileId)) {
+            notificationRepository.save(new NotificationEntity(
+                    targetProfileId,
+                    "New Connection Established",
+                    ownerName + " connected with you on TrueHunt.",
+                    "connection"));
+        }
 
         broadcastConnectionEvent("REQUEST_ACCEPTED", targetProfileId, primaryOwnerId, true, false);
 
@@ -1031,5 +1376,91 @@ public class ConnectionService {
         res.put("message", "Connected with " + targetName);
         res.put("timestamp", req.getTimestamp() != null ? req.getTimestamp() : new Date().toString());
         return res;
+    }
+
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> getFollowers(String userEmail) {
+        Set<String> ownerIds = getOwnerUserIdentifiers(userEmail);
+        Set<String> lowerOwnerIds = ownerIds.stream()
+                .map(s -> s.trim().toLowerCase(Locale.ROOT))
+                .collect(Collectors.toSet());
+
+        Map<String, Map<String, Object>> followersById = new LinkedHashMap<>();
+        List<UserProfileRelationshipEntity> allRels = relationshipRepository.findAll();
+
+        Set<String> myConnectedLower = new HashSet<>();
+        Set<String> myFollowingLower = new HashSet<>();
+        for (UserProfileRelationshipEntity rel : allRels) {
+            if (rel.getOwnerUserId() != null && lowerOwnerIds.contains(rel.getOwnerUserId().trim().toLowerCase(Locale.ROOT))
+                    && rel.getTargetProfileId() != null) {
+                String t = rel.getTargetProfileId().trim().toLowerCase(Locale.ROOT);
+                if (rel.isConnected()) myConnectedLower.add(t);
+                if (rel.isFollowing()) myFollowingLower.add(t);
+            }
+        }
+
+        for (UserProfileRelationshipEntity rel : allRels) {
+            if (!rel.isFollowing()) continue;
+            String target = rel.getTargetProfileId() != null ? rel.getTargetProfileId().trim().toLowerCase(Locale.ROOT) : "";
+            String follower = rel.getOwnerUserId() != null ? rel.getOwnerUserId().trim() : "";
+            if (follower.isEmpty() || lowerOwnerIds.contains(follower.toLowerCase(Locale.ROOT))) continue;
+            if (!lowerOwnerIds.contains(target)) continue;
+
+            String followerLower = follower.toLowerCase(Locale.ROOT);
+            if (!followersById.containsKey(followerLower)) {
+                Map<String, Object> dto = getProfileDto(
+                        follower,
+                        myConnectedLower.contains(followerLower),
+                        myFollowingLower.contains(followerLower)
+                );
+                dto.put("isFollower", true);
+                String key = String.valueOf(dto.getOrDefault("id", follower)).trim().toLowerCase(Locale.ROOT);
+                followersById.putIfAbsent(key, dto);
+            }
+        }
+        return new ArrayList<>(followersById.values());
+    }
+
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> getCatchUp(String userEmail) {
+        List<Map<String, Object>> updates = new ArrayList<>();
+        List<Map<String, Object>> connected = getConnectedProfiles(userEmail);
+        Set<String> connectedIds = new HashSet<>();
+        for (Map<String, Object> c : connected) {
+            for (String k : new String[]{"id", "userId", "email"}) {
+                Object v = c.get(k);
+                if (v != null && !String.valueOf(v).isBlank()) {
+                    connectedIds.add(String.valueOf(v).trim().toLowerCase(Locale.ROOT));
+                }
+            }
+        }
+
+        if (postRepository != null && !connectedIds.isEmpty()) {
+            List<PostEntity> recentPosts = postRepository.findAllByOrderByCreatedAtDesc();
+            for (PostEntity post : recentPosts) {
+                if (updates.size() >= 20) break;
+                if ("casting".equalsIgnoreCase(post.getType())) continue;
+                String authorId = post.getAuthorId() != null ? post.getAuthorId().trim().toLowerCase(Locale.ROOT) : "";
+                if (authorId.isEmpty() || !connectedIds.contains(authorId)) continue;
+                if ("private".equalsIgnoreCase(post.getAudience())) continue;
+
+                Map<String, Object> item = new LinkedHashMap<>();
+                item.put("id", "post-" + post.getId());
+                item.put("type", "opportunity".equalsIgnoreCase(post.getType()) ? "OPPORTUNITY" : "POST");
+                item.put("profileId", post.getAuthorId());
+                item.put("name", post.getAuthorName() != null ? post.getAuthorName() : "TrueHunt Member");
+                item.put("avatar", post.getAuthorAvatar() != null ? post.getAuthorAvatar() : "");
+                item.put("headline", post.getAuthorHeadline() != null ? post.getAuthorHeadline() : "");
+                item.put("title", post.getTitle() != null && !post.getTitle().isBlank()
+                        ? post.getTitle()
+                        : ("opportunity".equalsIgnoreCase(post.getType()) ? "Shared a new opportunity" : "Shared a new update"));
+                item.put("summary", post.getContent() != null ? post.getContent() : "");
+                item.put("postId", String.valueOf(post.getId()));
+                item.put("createdAt", post.getCreatedAt() != null ? post.getCreatedAt().toString() : "");
+                updates.add(item);
+            }
+        }
+
+        return updates;
     }
 }

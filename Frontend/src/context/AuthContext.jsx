@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 
@@ -16,7 +16,8 @@ export function AuthProvider({ children }) {
     if (token && storedUser) {
       try {
         setUser(JSON.parse(storedUser));
-      } catch (e) {
+      } catch (error) {
+        console.warn('Could not parse the cached user during sign-in initialization:', error);
         localStorage.removeItem('truehunt_user');
       }
     }

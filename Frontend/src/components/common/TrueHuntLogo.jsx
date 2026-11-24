@@ -1,4 +1,3 @@
-import React from 'react';
 import { Link } from 'react-router-dom';
 import logoImg from '../../assets/truehunt-logo.png';
 import emblemImg from '../../assets/truehunt-emblem.png';

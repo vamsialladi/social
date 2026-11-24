@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { createPortal } from 'react-dom'
+import { MoreHorizontal } from 'lucide-react'
 import '../../App.css'
 import { api } from '../../api'
 import { api as directoryApi } from '../../services/api'
@@ -9,9 +11,11 @@ import { SUB_CRAFTS_BY_PRIMARY_CRAFT } from '../../services/suggestion'
 import Messages, { getUnreadConversationCount } from './Messages'
 import Home from './Home'
 import NetworkPage from './NetworkPage'
-import Endorsement from './Endorsement'
+import Notifications from './Notification'
 import ProfilePage, { emptyProfileDetails } from './ProfilePage'
 import ConnectionsPage from './ConnectionsPage'
+import ProfileConnectionsPage from './ProfileConnectionsPage'
+import CastingPage from './CastingPage'
 import Settings from './Settings'
 import { useAuth } from '../../context/AuthContext'
 import { websocketService } from '../../services/websocket'
@@ -38,10 +42,12 @@ const navigationHashes = {
   home: 'home',
   network: 'network',
   messaging: 'messages',
-  endorsement: 'endorsement',
+  notifications: 'notifications',
   opportunities: 'opportunities',
+  casting: 'casting',
   profile: 'profile',
   connections: 'connections',
+  'profile-connections': 'profile-connections',
   settings: 'settings',
   'account-settings': 'account-settings',
   business: 'business',
@@ -273,12 +279,14 @@ function getNavigationFromHash() {
   const navigation = Object.entries(navigationHashes)
     .find(([, route]) => route === hash)?.[0]
 
+  if (hash === 'endorsement') return 'notifications'
   return navigation || (hash === 'artist-profile' ? 'profile' : 'home')
 }
 
 function getNavigationFromLocation(pathname) {
   if (pathname.endsWith('/profile')) return 'profile'
   const pathSegment = pathname.split('/').filter(Boolean).at(-1)
+  if (pathSegment === 'endorsement') return 'notifications'
   const navigationFromPath = Object.entries(navigationHashes)
     .find(([, route]) => route === pathSegment)?.[0]
   if (navigationFromPath) return navigationFromPath
@@ -291,8 +299,9 @@ function NavigationIcon({ name }) {
     home: <><path d="m3 10 9-7 9 7" /><path d="M5 9v11h14V9M9 20v-6h6v6" /></>,
     network: <><circle cx="9" cy="8" r="3" /><circle cx="17" cy="9" r="2.5" /><path d="M3.5 20v-1.5A5.5 5.5 0 0 1 9 13h0a5.5 5.5 0 0 1 5.5 5.5V20zM15 14a4.5 4.5 0 0 1 5.5 4.5V20h-4" /></>,
     messaging: <><path d="M16 4H8a7 7 0 0 0 0 14h4v4l8.16-5.39A6.78 6.78 0 0 0 23 11a7 7 0 0 0-7-7m-8 8.25A1.25 1.25 0 1 1 9.25 11 1.25 1.25 0 0 1 8 12.25m4 0A1.25 1.25 0 1 1 13.25 11 1.25 1.25 0 0 1 12 12.25m4 0A1.25 1.25 0 1 1 17.25 11 1.25 1.25 0 0 1 16 12.25"/><path d="M7.5 11.5h.01M12 11.5h.01M16.5 11.5h.01" /></>,
-    endorsement: <path d="M21 19v1H3v-1l2-2v-6c0-3.1 2.03-5.83 5-6.71V4a2 2 0 0 1 2-2a2 2 0 0 1 2 2v.29c2.97.88 5 3.61 5 6.71v6zm-7 2a2 2 0 0 1-2 2a2 2 0 0 1-2-2" />,
+    notifications: <path d="M21 19v1H3v-1l2-2v-6c0-3.1 2.03-5.83 5-6.71V4a2 2 0 0 1 2-2a2 2 0 0 1 2 2v.29c2.97.88 5 3.61 5 6.71v6zm-7 2a2 2 0 0 1-2 2a2 2 0 0 1-2-2" />,
     opportunities: <><rect x="3" y="7" width="18" height="13" rx="2" /><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 12h18M10 12v2h4v-2" /></>,
+    casting: <><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 9h18M8 5l3 4m2-4 3 4m2-4 3 4" /><circle cx="12" cy="15" r="2" /></>,
     business: <><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></>,
     commercial: <>
       <circle cx="9.5" cy="12" r="9.25" />
@@ -334,15 +343,17 @@ function ProfileAvatarPlaceholder() {
 }
 
 function Navigation({
+  isDarkMode,
   activeNavigation,
   setActiveNavigation,
   unreadMessageCount,
-  unreadEndorsementCount,
+  unreadNotificationCount,
   networkRequestCount,
   isProfileMenuOpen,
   setIsProfileMenuOpen,
   profilePreview,
   profileDetails,
+  profilePath,
   onCandidateSelected,
   onOpenMessageInbox,
   onShowMyProfile,
@@ -356,9 +367,14 @@ function Navigation({
 }) {
   const profileMenuRef = useRef(null)
   const businessMenuRef = useRef(null)
+  const mobileBusinessMenuRef = useRef(null)
+  const moreMenuRef = useRef(null)
+  const moreMenuTriggerRef = useRef(null)
+  const navbarRef = useRef(null)
   const searchTriggerRef = useRef(null)
   const searchQueryInputRef = useRef(null)
   const [isSearchOpen, setIsSearchOpen] = useState(false)
+  const [searchOverlayTop, setSearchOverlayTop] = useState(58)
   const [talentCategoryDraft, setTalentCategoryDraft] = useState('All')
   const [cinemaTypeDraft, setCinemaTypeDraft] = useState([])
   const [genderDraft, setGenderDraft] = useState([])
@@ -379,6 +395,7 @@ function Navigation({
   const [referralSearchMessage, setReferralSearchMessage] = useState('')
   const [isReferralSearching, setIsReferralSearching] = useState(false)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false)
 
   function selectNavigation(navigation) {
     if (navigation === 'network') {
@@ -386,6 +403,7 @@ function Navigation({
     }
     setActiveNavigation(navigation)
     setIsMobileMenuOpen(false)
+    setIsMoreMenuOpen(false)
     setIsProfileMenuOpen(false)
     setReferralId('')
     setReferralSearchMessage('')
@@ -514,6 +532,13 @@ function Navigation({
     if (!isSearchOpen) return undefined
 
     searchQueryInputRef.current?.focus()
+    function updateSearchOverlayTop() {
+      const navbarBottom = navbarRef.current?.getBoundingClientRect().bottom
+      if (navbarBottom !== undefined) setSearchOverlayTop(Math.ceil(navbarBottom))
+    }
+
+    updateSearchOverlayTop()
+    window.addEventListener('resize', updateSearchOverlayTop)
     const previousOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
 
@@ -527,6 +552,7 @@ function Navigation({
     document.addEventListener('keydown', handleSearchKeyDown)
     return () => {
       document.removeEventListener('keydown', handleSearchKeyDown)
+      window.removeEventListener('resize', updateSearchOverlayTop)
       document.body.style.overflow = previousOverflow
     }
   }, [isSearchOpen])
@@ -671,7 +697,10 @@ function Navigation({
     if (!isBusinessExploreOpen) return undefined
 
     function handleBusinessPointerDown(event) {
-      if (!businessMenuRef.current?.contains(event.target)) {
+      if (
+        !businessMenuRef.current?.contains(event.target)
+        && !mobileBusinessMenuRef.current?.contains(event.target)
+      ) {
         setIsBusinessExploreOpen(false)
       }
     }
@@ -680,8 +709,28 @@ function Navigation({
     return () => document.removeEventListener('pointerdown', handleBusinessPointerDown)
   }, [isBusinessExploreOpen, setIsBusinessExploreOpen])
 
+  useEffect(() => {
+    if (!isMoreMenuOpen) return undefined
+
+    function dismissMoreMenu(event) {
+      if (event.key === 'Escape') {
+        setIsMoreMenuOpen(false)
+        moreMenuTriggerRef.current?.focus()
+      } else if (!moreMenuRef.current?.contains(event.target)) {
+        setIsMoreMenuOpen(false)
+      }
+    }
+
+    document.addEventListener('pointerdown', dismissMoreMenu)
+    document.addEventListener('keydown', dismissMoreMenu)
+    return () => {
+      document.removeEventListener('pointerdown', dismissMoreMenu)
+      document.removeEventListener('keydown', dismissMoreMenu)
+    }
+  }, [isMoreMenuOpen])
+
   return (
-    <nav className={`linkedin-navbar${isMobileMenuOpen ? ' is-mobile-menu-open' : ''}`} aria-label="Profile navigation">
+    <nav ref={navbarRef} className={`linkedin-navbar${isMobileMenuOpen ? ' is-mobile-menu-open' : ''}`} aria-label="Profile navigation">
       <div className="linkedin-navbar-inner">
         <a
           href="/social/home"
@@ -694,6 +743,7 @@ function Navigation({
           <img className="truehunt-brand" src="/truehunt-logo.png" alt="TrueHunt" />
         </a>
         
+        <div className="linkedin-search-group">
         <div
           className="linkedin-search-wrap"
           style={{ position: 'relative' }}
@@ -716,9 +766,10 @@ function Navigation({
               }}
             />
           </label>
-          {isSearchOpen && (
+          {isSearchOpen && createPortal(
             <div
-              className="social-talent-search-overlay"
+              className={`social-talent-search-overlay${isDarkMode ? ' is-dark' : ''}`}
+              style={{ '--social-search-top': `${searchOverlayTop}px` }}
             >
               <form
                 role="dialog"
@@ -1115,7 +1166,8 @@ function Navigation({
                   </main>
                 </div>
               </form>
-            </div>
+            </div>,
+            document.body,
           )}
         </div>
         <div className="linkedin-refer-search-wrap">
@@ -1145,6 +1197,7 @@ function Navigation({
               {referralSearchMessage}
             </span>
           )}
+        </div>
         </div>
         <button
           className="linkedin-mobile-menu-toggle"
@@ -1209,29 +1262,136 @@ function Navigation({
             <small>Messaging</small>
           </a>
           <button
-            className={`linkedin-nav-item${activeNavigation === 'endorsement' ? ' is-active' : ''}`}
+            className={`linkedin-nav-item${activeNavigation === 'notifications' ? ' is-active' : ''}`}
             type="button"
-            onClick={() => selectNavigation('endorsement')}
-            aria-current={activeNavigation === 'endorsement' ? 'page' : undefined}
-            aria-label={unreadEndorsementCount > 0 && activeNavigation !== 'endorsement'
-              ? `Endorsement, ${unreadEndorsementCount} unread notifications`
-              : 'Endorsement'}
+            onClick={() => selectNavigation('notifications')}
+            aria-current={activeNavigation === 'notifications' ? 'page' : undefined}
+            aria-label={unreadNotificationCount > 0 && activeNavigation !== 'notifications'
+              ? `Notifications, ${unreadNotificationCount} unread notifications`
+              : 'Notifications'}
           >
-            <NavigationIcon name="endorsement" />
-            {activeNavigation !== 'endorsement' && unreadEndorsementCount > 0 && (
+            <NavigationIcon name="notifications" />
+            {activeNavigation !== 'notifications' && unreadNotificationCount > 0 && (
               <span className="linkedin-message-badge" aria-hidden="true">
-                {unreadEndorsementCount > 99 ? '99+' : unreadEndorsementCount}
+                {unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}
               </span>
             )}
             <small>Notifications</small>
           </button>
+          <div className={`linkedin-nav-overflow${isMoreMenuOpen ? ' is-open' : ''}`} ref={moreMenuRef}>
+            <button
+              ref={moreMenuTriggerRef}
+              className={`linkedin-nav-item linkedin-nav-more${['opportunities', 'casting', 'business'].includes(activeNavigation) ? ' is-active' : ''}`}
+              type="button"
+              onClick={() => setIsMoreMenuOpen((open) => !open)}
+              aria-label="More navigation"
+              aria-expanded={isMoreMenuOpen}
+              aria-controls="linkedin-nav-overflow-menu"
+            >
+              <MoreHorizontal className="linkedin-nav-icon" aria-hidden="true" />
+              <small>More</small>
+            </button>
+            {isMoreMenuOpen && (
+              <div className="linkedin-nav-overflow-menu" id="linkedin-nav-overflow-menu" role="group" aria-label="More navigation">
+                <button
+                  className={`linkedin-nav-item${activeNavigation === 'opportunities' ? ' is-active' : ''}`}
+                  type="button"
+                  onClick={() => selectNavigation('opportunities')}
+                  aria-current={activeNavigation === 'opportunities' ? 'page' : undefined}
+                >
+                  <NavigationIcon name="opportunities" /><small>Opportunities</small>
+                </button>
+                <button
+                  className={`linkedin-nav-item${activeNavigation === 'casting' ? ' is-active' : ''}`}
+                  type="button"
+                  onClick={() => selectNavigation('casting')}
+                  aria-current={activeNavigation === 'casting' ? 'page' : undefined}
+                >
+                  <NavigationIcon name="casting" /><small>Casting</small>
+                </button>
+                <div className={`linkedin-profile-menu linkedin-business-menu linkedin-mobile-business-menu${isBusinessExploreOpen ? ' is-open' : ''}`} ref={mobileBusinessMenuRef}>
+                  <button
+                    className={`linkedin-nav-item linkedin-business${isBusinessExploreOpen ? ' is-active' : ''}`}
+                    type="button"
+                    onClick={() => setIsBusinessExploreOpen((open) => !open)}
+                    aria-haspopup="menu"
+                    aria-expanded={isBusinessExploreOpen}
+                  >
+                    <NavigationIcon name="business" /><small>My Business</small>
+                  </button>
+                  {isBusinessExploreOpen && (
+                    <div className="linkedin-profile-dropdown business-explore-dropdown" role="menu" aria-label="Explore">
+                      <div className="business-explore-dropdown-heading">Explore</div>
+                      <Link
+                        className="profile-dropdown-item business-explore-dropdown-link"
+                        to={filmMakerVisited ? '/protect-producer' : '/entertainments'}
+                        role="menuitem" target="_blank"
+                        onClick={onFilmMakerAccess}
+                      >
+                        {filmMakerVisited ? 'Manage Film' : 'Are you a Film Maker?'} <span aria-hidden="true">↗</span>
+                      </Link>
+                      <div className="profile-dropdown-divider" />
+                      <button
+                        className="profile-dropdown-item business-explore-dropdown-link"
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setIsBusinessExploreOpen(false)
+                          setIsMoreMenuOpen(false)
+                          onOpenInvestorRequest()
+                        }}
+                      >
+                        Are you an Investor / Producer ?<span aria-hidden="true">↗</span>
+                      </button>
+                      <div className="profile-dropdown-divider" />
+                      <a
+                        className="profile-dropdown-item business-explore-dropdown-link"
+                        href="https://truehunt.in/entertainments"
+                        role="menuitem" target="_blank"
+                        onClick={() => setIsBusinessExploreOpen(false)}
+                      >
+                        Are you an asset manager ? <span aria-hidden="true">↗</span>
+                      </a>
+                      <div className="profile-dropdown-divider" />
+                      <Link
+                        className="profile-dropdown-item business-explore-dropdown-link"
+                        to="/entertainments"
+                        role="menuitem" target="_blank"
+                        onClick={() => setIsBusinessExploreOpen(false)}
+                      >
+                        Are you interested in advertisement? <span aria-hidden="true">↗</span>
+                      </Link>
+                    </div>
+                  )}
+                </div>
+                <Link
+                  className="linkedin-nav-item"
+                  to="/entertainments"
+                  onClick={() => {
+                    setIsBusinessExploreOpen(false)
+                    setIsMoreMenuOpen(false)
+                  }}
+                >
+                  <NavigationIcon name="commercial" /><small>Commercial</small>
+                </Link>
+              </div>
+            )}
+          </div>
           <button
-            className={`linkedin-nav-item${activeNavigation === 'opportunities' ? ' is-active' : ''}`}
+            className={`linkedin-nav-item linkedin-nav-overflow-desktop-item${activeNavigation === 'opportunities' ? ' is-active' : ''}`}
             type="button"
             onClick={() => selectNavigation('opportunities')}
             aria-current={activeNavigation === 'opportunities' ? 'page' : undefined}
           >
             <NavigationIcon name="opportunities" /><small>Opportunities</small>
+          </button>
+          <button
+            className={`linkedin-nav-item linkedin-nav-overflow-desktop-item${activeNavigation === 'casting' ? ' is-active' : ''}`}
+            type="button"
+            onClick={() => selectNavigation('casting')}
+            aria-current={activeNavigation === 'casting' ? 'page' : undefined}
+          >
+            <NavigationIcon name="casting" /><small>Casting</small>
           </button>
           <div className={`linkedin-profile-menu${isProfileMenuOpen ? ' is-open' : ''}`} ref={profileMenuRef}>
             <button
@@ -1252,7 +1412,7 @@ function Navigation({
               <div className="linkedin-profile-dropdown" role="menu">
                 <a
                   className="profile-dropdown-person"
-                  href="/social/profile"
+                  href={profilePath}
                   role="menuitem"
                   onClick={(event) => {
                     event.preventDefault()
@@ -1309,8 +1469,8 @@ function Navigation({
               </div>
             )}
           </div>
-          <span className="linkedin-nav-divider" aria-hidden="true" />
-          <div className={`linkedin-profile-menu linkedin-business-menu${isBusinessExploreOpen ? ' is-open' : ''}`} ref={businessMenuRef}>
+          <span className="linkedin-nav-divider linkedin-nav-overflow-desktop-item" aria-hidden="true" />
+          <div className={`linkedin-profile-menu linkedin-business-menu linkedin-nav-overflow-desktop-item${isBusinessExploreOpen ? ' is-open' : ''}`} ref={businessMenuRef}>
             <button
               className={`linkedin-nav-item linkedin-business${isBusinessExploreOpen ? ' is-active' : ''}`}
               type="button"
@@ -1365,7 +1525,7 @@ function Navigation({
             )}
           </div>
           <Link
-            className="linkedin-nav-item"
+            className="linkedin-nav-item linkedin-nav-overflow-desktop-item"
             to="/entertainments"
             onClick={() => {
               setIsBusinessExploreOpen(false)
@@ -1400,9 +1560,10 @@ export default function SocialApp() {
       : getNavigationFromLocation(location.pathname)
   ))
   const [connectionsReturnNavigation, setConnectionsReturnNavigation] = useState('profile')
+  const [profileConnectionsView, setProfileConnectionsView] = useState(null)
   const [unreadMessageCount, setUnreadMessageCount] = useState(0)
   const [messageInboxRequest, setMessageInboxRequest] = useState(0)
-  const [unreadEndorsementCount, setUnreadEndorsementCount] = useState(0)
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0)
   const [networkRequestCount, setNetworkRequestCount] = useState(0)
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false)
   const [isBusinessExploreOpen, setIsBusinessExploreOpen] = useState(false)
@@ -1470,7 +1631,8 @@ export default function SocialApp() {
   const [theme, setTheme] = useState(() => {
     if (typeof window === 'undefined') return 'light'
     try {
-      return window.localStorage.getItem('truehunt-social-theme') === 'dark' ? 'dark' : 'light'
+      const savedTheme = window.localStorage.getItem('truehunt-social-theme')
+      return savedTheme === 'dark' ? 'dark' : 'light'
     } catch (error) {
       console.warn('Could not read saved Social theme:', error)
       return 'light'
@@ -1525,6 +1687,13 @@ export default function SocialApp() {
     }
     return user?.avatar || user?.profileImageUrl || ''
   })
+  const ownProfileId = String(
+    profileDetails.userId || user?.userId || profileDetails.id || user?.id || '',
+  ).trim()
+  const ownProfilePath = ownProfileId
+    ? `/social/${encodeURIComponent(ownProfileId)}/profile`
+    : '/social/profile'
+  const previousOwnProfileIdRef = useRef(ownProfileId)
 
   const handleThemeChange = useCallback((nextTheme) => {
     setTheme(nextTheme)
@@ -1537,7 +1706,7 @@ export default function SocialApp() {
 
   function persistOwnPost(post) {
     const profileId = String(
-      profileDetails.userId || profileDetails.id || user?.userId || user?.id || user?.email || 'me',
+      profileDetails.userId || profileDetails.id || user?.userId || user?.id || user?.email,
     ).trim()
     const storageKey = `truehunt-social-posts:${encodeURIComponent(profileId || 'me')}`
     setProfileDetails((previous) => {
@@ -1572,7 +1741,7 @@ export default function SocialApp() {
     if (!hash) return
 
     window.dispatchEvent(new CustomEvent('truehunt-social-navigation-changed'))
-    const nextUrl = `/social/${hash}`
+    const nextUrl = navigation === 'profile' ? ownProfilePath : `/social/${hash}`
     if (window.location.hash !== `/${hash}`) {
       window.history.pushState({ navigation }, '', nextUrl)
     }
@@ -1587,23 +1756,23 @@ export default function SocialApp() {
     let isCurrent = true
     async function refreshNavigationCounts() {
       const results = await Promise.allSettled([
-        activeNavigation === 'endorsement' ? Promise.resolve(null) : api.getNotifications(),
+        activeNavigation === 'notifications' ? Promise.resolve(null) : api.getNotifications(),
         api.getInvitations(),
         api.getIncomingContactAccessRequests(),
       ])
       if (!isCurrent) return
 
       const [notificationsResult, invitationsResult, contactRequestsResult] = results
-      let endorsementCount = 0
+      let notificationCount = 0
       if (notificationsResult.status === 'fulfilled') {
         const notifications = notificationsResult.value
         if (Array.isArray(notifications)) {
-          endorsementCount += notifications.filter(
+          notificationCount += notifications.filter(
             (notification) => !(notification.read ?? notification.isRead),
           ).length
         }
       } else {
-        console.warn('Could not refresh endorsement notification count:', notificationsResult.reason)
+        console.warn('Could not refresh notification count:', notificationsResult.reason)
       }
 
       if (invitationsResult.status === 'fulfilled') {
@@ -1614,12 +1783,12 @@ export default function SocialApp() {
 
       if (contactRequestsResult.status === 'fulfilled') {
         if (Array.isArray(contactRequestsResult.value)) {
-          endorsementCount += contactRequestsResult.value.length
+          notificationCount += contactRequestsResult.value.length
         }
       } else {
         console.warn('Could not refresh contact access request count:', contactRequestsResult.reason)
       }
-      setUnreadEndorsementCount(endorsementCount)
+      setUnreadNotificationCount(notificationCount)
     }
 
     function refreshOnConnectionChange() {
@@ -1632,6 +1801,7 @@ export default function SocialApp() {
     refreshNavigationCounts()
     const intervalId = window.setInterval(refreshNavigationCounts, 30_000)
     window.addEventListener('truehunt-connection-changed', refreshOnConnectionChange)
+    window.addEventListener('truehunt-settings-updated', refreshNavigationCounts)
     window.addEventListener('focus', refreshWhenVisible)
     document.addEventListener('visibilitychange', refreshWhenVisible)
 
@@ -1639,23 +1809,24 @@ export default function SocialApp() {
       isCurrent = false
       window.clearInterval(intervalId)
       window.removeEventListener('truehunt-connection-changed', refreshOnConnectionChange)
+      window.removeEventListener('truehunt-settings-updated', refreshNavigationCounts)
       window.removeEventListener('focus', refreshWhenVisible)
       document.removeEventListener('visibilitychange', refreshWhenVisible)
     }
   }, [activeNavigation, isAuthenticated, user?.email, user?.id, user?.userId])
 
   useEffect(() => {
-    if (!isAuthenticated || activeNavigation !== 'endorsement') return
+    if (!isAuthenticated || activeNavigation !== 'notifications') return
 
     api.markAllNotificationsAsRead().catch((error) => {
-      console.warn('Could not mark endorsement notifications as read:', error)
+      console.warn('Could not mark notifications as read:', error)
     })
   }, [activeNavigation, isAuthenticated])
 
   function showMyProfile() {
     setViewingCandidateProfile(null)
     setActiveNavigationState('profile')
-    navigate('/social/profile')
+    navigate(ownProfilePath)
     api.getProfile().then((fresh) => {
       if (fresh && fresh.name) {
         setProfileDetails((prev) => ({ ...prev, ...fresh }))
@@ -1720,7 +1891,9 @@ export default function SocialApp() {
     }
     setViewingCandidateProfile(selectedCandidate)
     setActiveNavigationState('profile')
-    navigate('/social/profile', { state: { connectTalent: selectedCandidate } })
+    navigate(candidateId ? `/social/${encodeURIComponent(candidateId)}/profile` : '/social/profile', {
+      state: { connectTalent: selectedCandidate },
+    })
 
     const isImageTarget = (val) => {
       if (!val || typeof val !== 'string') return false
@@ -1797,6 +1970,32 @@ export default function SocialApp() {
       navigate(`${location.pathname}${location.search}`, { replace: true, state: null })
     }
   }, [location.pathname, location.search, location.state, navigate])
+
+  useEffect(() => {
+    const previousOwnProfileId = previousOwnProfileIdRef.current
+    previousOwnProfileIdRef.current = ownProfileId
+
+    if (activeNavigation !== 'profile' || viewingCandidateProfile || !ownProfileId) return
+
+    const ownProfilePaths = [
+      '/social/profile',
+      previousOwnProfileId
+        ? `/social/${encodeURIComponent(previousOwnProfileId)}/profile`
+        : '',
+      ownProfilePath,
+    ]
+    if (ownProfilePaths.includes(location.pathname) && location.pathname !== ownProfilePath) {
+      navigate(`${ownProfilePath}${location.search}`, { replace: true })
+    }
+  }, [
+    activeNavigation,
+    location.pathname,
+    location.search,
+    navigate,
+    ownProfileId,
+    ownProfilePath,
+    viewingCandidateProfile,
+  ])
 
   useEffect(() => {
     function restoreNavigation() {
@@ -1877,6 +2076,18 @@ export default function SocialApp() {
       } catch (err) {
         console.warn('Backend profile fetch note:', err)
       }
+      try {
+        const storedTheme = window.localStorage.getItem('truehunt-social-theme')
+        if (!storedTheme) {
+          const settings = await api.getSettings()
+          if (isCurrentAccount && (settings?.theme === 'light' || settings?.theme === 'dark')) {
+            setTheme(settings.theme)
+            window.localStorage.setItem('truehunt-social-theme', settings.theme)
+          }
+        }
+      } catch {
+        // ignore settings fetch note
+      }
     }
     loadBackendData()
     return () => {
@@ -1913,15 +2124,17 @@ export default function SocialApp() {
   return (
     <main className={`cinemans-page is-preview${activeNavigation === 'home' ? ' is-home' : ''}${activeNavigation === 'messaging' ? ' is-messaging' : ''}${theme === 'dark' ? ' is-dark' : ''}`}>
       <Navigation
+        isDarkMode={theme === 'dark'}
         activeNavigation={activeNavigation}
         setActiveNavigation={setActiveNavigation}
         unreadMessageCount={unreadMessageCount}
-        unreadEndorsementCount={isAuthenticated ? unreadEndorsementCount : 0}
+        unreadNotificationCount={isAuthenticated ? unreadNotificationCount : 0}
         networkRequestCount={isAuthenticated ? networkRequestCount : 0}
         isProfileMenuOpen={isProfileMenuOpen}
         setIsProfileMenuOpen={setIsProfileMenuOpen}
         profilePreview={profilePreview}
         profileDetails={profileDetails}
+        profilePath={ownProfilePath}
         onCandidateSelected={showCandidateProfile}
         onOpenMessageInbox={() => setMessageInboxRequest((current) => current + 1)}
         onShowMyProfile={showMyProfile}
@@ -1939,6 +2152,19 @@ export default function SocialApp() {
         isBusinessExploreOpen={isBusinessExploreOpen}
         setIsBusinessExploreOpen={setIsBusinessExploreOpen}
       />
+
+      <div hidden={activeNavigation !== 'casting'} className="social-casting-page">
+        {activeNavigation === 'casting' && (
+          <CastingPage
+            key={profileDetails.userId || user?.userId || profileDetails.id || user?.id || user?.email || 'guest'}
+            onBack={() => setActiveNavigation('home')}
+            onProfileSelect={showCandidateProfile}
+            currentUserId={profileDetails.userId || user?.userId || profileDetails.id || user?.id || user?.email}
+            currentUserAvatar={profileDetails.profileImageUrl || profileDetails.avatar || profilePreview}
+            isAuthenticated={isAuthenticated}
+          />
+        )}
+      </div>
 
       <Home
         profileDetails={profileDetails}
@@ -1989,17 +2215,19 @@ export default function SocialApp() {
           resetToInboxRequest={messageInboxRequest}
         />
       </div>
-      <div hidden={activeNavigation !== 'endorsement'}>
-        <Endorsement
+      <div hidden={activeNavigation !== 'notifications'}>
+        <Notifications
           profileDetails={profileDetails}
           profilePreview={profilePreview}
-          isActive={activeNavigation === 'endorsement'}
+          isActive={activeNavigation === 'notifications'}
           onViewProfile={showMyProfile}
+          onViewConnection={showCandidateProfile}
           onManageNotifications={() => setActiveNavigation('settings')}
         />
       </div>
       <div hidden={activeNavigation !== 'connections'}>
         <ConnectionsPage
+          isActive={activeNavigation === 'connections'}
           onBack={() => setActiveNavigation(connectionsReturnNavigation)}
           backLabel={connectionsReturnNavigation === 'home' ? 'Back to Home' : 'Back to profile'}
           onMessage={(recipient) => {
@@ -2016,6 +2244,24 @@ export default function SocialApp() {
             profileDetails.email,
           ]}
         />
+      </div>
+      <div hidden={activeNavigation !== 'profile-connections'}>
+        {profileConnectionsView && (
+          <ProfileConnectionsPage
+            key={`${profileConnectionsView.profileId}-${profileConnectionsView.initialTab}`}
+            isActive={activeNavigation === 'profile-connections'}
+            profileId={profileConnectionsView.profileId}
+            profileName={profileConnectionsView.profileName}
+            initialTab={profileConnectionsView.initialTab}
+            showMutualConnections={profileConnectionsView.showMutualConnections}
+            onBack={() => setActiveNavigation('profile')}
+            onProfileSelect={showCandidateProfile}
+            onMessage={(recipient) => {
+              openConversationRef.current?.(recipient)
+              setActiveNavigation('messaging')
+            }}
+          />
+        )}
       </div>
       {(() => {
         const viewingCandidateId = String(viewingCandidateProfile?.userId || viewingCandidateProfile?.id || viewingCandidateProfile?.email || '').trim().toLowerCase()
@@ -2073,6 +2319,37 @@ export default function SocialApp() {
                 setConnectionsReturnNavigation('profile')
                 setActiveNavigation('connections')
               }}
+              onViewFollowers={() => {
+                const profileId = String(
+                  activeProfileDetails.userId
+                    || activeProfileDetails.id
+                    || activeProfileDetails.email
+                    || '',
+                ).trim()
+                setProfileConnectionsView({
+                  profileId,
+                  profileName: activeProfileDetails.name || 'Profile',
+                  initialTab: 'followers',
+                  showMutualConnections: activeProfileDetails.connectionsVisible !== false,
+                })
+                setActiveNavigation('profile-connections')
+              }}
+              onViewMutualConnections={() => {
+                const profileId = String(
+                  activeProfileDetails.userId
+                    || activeProfileDetails.id
+                    || activeProfileDetails.email
+                    || '',
+                ).trim()
+                setProfileConnectionsView({
+                  profileId,
+                  profileName: activeProfileDetails.name || 'Profile',
+                  initialTab: 'mutual',
+                  showMutualConnections: activeProfileDetails.connectionsVisible !== false,
+                })
+                setActiveNavigation('profile-connections')
+              }}
+              onViewNotifications={() => setActiveNavigation('notifications')}
               onMessage={(recipient) => {
                 openConversationRef.current?.(recipient)
                 setActiveNavigation('messaging')

@@ -15,6 +15,7 @@ public class NotificationEntity {
     private Long id;
 
     private String recipientId;
+    private String senderProfileId;
     private String title;
     private String message;
     private String type = "endorsement";
@@ -36,6 +37,9 @@ public class NotificationEntity {
     public String getRecipientId() { return recipientId; }
     public void setRecipientId(String recipientId) { this.recipientId = recipientId; }
 
+    public String getSenderProfileId() { return senderProfileId; }
+    public void setSenderProfileId(String senderProfileId) { this.senderProfileId = senderProfileId; }
+
     public String getTitle() { return title; }
     public void setTitle(String title) { this.title = title; }
 
@@ -55,6 +59,9 @@ public class NotificationEntity {
         Map<String, Object> dto = new HashMap<>();
         dto.put("id", id);
         dto.put("recipientId", recipientId);
+        if (senderProfileId != null && !senderProfileId.isBlank()) {
+            dto.put("senderProfileId", senderProfileId);
+        }
         dto.put("title", title);
         dto.put("message", message);
         dto.put("type", type);

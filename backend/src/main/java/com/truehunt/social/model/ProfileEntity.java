@@ -75,8 +75,18 @@ public class ProfileEntity {
     @Column(name = "profile_image_url", columnDefinition = "CLOB")
     private String profileImageUrl;
 
-    @Column(length = 2048)
+    @Lob
+    @Column(name = "cover_image_url", columnDefinition = "CLOB")
     private String coverImageUrl;
+
+    @Column(length = 2048)
+    private String showreel;
+
+    private Boolean acceptedTerms;
+
+    @Lob
+    @Column(columnDefinition = "TEXT")
+    private String creditsJson = "[]";
 
     @Lob
     @Column(columnDefinition = "TEXT")
@@ -200,6 +210,20 @@ public class ProfileEntity {
 
     public String getCoverImageUrl() { return coverImageUrl; }
     public void setCoverImageUrl(String coverImageUrl) { this.coverImageUrl = coverImageUrl; }
+
+    public String getShowreel() { return showreel; }
+    public void setShowreel(String showreel) { this.showreel = showreel; }
+
+    public Boolean getAcceptedTerms() { return acceptedTerms; }
+    public void setAcceptedTerms(Boolean acceptedTerms) { this.acceptedTerms = acceptedTerms; }
+
+    public List<Map<String, Object>> getCredits() {
+        return fromJson(creditsJson, new TypeReference<List<Map<String, Object>>>() {});
+    }
+
+    public void setCredits(List<Map<String, Object>> credits) {
+        this.creditsJson = toJson(credits);
+    }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }

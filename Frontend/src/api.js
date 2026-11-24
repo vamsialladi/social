@@ -67,6 +67,22 @@ export const api = {
   // Profiles
   getProfile: () => fetchJson("/profiles/me"),
   getProfileById: (id) => fetchJson(`/profiles/${encodeURIComponent(id)}`),
+  getProfileEndorsements: (profileId) =>
+    fetchJson(`/profiles/${encodeURIComponent(profileId)}/endorsements`),
+  createProfileEndorsement: (profileId, endorsement) =>
+    fetchJson(`/profiles/${encodeURIComponent(profileId)}/endorsements`, {
+      method: "POST",
+      body: endorsement,
+    }),
+  updateProfileEndorsement: (profileId, endorsementId, endorsement) =>
+    fetchJson(`/profiles/${encodeURIComponent(profileId)}/endorsements/${encodeURIComponent(endorsementId)}`, {
+      method: "PUT",
+      body: endorsement,
+    }),
+  deleteProfileEndorsement: (profileId, endorsementId) =>
+    fetchJson(`/profiles/${encodeURIComponent(profileId)}/endorsements/${encodeURIComponent(endorsementId)}`, {
+      method: "DELETE",
+    }),
   getProfileDirectory: () => fetchJson("/profiles/directory"),
   recordProfileView: (id) =>
     fetchJson(`/profiles/${encodeURIComponent(id)}/views`, { method: "POST" }),
@@ -85,8 +101,25 @@ export const api = {
     formData.append("file", file);
     if (category) formData.append("category", category);
 
+    const headers = {};
+    try {
+      const token = localStorage.getItem("truehunt_token");
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const storedUser = localStorage.getItem("truehunt_user");
+      if (storedUser) {
+        const user = JSON.parse(storedUser);
+        if (user?.email) headers["X-User-Email"] = user.email;
+        const userId = user?.userId || user?.publicUserId || user?.id;
+        if (userId) headers["X-User-Id"] = String(userId);
+        if (user?.name) headers["X-User-Name"] = user.name;
+      }
+    } catch {
+      // ignore storage errors
+    }
+
     const response = await fetch(`${API_BASE}/media/upload`, {
       method: "POST",
+      headers,
       body: formData,
     });
 
@@ -112,6 +145,13 @@ export const api = {
 
   // Posts & Opportunities
   getPosts: (type = "") => fetchJson(`/posts${type ? `?type=${type}` : ""}`),
+  getCastingProfiles: () => fetchJson("/posts?type=casting"),
+  createCastingProfile: (profile) =>
+    fetchJson("/posts", {
+      method: "POST",
+      body: { ...profile, type: "casting", audience: "public" },
+    }),
+  getPostLikes: (id) => fetchJson(`/posts/${id}/likes`),
   getOpportunities: () => fetchJson("/opportunities"),
   createPost: (post) => fetchJson("/posts", { method: "POST", body: post }),
   createOpportunity: (opp) =>
@@ -121,6 +161,20 @@ export const api = {
   updatePost: (id, post) =>
     fetchJson(`/posts/${id}`, { method: "PATCH", body: post }),
   likePost: (id) => fetchJson(`/posts/${id}/like`, { method: "POST" }),
+  sharePost: (id) => fetchJson(`/posts/${id}/share`, { method: "POST" }),
+  getSavedPosts: () => fetchJson("/posts/saved"),
+  savePost: (id) => fetchJson(`/posts/${id}/save`, { method: "POST" }),
+  unsavePost: (id) => fetchJson(`/posts/${id}/save`, { method: "DELETE" }),
+  reportPost: (id, report) =>
+    fetchJson(`/posts/${id}/report`, { method: "POST", body: report }),
+  getMyReports: () => fetchJson("/reports/me"),
+  getHiddenContent: () => fetchJson("/posts/hidden"),
+  markPostNotInterested: (id) =>
+    fetchJson(`/posts/${id}/not-interested`, { method: "POST" }),
+  hideAuthorPosts: (authorId) =>
+    fetchJson(`/posts/hide-author/${encodeURIComponent(authorId)}`, {
+      method: "POST",
+    }),
   commentOnPost: (id, text) =>
     fetchJson(`/posts/${id}/comments`, { method: "POST", body: { text } }),
   deletePostComment: (postId, commentId) =>
@@ -139,8 +193,11 @@ export const api = {
       `/posts/${postId}/comments/${encodeURIComponent(commentId)}/replies/${encodeURIComponent(replyId)}`,
       { method: "DELETE" },
     ),
-  applyToOpportunity: (id) =>
-    fetchJson(`/posts/${id}/apply`, { method: "POST" }),
+  applyToOpportunity: (id, details = null) =>
+    fetchJson(`/posts/${id}/apply`, {
+      method: "POST",
+      ...(details ? { body: details } : {}),
+    }),
   cancelOpportunityApplication: (id) =>
     fetchJson(`/posts/${id}/apply`, { method: "DELETE" }),
   deletePost: async (id) => {
@@ -184,6 +241,12 @@ export const api = {
     fetchJson(`/admin/posts/${encodeURIComponent(id)}`, { method: "DELETE" }),
   deleteAdminOpportunity: (id) =>
     fetchJson(`/admin/opportunities/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  getAdminReports: () => fetchJson("/admin/reports"),
+  updateAdminReportStatus: (id, status) =>
+    fetchJson(`/admin/reports/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: { status },
+    }),
   getAdminInvestorRequests: () => fetchJson("/admin/investor-requests"),
   approveAdminInvestorRequest: (id) =>
     fetchJson(`/admin/investor-requests/${encodeURIComponent(id)}/approve`, {
@@ -201,11 +264,62 @@ export const api = {
     fetchJson(`/investor-access/listings/${encodeURIComponent(listingId)}/interest`, {
       method: "POST",
     }),
+  markInvestorNotInterested: (listingId) =>
+    fetchJson(`/investor-access/listings/${encodeURIComponent(listingId)}/not-interested`, {
+      method: "POST",
+    }),
 
   // Network & Connections
   getNetworkSuggestions: () => fetchJson("/connections/suggestions"),
   getInvitations: () => fetchJson("/connections/invitations"),
   getConnectedProfiles: () => fetchJson("/connections"),
+  getMutualConnectionsCount: (profileId) =>
+    fetchJson(`/connections/mutual/${encodeURIComponent(profileId)}`),
+  getProfileFollowers: (profileId) =>
+    fetchJson(`/connections/profiles/${encodeURIComponent(profileId)}/followers`),
+  getProfileMutualConnections: (profileId) =>
+    fetchJson(`/connections/profiles/${encodeURIComponent(profileId)}/mutual`),
+  getConnectionGroups: () => fetchJson("/connections/groups"),
+  createConnectionGroup: (name, memberProfileIds, imageUrl = "") =>
+    fetchJson("/connections/groups", {
+      method: "POST",
+      body: { name, memberProfileIds, imageUrl },
+    }),
+  updateConnectionGroup: (id, name, memberProfileIds, imageUrl = "") =>
+    fetchJson(`/connections/groups/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      body: { name, memberProfileIds, imageUrl },
+    }),
+  deleteConnectionGroup: (id) =>
+    fetchJson(`/connections/groups/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }),
+  followConnectionGroup: (id) =>
+    fetchJson(`/connections/groups/${encodeURIComponent(id)}/follow`, {
+      method: "POST",
+    }),
+  unfollowConnectionGroup: (id) =>
+    fetchJson(`/connections/groups/${encodeURIComponent(id)}/follow`, {
+      method: "DELETE",
+    }),
+  getConnectionGroupPosts: (id) =>
+    fetchJson(`/connections/groups/${encodeURIComponent(id)}/posts`),
+  createConnectionGroupPost: (id, post) =>
+    fetchJson(`/connections/groups/${encodeURIComponent(id)}/posts`, {
+      method: "POST",
+      body: post,
+    }),
+  deleteConnectionGroupPost: (groupId, postId) =>
+    fetchJson(
+      `/connections/groups/${encodeURIComponent(groupId)}/posts/${encodeURIComponent(postId)}`,
+      { method: "DELETE" },
+    ),
+  openConnectionGroupConversation: (id) =>
+    fetchJson(`/connections/groups/${encodeURIComponent(id)}/conversation`, {
+      method: "POST",
+    }),
+  getFollowers: () => fetchJson("/connections/followers"),
+  getNetworkCatchUp: () => fetchJson("/connections/catch-up"),
   sendConnectionRequest: (profileId, message = "") =>
     fetchJson("/connections/request", {
       method: "POST",
@@ -285,11 +399,22 @@ export const api = {
       method: "PATCH",
       body: { mailbox },
     }),
+  hideConversation: (id) =>
+    fetchJson(`/conversations/${encodeURIComponent(id)}/hide`, {
+      method: "POST",
+    }),
   deleteConversation: (id) =>
     fetchJson(`/conversations/${id}`, { method: "DELETE" }),
 
-  // Notifications / Endorsements
+  // Notifications
   getNotifications: () => fetchJson("/notifications"),
+  getEndorsementRequestCooldowns: (senderProfileId) =>
+    fetchJson(`/notifications/endorsement-requests/cooldowns?senderProfileId=${encodeURIComponent(senderProfileId)}`),
+  sendEndorsementRequests: (senderProfileId, recipientProfileIds) =>
+    fetchJson("/notifications/endorsement-requests", {
+      method: "POST",
+      body: { senderProfileId, recipientProfileIds },
+    }),
   markNotificationAsRead: (id) =>
     fetchJson(`/notifications/${id}/read`, { method: "PATCH" }),
   markAllNotificationsAsRead: () =>
@@ -303,6 +428,23 @@ export const api = {
     fetchJson("/settings/theme", { method: "PATCH", body: { theme } }),
   updateNotificationPreferences: (prefs) =>
     fetchJson("/settings/notifications", { method: "PATCH", body: prefs }),
+  updatePrivacySettings: (prefs) =>
+    fetchJson("/settings/privacy", { method: "PATCH", body: prefs }),
+  updateRestrictedSettings: (prefs) =>
+    fetchJson("/settings/restricted", { method: "PATCH", body: prefs }),
+  updateMediaVisibilitySettings: (prefs) =>
+    fetchJson("/settings/media-visibility", { method: "PATCH", body: prefs }),
+  updateEngagementSettings: (prefs) =>
+    fetchJson("/settings/engagement", { method: "PATCH", body: prefs }),
+  updateSecuritySettings: (prefs) =>
+    fetchJson("/settings/security", { method: "PATCH", body: prefs }),
+  getBlockedUsers: () => fetchJson("/settings/blocked-users"),
+  blockUser: (user) =>
+    fetchJson("/settings/blocked-users", { method: "POST", body: user }),
+  unblockUser: (identity) =>
+    fetchJson(`/settings/blocked-users?identity=${encodeURIComponent(identity)}`, {
+      method: "DELETE",
+    }),
   changePassword: (data) =>
     fetchJson("/settings/change-password", { method: "POST", body: data }),
   deleteAccount: () =>

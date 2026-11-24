@@ -6,13 +6,17 @@ import com.truehunt.social.exception.BadRequestException;
 import com.truehunt.social.exception.ResourceNotFoundException;
 import com.truehunt.social.exception.UnauthorizedException;
 import com.truehunt.social.model.ConversationEntity;
+import com.truehunt.social.model.ConnectionGroupEntity;
 import com.truehunt.social.model.MessageEntity;
 import com.truehunt.social.model.ProfileEntity;
 import com.truehunt.social.model.UserAccountEntity;
 import com.truehunt.social.repository.ConversationRepository;
+import com.truehunt.social.repository.ConnectionGroupRepository;
 import com.truehunt.social.repository.MessageRepository;
 import com.truehunt.social.repository.ProfileRepository;
 import com.truehunt.social.repository.UserAccountRepository;
+import com.truehunt.social.repository.UserProfileRelationshipRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,17 +32,42 @@ public class ConversationService {
     private final MessageService messageService;
     private final UserAccountRepository userAccountRepository;
     private final ProfileRepository profileRepository;
+    private final UserProfileRelationshipRepository relationshipRepository;
+    private final ConnectionGroupRepository connectionGroupRepository;
 
     public ConversationService(ConversationRepository conversationRepository,
             MessageRepository messageRepository,
             MessageService messageService,
             UserAccountRepository userAccountRepository,
             ProfileRepository profileRepository) {
+        this(conversationRepository, messageRepository, messageService, userAccountRepository, profileRepository, null, null);
+    }
+
+    public ConversationService(ConversationRepository conversationRepository,
+            MessageRepository messageRepository,
+            MessageService messageService,
+            UserAccountRepository userAccountRepository,
+            ProfileRepository profileRepository,
+            UserProfileRelationshipRepository relationshipRepository) {
+        this(conversationRepository, messageRepository, messageService, userAccountRepository, profileRepository,
+                relationshipRepository, null);
+    }
+
+    @Autowired
+    public ConversationService(ConversationRepository conversationRepository,
+            MessageRepository messageRepository,
+            MessageService messageService,
+            UserAccountRepository userAccountRepository,
+            ProfileRepository profileRepository,
+            UserProfileRelationshipRepository relationshipRepository,
+            ConnectionGroupRepository connectionGroupRepository) {
         this.conversationRepository = conversationRepository;
         this.messageRepository = messageRepository;
         this.messageService = messageService;
         this.userAccountRepository = userAccountRepository;
         this.profileRepository = profileRepository;
+        this.relationshipRepository = relationshipRepository;
+        this.connectionGroupRepository = connectionGroupRepository;
     }
 
     public List<Map<String, Object>> getConversations(String mailbox) {
@@ -56,10 +85,66 @@ public class ConversationService {
         final String cleanEmail = userEmail.trim().toLowerCase(Locale.ROOT);
         final Set<String> callerIdentifiers = resolveCallerIdentifiers(userEmail);
         return list.stream()
-                .filter(c -> callerIdentifiers.contains(normalizeIdentity(c.getUser1Id()))
-                        || callerIdentifiers.contains(normalizeIdentity(c.getUser2Id())))
+                .filter(c -> {
+                    if (c.isGroupConversation()) {
+                        if (connectionGroupRepository != null) {
+                            List<String> currentParticipants = resolveCurrentGroupParticipantIds(c);
+                            if (currentParticipants.isEmpty()) return false;
+                            if (!currentParticipants.equals(c.getGroupParticipantIds())) {
+                                c.setGroupParticipantIds(currentParticipants);
+                                conversationRepository.save(c);
+                            }
+                        }
+                        boolean isParticipant = c.getGroupParticipantIds().stream()
+                                .map(this::normalizeIdentity)
+                                .anyMatch(callerIdentifiers::contains);
+                        boolean isHidden = c.getGroupHiddenParticipantIds().stream()
+                                .map(this::normalizeIdentity)
+                                .anyMatch(callerIdentifiers::contains);
+                        return isParticipant && !isHidden;
+                    }
+                    boolean isUser1 = callerIdentifiers.contains(normalizeIdentity(c.getUser1Id()));
+                    boolean isUser2 = callerIdentifiers.contains(normalizeIdentity(c.getUser2Id()));
+                    if (!isUser1 && !isUser2) return false;
+                    if (isUser1 && c.isUser1Hidden()) return false;
+                    if (isUser2 && c.isUser2Hidden()) return false;
+                    return true;
+                })
                 .map(c -> toEnrichedDto(c, cleanEmail, callerIdentifiers))
                 .collect(Collectors.toList());
+    }
+
+    @Transactional
+    public Map<String, Object> hideConversation(String id, String userEmail) {
+        ConversationEntity conversation = findConversationEntity(id);
+        Set<String> callerIdentifiers = requireConversationParticipant(conversation, userEmail);
+        if (conversation.isGroupConversation()) {
+            hideGroupConversationForCaller(conversation, callerIdentifiers);
+            conversationRepository.save(conversation);
+            Map<String, Object> res = new LinkedHashMap<>();
+            res.put("id", conversation.getId());
+            res.put("hidden", true);
+            res.put("message", "Conversation hidden for current user.");
+            return res;
+        }
+        boolean isUser1 = callerIdentifiers.contains(normalizeIdentity(conversation.getUser1Id()));
+        boolean isUser2 = callerIdentifiers.contains(normalizeIdentity(conversation.getUser2Id()));
+        LocalDateTime now = LocalDateTime.now();
+        if (isUser1) {
+            conversation.setUser1Hidden(true);
+            conversation.setUser1HiddenAt(now);
+        }
+        if (isUser2) {
+            conversation.setUser2Hidden(true);
+            conversation.setUser2HiddenAt(now);
+        }
+        conversationRepository.save(conversation);
+        Map<String, Object> res = new LinkedHashMap<>();
+        res.put("id", conversation.getId());
+        res.put("hidden", true);
+        res.put("deletedAt", now.toString());
+        res.put("message", "Conversation hidden for current user.");
+        return res;
     }
 
     public Map<String, Object> getConversation(String id) {
@@ -156,6 +241,18 @@ public class ConversationService {
     public Map<String, Object> clearMessages(String conversationId, String userId) {
         ConversationEntity conversation = findConversationEntity(conversationId);
         Set<String> callerIdentifiers = requireConversationParticipant(conversation, userId);
+        if (conversation.isGroupConversation()) {
+            String participantId = conversation.getGroupParticipantIds().stream()
+                    .filter(participant -> callerIdentifiers.contains(normalizeIdentity(participant)))
+                    .findFirst()
+                    .orElseThrow(() -> new UnauthorizedException(
+                            "You cannot manage messages in this conversation."));
+            Map<String, String> clearedAt = conversation.getGroupClearedAt();
+            clearedAt.put(normalizeIdentity(participantId), LocalDateTime.now().toString());
+            conversation.setGroupClearedAt(clearedAt);
+            conversation.setUnread(false);
+            return toEnrichedDto(conversationRepository.save(conversation), userId, callerIdentifiers);
+        }
         messageRepository.deleteAll(messageRepository.findAllByConversationIdOrderByCreatedAtAsc(conversation.getId()));
         conversation.setThread(List.of());
         conversation.setPreview("Start a conversation");
@@ -214,6 +311,55 @@ public class ConversationService {
     }
 
     @Transactional
+    public Map<String, Object> getOrCreateGroupConversation(ConnectionGroupEntity group, String userEmail) {
+        if (group == null || group.getId() == null) {
+            throw new BadRequestException("Could not find this group.");
+        }
+        UserAccountEntity owner = resolveGroupParticipant(group.getOwnerId())
+                .orElseThrow(() -> new BadRequestException("Could not resolve the group owner."));
+        String ownerEmail = normalizeIdentity(owner.getEmail());
+        if (ownerEmail.isEmpty()) {
+            throw new BadRequestException("The group owner needs a valid messaging account.");
+        }
+        if (userEmail == null || userEmail.isBlank()
+                || !resolveCallerIdentifiers(userEmail).contains(ownerEmail)) {
+            throw new UnauthorizedException("Only the group owner can start this group conversation.");
+        }
+
+        LinkedHashMap<String, UserAccountEntity> participants = new LinkedHashMap<>();
+        participants.put(ownerEmail, owner);
+        for (String memberProfileId : group.getMemberProfileIds()) {
+            UserAccountEntity member = resolveGroupParticipant(memberProfileId)
+                    .orElseThrow(() -> new BadRequestException(
+                            "A group member does not have a messaging account."));
+            participants.putIfAbsent(normalizeIdentity(member.getEmail()), member);
+        }
+        if (participants.size() < 2) {
+            throw new BadRequestException("Add at least one member with a messaging account.");
+        }
+
+        ConversationEntity conversation = conversationRepository
+                .findFirstByConnectionGroupId(group.getId())
+                .orElseGet(ConversationEntity::new);
+        conversation.setConnectionGroupId(group.getId());
+        conversation.setName(group.getName());
+        conversation.setInitials(getInitials(group.getName()));
+        conversation.setGroupImageUrl(group.getImageUrl());
+        conversation.setGroupParticipantIds(new ArrayList<>(participants.keySet()));
+        List<String> hiddenParticipants = conversation.getGroupHiddenParticipantIds();
+        hiddenParticipants.removeIf(participant -> normalizeIdentity(participant).equals(ownerEmail));
+        conversation.setGroupHiddenParticipantIds(hiddenParticipants);
+        conversation.setUser1Id(ownerEmail);
+        conversation.setUser1Name(owner.getName());
+        conversation.setUser2Id(null);
+        conversation.setUser2Name(group.getName());
+        conversation.setCategory("Connections");
+        conversation.setMailbox("Focused");
+        conversation.setUpdatedAt(LocalDateTime.now());
+        return toEnrichedDto(conversationRepository.save(conversation), userEmail);
+    }
+
+    @Transactional
     public Map<String, Object> markAsRead(String id) {
         return markAsRead(id, null);
     }
@@ -223,6 +369,19 @@ public class ConversationService {
         ConversationEntity entity = findConversationEntity(id);
         Set<String> callerIdentifiers = requireConversationParticipant(entity, userEmail);
         LocalDateTime readAt = LocalDateTime.now();
+        if (entity.isGroupConversation()) {
+            String participantId = entity.getGroupParticipantIds().stream()
+                    .filter(participant -> callerIdentifiers.contains(normalizeIdentity(participant)))
+                    .findFirst()
+                    .orElseThrow(() -> new UnauthorizedException(
+                            "You cannot manage messages in this conversation."));
+            Map<String, String> groupReadAt = entity.getGroupReadAt();
+            groupReadAt.put(normalizeIdentity(participantId), readAt.toString());
+            entity.setGroupReadAt(groupReadAt);
+            entity.setUnread(false);
+            conversationRepository.save(entity);
+            return toEnrichedDto(entity, userEmail, callerIdentifiers);
+        }
         Set<String> updatedMessageIds = new LinkedHashSet<>();
 
         for (MessageEntity message : messageRepository.findAllByConversationIdOrderByCreatedAtAsc(entity.getId())) {
@@ -316,7 +475,12 @@ public class ConversationService {
     @Transactional
     public void deleteConversation(String id, String userEmail) {
         ConversationEntity entity = findConversationEntity(id);
-        requireConversationParticipant(entity, userEmail);
+        Set<String> callerIdentifiers = requireConversationParticipant(entity, userEmail);
+        if (entity.isGroupConversation()) {
+            hideGroupConversationForCaller(entity, callerIdentifiers);
+            conversationRepository.save(entity);
+            return;
+        }
         conversationRepository.delete(entity);
     }
 
@@ -367,12 +531,43 @@ public class ConversationService {
                 identifiers.add(normalizeIdentity(user.getName()));
         });
 
-        boolean isParticipant = identifiers.contains(normalizeIdentity(conversation.getUser1Id()))
-                || identifiers.contains(normalizeIdentity(conversation.getUser2Id()));
+        boolean isParticipant;
+        if (conversation.isGroupConversation()) {
+            List<String> currentParticipants = resolveCurrentGroupParticipantIds(conversation);
+            if (currentParticipants.isEmpty()) {
+                throw new UnauthorizedException("This group conversation is no longer available.");
+            }
+            if (!currentParticipants.equals(conversation.getGroupParticipantIds())) {
+                conversation.setGroupParticipantIds(currentParticipants);
+                conversationRepository.save(conversation);
+            }
+            isParticipant = currentParticipants.stream()
+                    .map(this::normalizeIdentity)
+                    .anyMatch(identifiers::contains);
+        } else {
+            isParticipant = identifiers.contains(normalizeIdentity(conversation.getUser1Id()))
+                    || identifiers.contains(normalizeIdentity(conversation.getUser2Id()));
+        }
         if (!isParticipant) {
             throw new UnauthorizedException("You cannot manage messages in this conversation.");
         }
         return identifiers;
+    }
+
+    private void hideGroupConversationForCaller(
+            ConversationEntity conversation,
+            Set<String> callerIdentifiers) {
+        List<String> hiddenParticipants = conversation.getGroupHiddenParticipantIds();
+        conversation.getGroupParticipantIds().stream()
+                .filter(participant -> callerIdentifiers.contains(normalizeIdentity(participant)))
+                .findFirst()
+                .ifPresent(participant -> {
+                    if (hiddenParticipants.stream()
+                            .noneMatch(hidden -> normalizeIdentity(hidden).equals(normalizeIdentity(participant)))) {
+                        hiddenParticipants.add(participant);
+                    }
+                });
+        conversation.setGroupHiddenParticipantIds(hiddenParticipants);
     }
 
     private MessageEntity findStoredMessage(Long conversationId, Map<String, Object> message, String senderId) {
@@ -418,6 +613,50 @@ public class ConversationService {
                         callerIdentifiers.add(u.getName().trim().toLowerCase(Locale.ROOT));
                 });
         return callerIdentifiers;
+    }
+
+    private Optional<UserAccountEntity> resolveGroupParticipant(String identifier) {
+        if (identifier == null || identifier.isBlank()) return Optional.empty();
+        String clean = identifier.trim();
+        Optional<UserAccountEntity> account = userAccountRepository.findByEmail(clean)
+                .or(() -> userAccountRepository.findByPublicUserId(clean));
+        if (account.isEmpty()) {
+            try {
+                account = userAccountRepository.findById(Long.parseLong(clean));
+            } catch (NumberFormatException ignored) {
+                account = Optional.empty();
+            }
+        }
+        if (account.isPresent()) return account;
+
+        Optional<ProfileEntity> profile = profileRepository.findByUserId(clean);
+        if (profile.isEmpty()) {
+            try {
+                profile = profileRepository.findById(Long.parseLong(clean));
+            } catch (NumberFormatException ignored) {
+                profile = Optional.empty();
+            }
+        }
+        return profile
+                .flatMap(resolvedProfile -> userAccountRepository.findByEmail(resolvedProfile.getEmail())
+                        .or(() -> userAccountRepository.findByPublicUserId(resolvedProfile.getUserId())));
+    }
+
+    private List<String> resolveCurrentGroupParticipantIds(ConversationEntity conversation) {
+        if (connectionGroupRepository == null) return conversation.getGroupParticipantIds();
+        Optional<ConnectionGroupEntity> group = connectionGroupRepository.findById(
+                conversation.getConnectionGroupId());
+        if (group.isEmpty()) return List.of();
+
+        LinkedHashMap<String, UserAccountEntity> participants = new LinkedHashMap<>();
+        resolveGroupParticipant(group.get().getOwnerId())
+                .ifPresent(owner -> participants.put(normalizeIdentity(owner.getEmail()), owner));
+        for (String memberProfileId : group.get().getMemberProfileIds()) {
+            resolveGroupParticipant(memberProfileId)
+                    .ifPresent(member -> participants.putIfAbsent(normalizeIdentity(member.getEmail()), member));
+        }
+        participants.remove("");
+        return new ArrayList<>(participants.keySet());
     }
 
     private Map<String, Object> toEnrichedDto(ConversationEntity entity, String currentUserId) {
@@ -467,7 +706,10 @@ public class ConversationService {
         boolean isUser1 = !u1IdClean.isEmpty() && cleanIdentifiers.contains(u1IdClean);
         boolean isUser2 = !u2IdClean.isEmpty() && cleanIdentifiers.contains(u2IdClean);
 
-        if (isUser1 && effectiveUser2Name != null && !effectiveUser2Name.isBlank()) {
+        if (entity.isGroupConversation()) {
+            dto.put("name", entity.getName());
+            dto.put("initials", getInitials(entity.getName()));
+        } else if (isUser1 && effectiveUser2Name != null && !effectiveUser2Name.isBlank()) {
             dto.put("name", effectiveUser2Name);
             dto.put("initials", getInitials(effectiveUser2Name));
         } else if (isUser2 && effectiveUser1Name != null && !effectiveUser1Name.isBlank()) {
@@ -480,11 +722,33 @@ public class ConversationService {
 
         String user1ProfileImage = resolveProfileImage(entity.getUser1Id());
         String user2ProfileImage = resolveProfileImage(entity.getUser2Id());
-        String contactProfileImage = isUser1 ? user2ProfileImage : isUser2 ? user1ProfileImage : "";
+        String contactProfileImage = entity.isGroupConversation()
+                ? entity.getGroupImageUrl()
+                : isUser1 ? user2ProfileImage : isUser2 ? user1ProfileImage : "";
         dto.put("user1ProfileImageUrl", user1ProfileImage);
         dto.put("user2ProfileImageUrl", user2ProfileImage);
         dto.put("profileImageUrl", contactProfileImage);
         dto.put("avatar", contactProfileImage);
+
+        if (!entity.isGroupConversation() && relationshipRepository != null && !cleanIdentifiers.isEmpty()) {
+            String otherParticipantId = isUser1 ? entity.getUser2Id() : (isUser2 ? entity.getUser1Id() : null);
+            boolean connected = false;
+            if (otherParticipantId != null && !otherParticipantId.isBlank()) {
+                Set<String> otherIdentifiers = resolveCallerIdentifiers(otherParticipantId);
+                for (String cid : cleanIdentifiers) {
+                    if (connected) break;
+                    for (com.truehunt.social.model.UserProfileRelationshipEntity rel :
+                            relationshipRepository.findAllByOwnerUserIdAndConnectedTrue(cid)) {
+                        String targetNorm = normalizeIdentity(rel.getTargetProfileId());
+                        if (!targetNorm.isEmpty() && otherIdentifiers.contains(targetNorm)) {
+                            connected = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            dto.put("isConnected", connected);
+        }
 
         Object rawThread = dto.get("thread");
         if (rawThread instanceof List<?> rawList && !rawList.isEmpty()) {

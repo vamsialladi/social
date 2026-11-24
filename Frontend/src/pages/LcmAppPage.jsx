@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { 
   Smartphone, 
@@ -6,29 +6,30 @@ import {
   Users, 
   Camera, 
   FileText, 
-  Download, 
-  CheckCircle2, 
-  Shield, 
-  Clock, 
-  Sparkles,
   ArrowRight
 } from 'lucide-react';
 import { LCM_APP_FEATURES } from '../services/mockData';
 import { useNotification } from '../context/NotificationContext';
+import { api } from '../services/api';
 
 export default function LcmAppPage() {
   const [betaEmail, setBetaEmail] = useState('');
   const [betaJoined, setBetaJoined] = useState(false);
   const { showNotification } = useNotification();
 
-  const handleBetaSignup = (e) => {
+  const handleBetaSignup = async (e) => {
     e.preventDefault();
     if (!betaEmail || !betaEmail.includes('@')) {
       showNotification('Please enter a valid email address', 'error');
       return;
     }
-    setBetaJoined(true);
-    showNotification('Thank you! You are on the priority beta invite list for LCM App.', 'success');
+    try {
+      await api.lcm.joinBeta(betaEmail.trim());
+      setBetaJoined(true);
+      showNotification('Thank you! You are on the priority beta invite list for LCM App.', 'success');
+    } catch (err) {
+      showNotification(err.message || 'Could not join beta waitlist. Please try again.', 'error');
+    }
   };
 
   const featureIcons = {

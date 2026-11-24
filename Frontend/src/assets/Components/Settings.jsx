@@ -251,45 +251,84 @@ function Settings({ profileDetails, profilePreview, onEditProfile, theme, onThem
     : []
 
   useEffect(() => {
+    let isActive = true
+    const storageKey = `truehunt-social-settings:${String(email).trim().toLowerCase()}`
+    try {
+      const stored = localStorage.getItem(storageKey)
+      if (stored) {
+        const saved = JSON.parse(stored)
+        setBlockedUsers(Array.isArray(saved.blockedUsers)
+          ? saved.blockedUsers.map((blocked) => (
+              typeof blocked === 'string'
+                ? { name: blocked, reason: 'Not specified', identity: blocked }
+                : blocked
+            ))
+          : [])
+        if (saved.notifications) {
+          setNotificationPreferences((prev) => ({ ...prev, ...saved.notifications }))
+        }
+        setPrivacyPreferences((prev) => ({ ...prev, ...saved.privacyPreferences }))
+        setRestrictedPreferences((prev) => ({ ...prev, ...saved.restrictedPreferences }))
+        if (saved.mediaPreferences) {
+          setMediaPreferences((prev) => Object.fromEntries(
+            Object.keys(prev).map((id) => {
+              const value = saved.mediaPreferences[id]
+              return [id, value === 'private' || value === false ? 'private' : 'public']
+            }),
+          ))
+        }
+        setEngagementPreferences((prev) => ({ ...prev, ...saved.engagementPreferences }))
+      }
+    } catch (err) {
+      console.warn('Could not load local Social settings:', err)
+    }
+
     async function loadSettings() {
       try {
         const data = await api.getSettings()
-        if (data?.notifications) {
+        if (!isActive || !data) return
+        if (data.notifications) {
           setNotificationPreferences((prev) => ({ ...prev, ...data.notifications }))
+        }
+        if (data.privacyPreferences) {
+          setPrivacyPreferences((prev) => ({ ...prev, ...data.privacyPreferences }))
+        }
+        if (data.restrictedPreferences) {
+          setRestrictedPreferences((prev) => ({ ...prev, ...data.restrictedPreferences }))
+        }
+        if (data.mediaPreferences) {
+          setMediaPreferences((prev) => ({ ...prev, ...data.mediaPreferences }))
+        }
+        if (data.engagementPreferences) {
+          setEngagementPreferences((prev) => ({ ...prev, ...data.engagementPreferences }))
+        }
+        if (typeof data.twoFactorEnabled === 'boolean') {
+          setTwoFactorEnabled(data.twoFactorEnabled)
+        }
+        if (Array.isArray(data.blockedUsers)) {
+          setBlockedUsers(data.blockedUsers)
+        }
+        try {
+          const existing = JSON.parse(localStorage.getItem(storageKey) || '{}')
+          localStorage.setItem(storageKey, JSON.stringify({
+            ...existing,
+            ...(data.notifications ? { notifications: data.notifications } : {}),
+            ...(data.privacyPreferences ? { privacyPreferences: data.privacyPreferences } : {}),
+            ...(data.restrictedPreferences ? { restrictedPreferences: data.restrictedPreferences } : {}),
+            ...(data.mediaPreferences ? { mediaPreferences: data.mediaPreferences } : {}),
+            ...(data.engagementPreferences ? { engagementPreferences: data.engagementPreferences } : {}),
+            ...(Array.isArray(data.blockedUsers) ? { blockedUsers: data.blockedUsers } : {}),
+          }))
+        } catch {
+          // ignore localStorage write errors
         }
       } catch (err) {
         console.warn('Backend settings load note:', err)
       }
     }
     loadSettings()
-  }, [])
-
-  useEffect(() => {
-    const storageKey = `truehunt-social-settings:${String(email).trim().toLowerCase()}`
-    try {
-      const stored = localStorage.getItem(storageKey)
-      if (!stored) return
-      const saved = JSON.parse(stored)
-      setBlockedUsers(Array.isArray(saved.blockedUsers)
-        ? saved.blockedUsers.map((blocked) => (
-            typeof blocked === 'string'
-              ? { name: blocked, reason: 'Not specified', identity: blocked }
-              : blocked
-          ))
-        : [])
-      setPrivacyPreferences((prev) => ({ ...prev, ...saved.privacyPreferences }))
-      setRestrictedPreferences((prev) => ({ ...prev, ...saved.restrictedPreferences }))
-      if (saved.mediaPreferences) {
-        setMediaPreferences((prev) => Object.fromEntries(
-          Object.keys(prev).map((id) => {
-            const value = saved.mediaPreferences[id]
-            return [id, value === 'private' || value === false ? 'private' : 'public']
-          }),
-        ))
-      }
-      setEngagementPreferences((prev) => ({ ...prev, ...saved.engagementPreferences }))
-    } catch (err) {
-      console.warn('Could not load local Social settings:', err)
+    return () => {
+      isActive = false
     }
   }, [email])
 
@@ -387,8 +426,41 @@ function Settings({ profileDetails, profilePreview, onEditProfile, theme, onThem
     }
 
     loadSavedItems()
-    if (activeSection === 'saved') {
-      markUnavailableSavedPosts()
+    async function syncBackendSavedAndReports() {
+      try {
+        if (activeSection === 'saved') {
+          const backendSaved = await api.getSavedPosts()
+          if (isCurrent && Array.isArray(backendSaved) && backendSaved.length > 0) {
+            setSavedPosts(backendSaved)
+            try {
+              localStorage.setItem(`truehunt-social-saved-posts:${accountStorageKey}`, JSON.stringify(backendSaved))
+            } catch {
+              // ignore quota errors
+            }
+          } else {
+            await markUnavailableSavedPosts()
+          }
+        }
+        if (activeSection === 'reports') {
+          const backendReports = await api.getMyReports()
+          if (isCurrent && Array.isArray(backendReports) && backendReports.length > 0) {
+            setReportedPosts(backendReports)
+            try {
+              localStorage.setItem(`truehunt-social-reported-posts:${accountStorageKey}`, JSON.stringify(backendReports))
+            } catch {
+              // ignore quota errors
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Backend saved/reports sync note:', err)
+        if (activeSection === 'saved') {
+          await markUnavailableSavedPosts()
+        }
+      }
+    }
+    if (activeSection === 'saved' || activeSection === 'reports') {
+      syncBackendSavedAndReports()
     }
     window.addEventListener('truehunt-saved-post-changed', loadSavedItems)
     window.addEventListener('truehunt-reported-post-changed', loadSavedItems)
@@ -409,6 +481,11 @@ function Settings({ profileDetails, profilePreview, onEditProfile, theme, onThem
       window.dispatchEvent(new CustomEvent('truehunt-saved-post-changed'))
     } catch (err) {
       console.warn('Could not remove saved post:', err)
+    }
+    if (/^\d+$/.test(String(postId))) {
+      api.unsavePost(postId).catch((err) => {
+        console.warn('Could not remove saved post on backend:', err)
+      })
     }
   }
 
@@ -456,24 +533,55 @@ function Settings({ profileDetails, profilePreview, onEditProfile, theme, onThem
     setBlockReason('')
     setCustomBlockReason('')
     saveLocalPreferences({ blockedUsers: next })
+    api.blockUser(blockedEntry).catch((err) => {
+      console.warn('Could not persist blocked user on backend:', err)
+    })
   }
 
   function handleRemoveBlockedUser(identity) {
     const next = blockedUsers.filter((item) => String(item.identity || item) !== identity)
     setBlockedUsers(next)
     saveLocalPreferences({ blockedUsers: next })
+    api.unblockUser(identity).catch((err) => {
+      console.warn('Could not unblock user on backend:', err)
+    })
   }
 
   function updatePreference(setter, state, id, key) {
-    const next = { ...state, [id]: !state[id] }
+    const nextVal = !state[id]
+    const next = { ...state, [id]: nextVal }
     setter(next)
     saveLocalPreferences({ [key]: next })
+    if (key === 'privacyPreferences') {
+      const payload = {
+        ...next,
+        ...(id === 'profileVisibility' ? {
+          'publicProfile': nextVal,
+          'public-profile': nextVal,
+          'profile_visibility': nextVal
+        } : {})
+      }
+      api.updatePrivacySettings(payload).catch((err) => console.warn('Privacy API note:', err))
+    } else if (key === 'restrictedPreferences') {
+      api.updateRestrictedSettings(next).catch((err) => console.warn('Restricted API note:', err))
+    } else if (key === 'engagementPreferences') {
+      api.updateEngagementSettings(next)
+        .then(() => {
+          window.dispatchEvent(new CustomEvent('truehunt-settings-updated', { detail: { engagementPreferences: next } }))
+        })
+        .catch((err) => console.warn('Engagement API note:', err))
+    }
   }
 
   function updateMediaVisibility(id, visibility) {
     const next = { ...mediaPreferences, [id]: visibility }
     setMediaPreferences(next)
     saveLocalPreferences({ mediaPreferences: next })
+    api.updateMediaVisibilitySettings({ [id]: visibility })
+      .then(() => {
+        window.dispatchEvent(new CustomEvent('truehunt-settings-updated', { detail: { mediaPreferences: next } }))
+      })
+      .catch((err) => console.warn('Media visibility API note:', err))
   }
 
   const isChangePasswordValid =
@@ -531,10 +639,25 @@ function Settings({ profileDetails, profilePreview, onEditProfile, theme, onThem
     const nextPrefs = {
       ...notificationPreferences,
       [id]: nextVal,
+      ...(id === 'connections' ? { 'connecting-with-others': nextVal } : {}),
+      ...(id === 'connecting-with-others' ? { connections: nextVal } : {}),
+      ...(id === 'posting' ? { 'posting-and-commenting': nextVal, postingAndCommenting: nextVal } : {}),
+      ...(id === 'posting-and-commenting' ? { posting: nextVal, postingAndCommenting: nextVal } : {}),
+      ...(id === 'profile' ? { 'updating-your-profile': nextVal, updatingYourProfile: nextVal } : {}),
+      ...(id === 'updating-your-profile' ? { profile: nextVal, updatingYourProfile: nextVal } : {}),
     }
     setNotificationPreferences(nextPrefs)
+    saveLocalPreferences({ notifications: nextPrefs })
+    window.dispatchEvent(new CustomEvent('truehunt-settings-updated', {
+      detail: { notifications: nextPrefs, notificationPreferences: nextPrefs },
+    }))
     try {
-      await api.updateNotificationPreferences({ [id]: nextVal })
+      await api.updateNotificationPreferences({
+        [id]: nextVal,
+        ...(id === 'connections' ? { 'connecting-with-others': nextVal } : {}),
+        ...(id === 'posting' ? { 'posting-and-commenting': nextVal } : {}),
+        ...(id === 'profile' ? { 'updating-your-profile': nextVal } : {}),
+      })
     } catch (err) {
       console.warn('Notification preference API note:', err)
     }
@@ -699,6 +822,9 @@ function Settings({ profileDetails, profilePreview, onEditProfile, theme, onThem
                     const next = !twoFactorEnabled
                     setTwoFactorEnabled(next)
                     setSecurityMessage(`Two-factor authentication is now ${next ? 'enabled' : 'disabled'}.`)
+                    api.updateSecuritySettings({ twoFactorEnabled: next }).catch((err) => {
+                      console.warn('Security settings API note:', err)
+                    })
                   }}
                 >
                   <span>Two-factor authentication</span>

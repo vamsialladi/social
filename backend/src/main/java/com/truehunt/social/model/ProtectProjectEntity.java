@@ -61,6 +61,10 @@ public class ProtectProjectEntity {
     @Column(columnDefinition = "TEXT")
     private String recentActivityJson = "[]";
 
+    @Lob
+    @Column(columnDefinition = "TEXT")
+    private String checklistsJson = "{}";
+
     public ProtectProjectEntity() {}
 
     public String getId() { return id; }
@@ -143,5 +147,8 @@ public class ProtectProjectEntity {
 
     public String getRecentActivityJson() { return recentActivityJson; }
     public void setRecentActivityJson(String recentActivityJson) { this.recentActivityJson = recentActivityJson; }
+
+    public String getChecklistsJson() { return checklistsJson; }
+    public void setChecklistsJson(String checklistsJson) { this.checklistsJson = checklistsJson; }
 }
 

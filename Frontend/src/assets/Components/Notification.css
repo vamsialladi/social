@@ -165,6 +165,18 @@
   box-shadow: 0 2px 8px rgba(25, 25, 25, 0.04);
 }
 
+.notification-card.is-actionable {
+  cursor: pointer;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.notification-card.is-actionable:hover,
+.notification-card.is-actionable:focus-visible {
+  border-color: #9c83e7;
+  box-shadow: 0 0 0 3px rgba(112, 72, 216, 0.12);
+  outline: 0;
+}
+
 .notification-card-heading {
   display: flex;
   align-items: flex-start;

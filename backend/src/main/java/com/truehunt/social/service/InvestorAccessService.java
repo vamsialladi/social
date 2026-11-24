@@ -6,19 +6,24 @@ import com.truehunt.social.dto.CreateConversationRequest;
 import com.truehunt.social.exception.BadRequestException;
 import com.truehunt.social.exception.ResourceNotFoundException;
 import com.truehunt.social.exception.UnauthorizedException;
+import com.truehunt.social.model.HiddenContentEntity;
 import com.truehunt.social.model.InvestorAccessRequestEntity;
 import com.truehunt.social.model.NotificationEntity;
 import com.truehunt.social.model.UserAccountEntity;
+import com.truehunt.social.repository.HiddenContentRepository;
 import com.truehunt.social.repository.InvestorAccessRequestRepository;
 import com.truehunt.social.repository.UserAccountRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 public class InvestorAccessService {
@@ -28,17 +33,29 @@ public class InvestorAccessService {
     private final PostService postService;
     private final ConversationService conversationService;
     private final NotificationService notificationService;
+    private final HiddenContentRepository hiddenContentRepository;
 
     public InvestorAccessService(InvestorAccessRequestRepository requestRepository,
                                  UserAccountRepository userAccountRepository,
                                  PostService postService,
                                  ConversationService conversationService,
                                  NotificationService notificationService) {
+        this(requestRepository, userAccountRepository, postService, conversationService, notificationService, null);
+    }
+
+    @Autowired
+    public InvestorAccessService(InvestorAccessRequestRepository requestRepository,
+                                 UserAccountRepository userAccountRepository,
+                                 PostService postService,
+                                 ConversationService conversationService,
+                                 NotificationService notificationService,
+                                 HiddenContentRepository hiddenContentRepository) {
         this.requestRepository = requestRepository;
         this.userAccountRepository = userAccountRepository;
         this.postService = postService;
         this.conversationService = conversationService;
         this.notificationService = notificationService;
+        this.hiddenContentRepository = hiddenContentRepository;
     }
 
     @Transactional
@@ -98,10 +115,59 @@ public class InvestorAccessService {
 
     @Transactional(readOnly = true)
     public List<Map<String, Object>> getPublishedListings(String email) {
+        Set<String> hiddenListingIds = new HashSet<>();
+        if (hiddenContentRepository != null && email != null && !email.isBlank()) {
+            String key = email.trim().toLowerCase(Locale.ROOT);
+            for (HiddenContentEntity hc : hiddenContentRepository
+                    .findAllByUserEmailIgnoreCaseAndTargetTypeIgnoreCase(key, "INVESTOR_LISTING")) {
+                if (hc.getTargetId() != null) {
+                    hiddenListingIds.add(hc.getTargetId().trim());
+                }
+            }
+        }
         return requestRepository.findAllByStatusOrderByCreatedAtDesc("PUBLISHED")
                 .stream()
+                .filter(listing -> listing.getId() == null || !hiddenListingIds.contains(String.valueOf(listing.getId())))
                 .map(listing -> toPublicListingMap(listing, email))
                 .toList();
+    }
+
+    @Transactional
+    public Map<String, Object> hideListing(String rawListingId, String email) {
+        if (email == null || email.isBlank()) {
+            throw new UnauthorizedException("Sign in to update investor feed preferences.");
+        }
+        String key = email.trim().toLowerCase(Locale.ROOT);
+        Long listingId = parseListingId(rawListingId);
+        String targetId = listingId != null ? String.valueOf(listingId) : rawListingId.trim();
+        if (hiddenContentRepository != null && !targetId.isEmpty()) {
+            hiddenContentRepository
+                    .findByUserEmailIgnoreCaseAndTargetTypeIgnoreCaseAndTargetIdIgnoreCase(key, "INVESTOR_LISTING", targetId)
+                    .orElseGet(() -> hiddenContentRepository.save(new HiddenContentEntity(key, "INVESTOR_LISTING", targetId)));
+        }
+        Map<String, Object> res = new LinkedHashMap<>();
+        res.put("id", targetId);
+        res.put("hidden", true);
+        return res;
+    }
+
+    @Transactional
+    public Map<String, Object> unhideListing(String rawListingId, String email) {
+        if (email == null || email.isBlank()) {
+            throw new UnauthorizedException("Sign in to update investor feed preferences.");
+        }
+        String key = email.trim().toLowerCase(Locale.ROOT);
+        Long listingId = parseListingId(rawListingId);
+        String targetId = listingId != null ? String.valueOf(listingId) : rawListingId.trim();
+        if (hiddenContentRepository != null && !targetId.isEmpty()) {
+            hiddenContentRepository
+                    .findByUserEmailIgnoreCaseAndTargetTypeIgnoreCaseAndTargetIdIgnoreCase(key, "INVESTOR_LISTING", targetId)
+                    .ifPresent(hiddenContentRepository::delete);
+        }
+        Map<String, Object> res = new LinkedHashMap<>();
+        res.put("id", targetId);
+        res.put("hidden", false);
+        return res;
     }
 
     @Transactional
@@ -235,11 +301,28 @@ public class InvestorAccessService {
     public Map<String, Object> review(Long requestId, String decision, String adminEmail) {
         InvestorAccessRequestEntity request = requestRepository.findById(requestId)
                 .orElseThrow(() -> new ResourceNotFoundException("Investor access request", "id", requestId));
-        if (!"PENDING".equals(request.getStatus())) {
+        String currentStatus = request.getStatus() == null ? "" : request.getStatus().trim().toUpperCase(Locale.ROOT);
+        String normalizedDecision = decision == null ? "" : decision.trim().toUpperCase(Locale.ROOT);
+
+        boolean allowed = "PENDING".equals(currentStatus)
+                || ("PUBLISHED".equals(currentStatus) && "REJECTED".equals(normalizedDecision))
+                || ("REJECTED".equals(currentStatus) && "APPROVED".equals(normalizedDecision));
+        if (!allowed) {
             throw new BadRequestException("This investor access request has already been reviewed.");
         }
 
-        request.setStatus(decision);
+        if ("REJECTED".equals(normalizedDecision) && request.getFeedPostId() != null && request.getApplicantEmail() != null) {
+            try {
+                postService.deletePostIfPresent(String.valueOf(request.getFeedPostId()), request.getApplicantEmail());
+                request.setFeedPostId(null);
+            } catch (Exception ignored) {}
+        }
+
+        if ("REJECTED".equals(currentStatus) && "APPROVED".equals(normalizedDecision)) {
+            request.setStatus("PUBLISHED");
+        } else {
+            request.setStatus(normalizedDecision);
+        }
         request.setReviewedBy(adminEmail);
         request.setReviewedAt(LocalDateTime.now());
         return toMap(requestRepository.save(request));

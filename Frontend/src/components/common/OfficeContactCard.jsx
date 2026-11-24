@@ -1,4 +1,3 @@
-import React from 'react';
 import { Building2, MapPin, Mail, Phone, ExternalLink } from 'lucide-react';
 import { OFFICIAL_CONTACT } from '../../constants/contactInfo';
 

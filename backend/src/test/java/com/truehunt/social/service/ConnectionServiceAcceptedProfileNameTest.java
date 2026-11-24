@@ -1,6 +1,7 @@
 package com.truehunt.social.service;
 
 import com.truehunt.social.dto.ChatMessageDto;
+import com.truehunt.social.model.NotificationEntity;
 import com.truehunt.social.model.ProfileEntity;
 import com.truehunt.social.model.UserAccountEntity;
 import com.truehunt.social.model.UserProfileRelationshipEntity;
@@ -74,6 +75,7 @@ class ConnectionServiceAcceptedProfileNameTest {
         when(accounts.findByEmail("requester@example.com")).thenReturn(Optional.of(requester));
         when(accounts.findByEmail("acceptor@example.com")).thenReturn(Optional.of(acceptor));
         when(accounts.findByPublicUserId("requester-id")).thenReturn(Optional.of(requester));
+        when(accounts.findByPublicUserId("acceptor-id")).thenReturn(Optional.of(acceptor));
 
         ProfileEntity requesterProfile = profile("requester-id", "requester@example.com", "Ravi Kumar");
         ProfileEntity acceptorProfile = profile("acceptor-id", "acceptor@example.com", "TrueHunt Member");
@@ -111,8 +113,55 @@ class ConnectionServiceAcceptedProfileNameTest {
         assertEquals("Hi", messageCaptor.getValue().getContent());
         assertEquals("acceptor-id", messageCaptor.getValue().getReceiverId());
         assertEquals("requester-id", principalCaptor.getValue().getName());
+        ArgumentCaptor<NotificationEntity> notificationCaptor = ArgumentCaptor.forClass(NotificationEntity.class);
+        verify(notifications, times(2)).save(notificationCaptor.capture());
+        assertEquals("Connection Request Accepted", notificationCaptor.getAllValues().get(0).getTitle());
+        assertEquals("requester-id", notificationCaptor.getAllValues().get(0).getRecipientId());
+        assertEquals(
+                "Asha Rao accepted your connection request on TrueHunt.",
+                notificationCaptor.getAllValues().get(0).getMessage());
         assertConnection(service.getConnectedProfiles("requester@example.com"), "acceptor-id", "Asha Rao");
         assertConnection(service.getConnectedProfiles("acceptor@example.com"), "requester-id", "Ravi Kumar");
+    }
+
+    @Test
+    void rejectingRequestNotifiesTheRequester() {
+        NetworkProfileRepository networkProfiles = mock(NetworkProfileRepository.class);
+        NotificationRepository notifications = mock(NotificationRepository.class);
+        ProfileRepository profiles = mock(ProfileRepository.class);
+        UserAccountRepository accounts = mock(UserAccountRepository.class);
+        UserProfileRelationshipRepository relationships = mock(UserProfileRelationshipRepository.class);
+
+        UserAccountEntity requester = account(1L, "requester@example.com", "requester-id", "Ravi Kumar");
+        UserAccountEntity rejector = account(2L, "rejector@example.com", "rejector-id", "Asha Rao");
+        when(accounts.findByEmail("requester@example.com")).thenReturn(Optional.of(requester));
+        when(accounts.findByEmail("rejector@example.com")).thenReturn(Optional.of(rejector));
+        when(accounts.findByPublicUserId("requester-id")).thenReturn(Optional.of(requester));
+        when(profiles.findByUserId("requester-id"))
+                .thenReturn(Optional.of(profile("requester-id", "requester@example.com", "Ravi Kumar")));
+        when(profiles.findByUserId("rejector-id"))
+                .thenReturn(Optional.of(profile("rejector-id", "rejector@example.com", "Asha Rao")));
+        when(relationships.findAll()).thenReturn(List.of());
+
+        ConnectionService service = new ConnectionService(
+                networkProfiles,
+                notifications,
+                profiles,
+                accounts,
+                relationships,
+                mock(MessageService.class),
+                null,
+                null);
+
+        service.rejectConnection("requester-id", "rejector@example.com");
+
+        ArgumentCaptor<NotificationEntity> notificationCaptor = ArgumentCaptor.forClass(NotificationEntity.class);
+        verify(notifications).save(notificationCaptor.capture());
+        NotificationEntity notification = notificationCaptor.getValue();
+        assertEquals("requester-id", notification.getRecipientId());
+        assertEquals("Connection Request Rejected", notification.getTitle());
+        assertEquals("Asha Rao rejected your connection request on TrueHunt.", notification.getMessage());
+        assertEquals("connection_rejected", notification.getType());
     }
 
     @Test

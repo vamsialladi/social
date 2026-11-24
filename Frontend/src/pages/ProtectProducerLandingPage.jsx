@@ -1,12 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { 
-  Shield, 
-  CheckCircle2, 
-  FileCheck, 
-  DollarSign, 
-  AlertTriangle, 
-  Lock,
   ArrowRight,
 } from 'lucide-react';
 import { api } from '../services/api';

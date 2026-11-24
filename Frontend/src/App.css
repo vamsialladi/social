@@ -207,17 +207,30 @@
 
 .linkedin-navbar-inner {
   display: flex;
-  width: min(100% - 40px, 1120px);
+  position: relative;
+  width: 100%;
   height: 100%;
   align-items: center;
   gap: 12px;
-  margin: 0 auto;
+  margin: 0;
+  padding: 0 clamp(20px, 4vw, 64px);
+  box-sizing: border-box;
+}
+
+.linkedin-search-group {
+  position: static;
+  display: flex;
+  min-width: 0;
+  flex: 0 1 420px;
+  align-items: center;
+  gap: 12px;
 }
 
 .home-promotion-card {
   --home-blue: #0a66c2;
+  position: relative;
   min-height: 220px;
-  overflow: hidden;
+  overflow: visible;
   border: 1px solid #dedbd6;
   border-radius: 9px;
   background: #fff;
@@ -234,6 +247,7 @@
   justify-content: center;
   overflow: hidden;
   padding: 10px 16px;
+  border-radius: 8px 8px 0 0;
   background:
     radial-gradient(ellipse at 78% 115%, rgba(238, 142, 65, 0.9), transparent 40%),
     linear-gradient(112deg, #142f3a 0%, #31535a 54%, #a56b48 100%);
@@ -271,12 +285,77 @@
   right: 8px;
   z-index: 1;
   display: grid;
-  width: 22px;
-  height: 22px;
+  width: 30px;
+  height: 30px;
   place-items: center;
+  padding: 0;
+  border: 0;
   border-radius: 50%;
   background: rgba(17, 36, 43, 0.35);
   color: #fff;
+  cursor: pointer;
+}
+
+.home-promotion-menu-icon:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+.home-promotion-hide-prompt {
+  position: absolute;
+  top: 42px;
+  right: 8px;
+  z-index: 3;
+  width: min(250px, calc(100% - 16px));
+  padding: 14px;
+  border: 1px solid #dedbd6;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  color: #191919;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.home-promotion-hide-prompt h2 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.home-promotion-hide-prompt p {
+  margin: 6px 0 12px;
+  color: #555;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.home-promotion-hide-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.home-promotion-hide-actions button {
+  min-height: 30px;
+  padding: 5px 10px;
+  border: 1px solid #b7b7b7;
+  border-radius: 16px;
+  background: #fff;
+  color: #333;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.home-promotion-hide-actions button:last-child {
+  border-color: var(--home-blue);
+  background: var(--home-blue);
+  color: #fff;
+}
+
+.home-promotion-hide-actions button:focus-visible {
+  outline: 2px solid var(--home-blue);
+  outline-offset: 2px;
 }
 
 .home-promotion-art-title {
@@ -300,6 +379,7 @@
   display: grid;
   gap: 6px;
   padding: 10px 12px 12px;
+  border-radius: 0 0 8px 8px;
 }
 
 .home-promotion-content h2 {
@@ -735,7 +815,8 @@
   }
 
   .linkedin-navbar-inner {
-    width: min(100% - 24px, 1120px);
+    width: 100%;
+    padding-inline: 20px;
   }
 
   .linkedin-nav-items {
@@ -755,8 +836,9 @@
   }
 
   .linkedin-navbar-inner {
-    width: calc(100% - 18px);
+    width: 100%;
     gap: 8px;
+    padding-inline: 9px;
     overflow-x: auto;
     justify-content: flex-start;
   }
@@ -1218,4 +1300,23 @@
 
 .cinemans-page.is-dark .opportunity-date-input::-webkit-calendar-picker-indicator:hover {
   background-color: #393d45;
+}
+
+.cinemans-page.is-dark .home-promotion-card {
+  border-color: #393d45;
+  background: #202329;
+}
+
+.cinemans-page.is-dark .home-promotion-button,
+.cinemans-page.is-dark .home-opportunity-button {
+  border-color: #444953;
+  background: #282c33;
+  color: #e5e7eb;
+}
+
+.cinemans-page.is-dark .home-promotion-button:hover,
+.cinemans-page.is-dark .home-opportunity-button:hover {
+  border-color: #59616d;
+  background: #30353d;
+  color: #fff;
 }

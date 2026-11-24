@@ -13,5 +13,6 @@ public interface ConversationRepository extends JpaRepository<ConversationEntity
     List<ConversationEntity> findAllByMailboxIgnoreCaseOrderByUpdatedAtDesc(String mailbox);
     List<ConversationEntity> findAllByUser1IdOrUser2IdOrderByUpdatedAtDesc(String user1Id, String user2Id);
     java.util.Optional<ConversationEntity> findByUser1IdAndUser2Id(String user1Id, String user2Id);
+    java.util.Optional<ConversationEntity> findFirstByConnectionGroupId(Long connectionGroupId);
     java.util.Optional<ConversationEntity> findFirstByNameIgnoreCase(String name);
 }

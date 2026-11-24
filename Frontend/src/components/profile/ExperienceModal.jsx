@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { X, Briefcase, Loader2 } from 'lucide-react';
 import { useNotification } from '../../context/NotificationContext';
 

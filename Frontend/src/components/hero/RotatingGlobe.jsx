@@ -2,9 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import * as THREE from 'three';
 import { WORLDWIDE_IMAGES } from './worldwide';
+import emblemImage from '../../assets/truehunt-emblem.png';
 
 const IMAGE_MARKER_RADIUS = 0.055;
 const MAX_CONCURRENT_MARKER_IMAGE_LOADS = 12;
+const FALLBACK_MARKER_IMAGES = [emblemImage];
 
 function cropTextureToSquare(texture) {
   const { width, height } = texture.image;

@@ -3,10 +3,12 @@ import { ArrowLeft, ArrowUpRight, Ban, Bookmark, BriefcaseBusiness, ChevronDown,
 import { Link, useNavigate } from 'react-router-dom'
 import './Home.css'
 import Article from './Article.jsx'
+import MediaSafetyStatus from '../../components/common/MediaSafetyStatus.jsx'
 import OpportunitiesPage from './OpportunitiesPage.jsx'
 import ProfileBanner from './ProfileBanner.jsx'
 import api from '../../api'
 import { hasVisitedFilmMaker, markFilmMakerVisited } from '../../services/filmMakerAccess'
+import { useMediaSafety } from '../../hooks/useMediaSafety.js'
 import { useAuth } from '../../context/AuthContext'
 
 function formatInvestorBudget(value) {
@@ -48,6 +50,26 @@ function ProfileAvatarPlaceholder() {
       <path d="M10 100c2-24 18-42 40-42s38 18 40 42H10Z" />
     </svg>
   )
+}
+
+function getProfileLocationSummary(profile) {
+  const structuredParts = [profile?.district, profile?.state, profile?.country]
+    .map((part) => String(part || '').trim())
+    .filter(Boolean)
+
+  if (structuredParts.length) return structuredParts.join(', ')
+
+  const parts = String(profile?.location || profile?.address || '')
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean)
+  if (parts.length < 2) return ''
+
+  const summaryParts = parts.slice(-3)
+  if (/\b(?:old village|street|road|lane|colony|apartment|flat|plot|door no|house no)\b|\d/i.test(summaryParts[0])) {
+    summaryParts.shift()
+  }
+  return summaryParts.join(', ')
 }
 
 function getConnectionProfileId(profile) {
@@ -261,6 +283,14 @@ function Home({
   const navigate = useNavigate()
   const { isAuthenticated, loading: authLoading } = useAuth()
   const [posts, setPosts] = useState([])
+  const [isPromotionHidden, setIsPromotionHidden] = useState(false)
+  const [isHidePromotionPromptOpen, setIsHidePromotionPromptOpen] = useState(false)
+  const [postLikesDialog, setPostLikesDialog] = useState(null)
+  const [postLikers, setPostLikers] = useState([])
+  const [isLoadingPostLikers, setIsLoadingPostLikers] = useState(false)
+  const [postLikersError, setPostLikersError] = useState('')
+  const [connectingLikerIds, setConnectingLikerIds] = useState([])
+  const [likerConnectionErrors, setLikerConnectionErrors] = useState({})
   const [savedPostIds, setSavedPostIds] = useState(() => (
     readSavedPostIds(getSavedPostsStorageKey(currentUserId))
   ))
@@ -301,6 +331,7 @@ function Home({
   const [draftType, setDraftType] = useState('post')
   const [draftAudience, setDraftAudience] = useState('public')
   const [draftMedia, setDraftMedia] = useState(null)
+  const [mediaSelectionError, setMediaSelectionError] = useState('')
   const [editingPost, setEditingPost] = useState(null)
   const [isComposerOpen, setIsComposerOpen] = useState(false)
   const [isAudienceMenuOpen, setIsAudienceMenuOpen] = useState(false)
@@ -308,8 +339,10 @@ function Home({
   const imageInputRef = useRef(null)
   const videoInputRef = useRef(null)
   const mediaUrls = useRef([])
+  const mediaSafety = useMediaSafety(draftMedia?.file)
 
   const name = profileDetails.name.trim() || 'Your name'
+  const profileLocation = getProfileLocationSummary(profileDetails)
   const dismissedPostsStorageKey = getDismissedPostsStorageKey(currentUserId)
   const dismissedInvestorListingsStorageKey = getDismissedInvestorListingsStorageKey(currentUserId)
   const savedPostsStorageKey = getSavedPostsStorageKey(currentUserId)
@@ -318,6 +351,7 @@ function Home({
     ...profileDetails.languages.filter((language) => language !== 'Other'),
     ...(profileDetails.otherLanguage ? [profileDetails.otherLanguage] : []),
   ]
+  const isDraftMediaBlocked = Boolean(draftMedia?.file && mediaSafety.isBlocked)
 
   useEffect(() => () => {
     mediaUrls.current.forEach((url) => URL.revokeObjectURL(url))
@@ -386,6 +420,57 @@ function Home({
   }, [])
 
   useEffect(() => {
+    if (!postLikesDialog) return undefined
+
+    let isCurrent = true
+    const previousBodyOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+
+    function closeOnEscape(event) {
+      if (event.key === 'Escape') setPostLikesDialog(null)
+    }
+
+    document.addEventListener('keydown', closeOnEscape)
+    setPostLikers([])
+    setPostLikersError('')
+
+    if (postLikesDialog.localOnly || !/^\d+$/.test(String(postLikesDialog.id))) {
+      setIsLoadingPostLikers(false)
+      return () => {
+        isCurrent = false
+        document.removeEventListener('keydown', closeOnEscape)
+        document.body.style.overflow = previousBodyOverflow
+      }
+    }
+
+    async function loadPostLikers() {
+      setIsLoadingPostLikers(true)
+      try {
+        const likers = await api.getPostLikes(postLikesDialog.id)
+        if (!Array.isArray(likers)) {
+          throw new Error('The likes list returned an invalid response.')
+        }
+        if (isCurrent) setPostLikers(likers)
+      } catch (error) {
+        if (isCurrent) {
+          setPostLikersError(error instanceof Error
+            ? error.message
+            : 'Could not load the people who liked this post.')
+        }
+      } finally {
+        if (isCurrent) setIsLoadingPostLikers(false)
+      }
+    }
+
+    loadPostLikers()
+    return () => {
+      isCurrent = false
+      document.removeEventListener('keydown', closeOnEscape)
+      document.body.style.overflow = previousBodyOverflow
+    }
+  }, [postLikesDialog])
+
+  useEffect(() => {
     let isCurrent = true
     async function loadPosts() {
       try {
@@ -403,6 +488,10 @@ function Home({
           console.warn('Could not read blocked profiles for the feed:', error)
         }
         setDismissedPostIds([...dismissedIds])
+        const serverSavedIds = data.filter((post) => post?.saved).map((post) => String(post.id))
+        if (serverSavedIds.length > 0) {
+          setSavedPostIds((prev) => [...new Set([...prev, ...serverSavedIds])])
+        }
         setPosts((current) => {
           const localPosts = current.filter((post) => (
             post.localOnly && !postMatchesBlockedUser(post, blockedUsers)
@@ -423,9 +512,19 @@ function Home({
       if (document.visibilityState === 'visible') loadPosts()
     }
     window.addEventListener('focus', handleFocus)
+    document.addEventListener('visibilitychange', handleFocus)
+    window.addEventListener('truehunt-settings-updated', loadPosts)
+    const refreshInterval = activeNavigation === 'home'
+      ? window.setInterval(() => {
+        if (document.visibilityState === 'visible') loadPosts()
+      }, 15000)
+      : null
     return () => {
       isCurrent = false
       window.removeEventListener('focus', handleFocus)
+      document.removeEventListener('visibilitychange', handleFocus)
+      window.removeEventListener('truehunt-settings-updated', loadPosts)
+      if (refreshInterval) window.clearInterval(refreshInterval)
     }
   }, [activeNavigation, accountSettingsStorageKey, dismissedPostsStorageKey])
 
@@ -526,8 +625,12 @@ function Home({
     }
 
     loadConnections()
+    window.addEventListener('truehunt-settings-updated', loadConnections)
+    window.addEventListener('truehunt-connection-changed', loadConnections)
     return () => {
       isCurrent = false
+      window.removeEventListener('truehunt-settings-updated', loadConnections)
+      window.removeEventListener('truehunt-connection-changed', loadConnections)
     }
   }, [activeNavigation, accountEmail, currentUserId])
 
@@ -633,6 +736,12 @@ function Home({
     if (!file) return
 
     if (draftMedia?.file) URL.revokeObjectURL(draftMedia.url)
+    if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) {
+      setMediaSelectionError('Choose an image or video to attach to your post.')
+      setDraftMedia(null)
+      return
+    }
+    setMediaSelectionError('')
     setDraftMedia({
       file,
       url: URL.createObjectURL(file),
@@ -644,6 +753,7 @@ function Home({
   function removeDraftMedia() {
     if (draftMedia?.file) URL.revokeObjectURL(draftMedia.url)
     setDraftMedia(null)
+    setMediaSelectionError('')
   }
 
   function startEditingPost(post) {
@@ -678,6 +788,7 @@ function Home({
     event.preventDefault()
     const content = draft.trim()
     if (!content && !draftMedia) return
+    if (isDraftMediaBlocked) return
 
     let uploadedMedia = null
     if (draftMedia?.file) {
@@ -1073,6 +1184,7 @@ function Home({
   }
 
   async function handleLike(post) {
+    if (post?.likeCountDisabled) return
     const postId = String(post.id)
     if (pendingLikePostIds.includes(postId)) return
 
@@ -1116,8 +1228,53 @@ function Home({
     }
   }
 
-  async function handleApply(postId) {
-    const updated = await api.applyToOpportunity(postId)
+  async function connectWithLiker(liker) {
+    const profileId = getConnectionProfileId(liker)
+    if (!profileId || connectingLikerIds.includes(profileId)) return
+
+    setLikerConnectionErrors((current) => {
+      const next = { ...current }
+      delete next[profileId]
+      return next
+    })
+    setConnectingLikerIds((current) => [...current, profileId])
+    try {
+      const result = await api.sendConnectionRequest(profileId)
+      const connected = Boolean(result?.connected)
+      const pending = Boolean(result?.isPending)
+      const updatedLiker = {
+        ...liker,
+        isConnected: connected,
+        isPending: pending,
+        isOutgoingPending: pending,
+      }
+      setPostLikers((current) => current.map((profile) => (
+        isSameConnectionProfile(profile, liker) ? { ...profile, ...updatedLiker } : profile
+      )))
+      if (connected) {
+        const normalizedLiker = normalizeConnectionProfile(updatedLiker)
+        if (normalizedLiker) {
+          setConnectedProfiles((current) => current.some((profile) => (
+            isSameConnectionProfile(profile, normalizedLiker)
+          )) ? current : [...current, normalizedLiker])
+        }
+      }
+      window.dispatchEvent(new CustomEvent('truehunt-connection-changed', {
+        detail: { connected, pending, profile: updatedLiker },
+      }))
+    } catch (error) {
+      console.error('Could not connect with a post liker:', error)
+      setLikerConnectionErrors((current) => ({
+        ...current,
+        [profileId]: error instanceof Error ? error.message : 'Could not send this connection request.',
+      }))
+    } finally {
+      setConnectingLikerIds((current) => current.filter((id) => id !== profileId))
+    }
+  }
+
+  async function handleApply(postId, details = null) {
+    const updated = await api.applyToOpportunity(postId, details)
     setPosts((current) => current.map((post) => (
       String(post.id) === String(postId) ? { ...post, ...updated } : post
     )))
@@ -1185,7 +1342,7 @@ function Home({
         ...current,
         [interestKey]: { status: 'sent', message: '' },
       }))
-      setActiveNavigation('endorsement')
+      setActiveNavigation('notifications')
     } catch (error) {
       console.error('Could not send investor interest message:', error)
       setInvestorInterestStatus((current) => ({
@@ -1227,7 +1384,10 @@ function Home({
     setApplicationError('')
     setIsSubmittingApplication(true)
     try {
-      await handleApply(applyingOpportunity.id)
+      await handleApply(applyingOpportunity.id, {
+        applicantName: applicationName.trim(),
+        experience: applicationExperience.trim(),
+      })
       setApplyingOpportunity(null)
     } catch (error) {
       console.error('Failed to apply for opportunity:', error)
@@ -1301,14 +1461,20 @@ function Home({
     }
     setDismissedPostIds([...dismissedIds])
     setPosts((current) => current.filter((post) => String(post.id) !== postIdString))
+    if (isAuthenticated && /^\d+$/.test(postIdString)) {
+      api.markPostNotInterested(postIdString).catch((err) => {
+        console.warn('Could not persist not-interested post on backend:', err)
+      })
+    }
   }
 
   function handleSavePost(post) {
     const postId = String(post.id)
+    let isAlreadySaved
     try {
       const savedPosts = JSON.parse(localStorage.getItem(savedPostsStorageKey) || '[]')
       const existing = Array.isArray(savedPosts) ? savedPosts : []
-      const isAlreadySaved = existing.some((saved) => String(saved.id) === postId)
+      isAlreadySaved = existing.some((saved) => String(saved.id) === postId)
       const next = isAlreadySaved
         ? existing.filter((saved) => String(saved.id) !== postId)
         : [post, ...existing]
@@ -1320,10 +1486,21 @@ function Home({
       setOpenPostMenuId('')
       return
     }
+    if (isAuthenticated && !post?.localOnly && /^\d+$/.test(postId)) {
+      const request = isAlreadySaved ? api.unsavePost(postId) : api.savePost(postId)
+      request.catch((err) => {
+        console.warn('Could not sync saved post on backend:', err)
+      })
+    }
     setOpenPostMenuId('')
   }
 
   async function handleCopyPostLink(postId) {
+    const targetPost = posts.find((item) => String(item.id) === String(postId))
+    if (targetPost?.shareCountDisabled) {
+      setOpenPostMenuId('')
+      return
+    }
     const link = `${window.location.origin}/social/home?postId=${encodeURIComponent(String(postId))}`
     try {
       await navigator.clipboard.writeText(link)
@@ -1334,6 +1511,27 @@ function Home({
   }
 
   async function handleSharePost(post) {
+    if (post?.shareCountDisabled) return
+    if (!post?.localOnly && /^\d+$/.test(String(post.id))) {
+      try {
+        const res = await api.sharePost(post.id)
+        if (res?.shareCountDisabled || res?.allowed === false) {
+          setPosts((current) => current.map((item) => (
+            String(item.id) === String(post.id)
+              ? { ...item, sharesCount: 0, shareCountDisabled: true }
+              : item
+          )))
+          return
+        }
+        if (res && typeof res.sharesCount === 'number') {
+          setPosts((current) => current.map((item) => (
+            String(item.id) === String(post.id) ? { ...item, sharesCount: res.sharesCount } : item
+          )))
+        }
+      } catch (err) {
+        console.warn('Could not record post share:', err)
+      }
+    }
     const link = `${window.location.origin}/social/home?postId=${encodeURIComponent(String(post.id))}`
     if (navigator.share) {
       try {
@@ -1378,6 +1576,12 @@ function Home({
       console.warn('Could not save dismissed posts:', error)
     }
     setDismissedPostIds([...dismissedIds])
+    const targetAuthor = authorId || authorName
+    if (isAuthenticated && targetAuthor) {
+      api.hideAuthorPosts(targetAuthor).catch((err) => {
+        console.warn('Could not persist hidden author on backend:', err)
+      })
+    }
     setOpenPostMenuId('')
   }
 
@@ -1434,6 +1638,11 @@ function Home({
     }
 
     setPosts((current) => current.filter((post) => !postMatchesBlockedUser(post, [blockedUser])))
+    if (isAuthenticated) {
+      api.blockUser(blockedUser).catch((err) => {
+        console.warn('Could not persist blocked user on backend:', err)
+      })
+    }
     setBlockTarget(null)
     setBlockReason('')
     setCustomBlockReason('')
@@ -1445,6 +1654,7 @@ function Home({
       const reportsKey = `truehunt-social-reported-posts:${encodeURIComponent(String(currentUserId || 'me'))}`
       const report = {
         postId: String(post.id),
+        authorId: post.authorId || '',
         authorName: post.authorName || '',
         title: post.title || '',
         content: post.content || '',
@@ -1458,6 +1668,11 @@ function Home({
         window.dispatchEvent(new CustomEvent('truehunt-reported-post-changed'))
       } catch (error) {
         console.warn('Could not save post report:', error)
+      }
+      if (isAuthenticated) {
+        api.reportPost(post.id, report).catch((err) => {
+          console.warn('Could not persist post report on backend:', err)
+        })
       }
       window.alert(`Report submitted: ${reason.trim()}`)
     }
@@ -1474,11 +1689,16 @@ function Home({
       console.warn('Could not save dismissed investor listing:', error)
     }
     setDismissedInvestorListingIds([...dismissedIds])
+    if (isAuthenticated) {
+      api.markInvestorNotInterested(listingIdString).catch((err) => {
+        console.warn('Could not persist dismissed investor listing on backend:', err)
+      })
+    }
   }
 
   function isOwnPost(post) {
     const authorId = String(post.authorId || '').trim().toLowerCase()
-    const ownIds = [currentUserId, profileDetails.userId, profileDetails.id, profileDetails.email]
+    const ownIds = [currentUserId, profileDetails.userId, profileDetails.id, profileDetails.email, accountEmail]
       .filter(Boolean)
       .map((id) => String(id).trim().toLowerCase())
     if (authorId && authorId !== 'me' && ownIds.includes(authorId)) return true
@@ -1944,7 +2164,7 @@ function Home({
               {profileDetails.talents.length > 0 && (
                 <p className="home-profile-headline">{profileDetails.talents.join(' · ')}</p>
               )}
-              {profileDetails.address && <p>{profileDetails.address}</p>}
+              {profileLocation && <p>{profileLocation}</p>}
               {profileDetails.experience && (
                 <p>{profileDetails.experience.toLowerCase().includes('year') ? `${profileDetails.experience} experience` : `${profileDetails.experience} years of experience`}</p>
               )}
@@ -2036,7 +2256,7 @@ function Home({
             )}
           </div>
           {activeNavigation === 'opportunities' && (
-            <Link className="home-explore-promo home-explore-promo-tickets" to="/entertainments">
+            <Link className="home-explore-promo home-explore-promo-tickets home-explore-promo-tickets-opportunities" to="/entertainments">
               <span className="home-explore-promo-art">
                 <img src="/assets/explore-tickets.png" alt="" />
               </span>
@@ -2220,18 +2440,26 @@ function Home({
                     )}
                   </div>
                 )}
+                {draftMedia?.file && (
+                  <MediaSafetyStatus
+                    safety={mediaSafety}
+                    blockedMessage={`This ${draftMedia.kind} has high adult content, so we can't post this ${draftMedia.kind}.`}
+                    safeMessage="Safe content verified. Ready to post."
+                  />
+                )}
+                {mediaSelectionError && (
+                  <p className="home-post-error" role="alert">{mediaSelectionError}</p>
+                )}
                 <div className="home-publish-row">
                   <span>{draftType === 'opportunity' ? 'Opportunity' : 'Post'}</span>
                   <div className="home-publish-controls">
-                    {editingPost && (
-                      <button
-                        className="home-cancel-edit-button"
-                        type="button"
-                        onClick={cancelEditingPost}
-                      >
-                        Cancel
-                      </button>
-                    )}
+                    <button
+                      className="home-cancel-edit-button"
+                      type="button"
+                      onClick={cancelEditingPost}
+                    >
+                      Cancel
+                    </button>
                     <div className="home-audience-selector" ref={audienceMenuRef}>
                       <button
                         className="home-audience-trigger"
@@ -2278,9 +2506,9 @@ function Home({
                     <button
                       className="home-publish-button"
                       type="submit"
-                      disabled={!draft.trim() && !draftMedia}
+                      disabled={(!draft.trim() && !draftMedia) || isDraftMediaBlocked}
                     >
-                      {editingPost ? 'Save changes' : draftType === 'opportunity' ? 'Share' : 'Post'}
+                      {editingPost ? 'Save changes' : draftType === 'opportunity' ? 'Share' : 'publish'}
                     </button>
                   </div>
                 </div>
@@ -2496,32 +2724,43 @@ function Home({
                   <div className="home-post-action-bar" style={{ display: 'flex', gap: '8px', marginTop: '12px', borderTop: '1px solid var(--color-border, #eee)', paddingTop: '8px', flexWrap: 'wrap' }}>
                     {!isOwnOpportunity && (
                       <>
-                    <button
-                      type="button"
-                      onClick={() => handleLike(post)}
-                      disabled={pendingLikePostIds.includes(String(post.id))}
-                      className="home-post-icon-action"
-                      aria-label={`${post.liked ? 'Unlike' : 'Like'} post (${post.likesCount ?? 0} likes)`}
-                      title={post.liked ? 'Unlike' : 'Like'}
-                      style={{
-                        background: post.liked ? '#e8f0fe' : 'transparent',
-                        color: post.liked ? '#1a73e8' : 'inherit',
-                        border: 'none',
-                        width: 'auto',
-                        minWidth: '36px',
-                        height: '36px',
-                        padding: '0 8px',
-                        cursor: pendingLikePostIds.includes(String(post.id)) ? 'wait' : 'pointer',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '6px',
-                        borderRadius: '18px'
-                      }}
-                    >
-                      <ThumbsUp size={18} fill={post.liked ? 'currentColor' : 'none'} aria-hidden="true" />
-                      <span className="home-post-action-count">{post.likesCount ?? 0}</span>
-                    </button>
+                    <div className="home-post-like-actions">
+                      <button
+                        type="button"
+                        onClick={() => handleLike(post)}
+                        disabled={pendingLikePostIds.includes(String(post.id)) || Boolean(post.likeCountDisabled)}
+                        className="home-post-icon-action"
+                        aria-label={post.likeCountDisabled ? 'Like count disabled' : `${post.liked ? 'Unlike' : 'Like'} post`}
+                        title={post.likeCountDisabled ? 'Like counts are turned off' : (post.liked ? 'Unlike' : 'Like')}
+                        style={{
+                          background: post.liked ? '#e8f0fe' : 'transparent',
+                          color: post.liked ? '#1a73e8' : 'inherit',
+                          border: 'none',
+                          width: '36px',
+                          minWidth: '36px',
+                          height: '36px',
+                          padding: '0 8px',
+                          cursor: pendingLikePostIds.includes(String(post.id)) ? 'wait' : 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '6px',
+                          borderRadius: '18px'
+                        }}
+                      >
+                        <ThumbsUp size={18} fill={post.liked ? 'currentColor' : 'none'} aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        className="home-post-like-count-button"
+                        onClick={() => setPostLikesDialog(post)}
+                        disabled={Boolean(post.likeCountDisabled)}
+                        aria-label={`View ${post.likesCount ?? 0} likes`}
+                        title="View people who liked this post"
+                      >
+                        <span className="home-post-action-count">{post.likesCount ?? 0}</span>
+                      </button>
+                    </div>
                     {likeErrors[String(post.id)] && (
                       <span role="alert" style={{ alignSelf: 'center', color: '#b3261e', fontSize: '12px' }}>
                         {likeErrors[String(post.id)]}
@@ -2530,7 +2769,7 @@ function Home({
 
                     <button
                       type="button"
-                      onClick={() => setOpenCommentsPostId(openCommentsPostId === post.id ? null : post.id)}
+                      onClick={() => setOpenCommentsPostId(openCommentsPostId === String(post.id) ? null : String(post.id))}
                       className="home-post-icon-action"
                       aria-label={`Comments (${post.commentsCount ?? post.comments?.length ?? 0})`}
                       title="Comments"
@@ -2556,21 +2795,28 @@ function Home({
                     <button
                       type="button"
                       onClick={() => handleSharePost(post)}
+                      disabled={Boolean(post.shareCountDisabled)}
                       className="home-post-icon-action"
-                      aria-label="Share post"
-                      title="Share"
+                      aria-label={post.shareCountDisabled ? 'Sharing disabled' : `Share post (${post.sharesCount ?? 0} shares)`}
+                      title={post.shareCountDisabled ? 'Sharing is turned off' : 'Share'}
                       style={{
                         background: 'transparent',
                         border: 'none',
-                        width: '36px',
+                        width: 'auto',
+                        minWidth: '36px',
                         height: '36px',
-                        cursor: 'pointer',
-                        display: 'grid',
-                        placeItems: 'center',
-                        borderRadius: '50%'
+                        padding: '0 8px',
+                        cursor: post.shareCountDisabled ? 'not-allowed' : 'pointer',
+                        opacity: post.shareCountDisabled ? 0.45 : 1,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px',
+                        borderRadius: '18px'
                       }}
                     >
                       <Share2 size={18} aria-hidden="true" />
+                      <span className="home-post-action-count">{post.sharesCount ?? 0}</span>
                     </button>
 
                     {post.type === 'opportunity' && (
@@ -2960,28 +3206,55 @@ function Home({
         </div>
 
         <aside className="home-promotion-column" aria-label="Promotions and Explore">
-          <section className="home-promotion-card" aria-label="Sponsored movie industry promotion">
-            <div className="home-promotion-art">
-              <span className="home-promotion-label">PROMOTED</span>
-              <span className="home-promotion-menu-icon" aria-hidden="true">
-                <MoreVertical size={18} />
-              </span>
-              <span className="home-promotion-art-title">THE NEXT<br />BIG PICTURE</span>
-              <span className="home-promotion-studio">NORTHSTAR FILMS</span>
-            </div>
-            <div className="home-promotion-content">
-              <h2>Bring your next story to the screen</h2>
-              <p>Northstar Films is meeting new writers, actors, and independent filmmakers for upcoming productions.</p>
-              <span className="home-promotion-caption">Make your mark in the movies.</span>
-              <button
-                className="home-promotion-button"
-                type="button"
-                onClick={() => handlePromoClick("Northstar Films Production")}
-              >
-                Explore film careers
-              </button>
-            </div>
-          </section>
+          {!isPromotionHidden && (
+            <section className="home-promotion-card" aria-label="Sponsored movie industry promotion">
+              <div className="home-promotion-art">
+                <span className="home-promotion-label">PROMOTED</span>
+                <button
+                  className="home-promotion-menu-icon"
+                  type="button"
+                  aria-label="Ad options"
+                  aria-haspopup="dialog"
+                  aria-expanded={isHidePromotionPromptOpen}
+                  onClick={() => setIsHidePromotionPromptOpen((isOpen) => !isOpen)}
+                >
+                  <MoreVertical size={18} aria-hidden="true" />
+                </button>
+                <span className="home-promotion-art-title">THE NEXT<br />BIG PICTURE</span>
+                <span className="home-promotion-studio">NORTHSTAR FILMS</span>
+              </div>
+              {isHidePromotionPromptOpen && (
+                <div className="home-promotion-hide-prompt" role="dialog" aria-labelledby="home-promotion-hide-title">
+                  <h2 id="home-promotion-hide-title">Hide this ad?</h2>
+                  <p>This promotion will be removed from your sidebar.</p>
+                  <div className="home-promotion-hide-actions">
+                    <button type="button" onClick={() => setIsHidePromotionPromptOpen(false)}>Cancel</button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsPromotionHidden(true)
+                        setIsHidePromotionPromptOpen(false)
+                      }}
+                    >
+                      Hide ad
+                    </button>
+                  </div>
+                </div>
+              )}
+              <div className="home-promotion-content">
+                <h2>Bring your next story to the screen</h2>
+                <p>Northstar Films is meeting new writers, actors, and independent filmmakers for upcoming productions.</p>
+                <span className="home-promotion-caption">Make your mark in the movies.</span>
+                <button
+                  className="home-promotion-button"
+                  type="button"
+                  onClick={() => handlePromoClick("Northstar Films Production")}
+                >
+                  Explore film careers
+                </button>
+              </div>
+            </section>
+          )}
           <section className="home-card home-sidebar-stats home-discovery-card" aria-labelledby="home-discovery-heading">
             <h2 className="home-discovery-heading" id="home-discovery-heading">Explore</h2>
             <Link
@@ -3027,6 +3300,18 @@ function Home({
                 <ArrowUpRight size={16} aria-hidden="true" />
               </span>
             </a>
+            {activeNavigation === 'opportunities' && (
+              <Link className="home-explore-promo home-explore-promo-tickets home-explore-promo-tickets-mobile" to="/entertainments">
+                <span className="home-explore-promo-art">
+                  <img src="/assets/explore-tickets.png" alt="" />
+                </span>
+                <span className="home-explore-promo-copy">
+                  <strong>Book a ticket</strong>
+                  <small>Explore films and showtimes</small>
+                  <ArrowUpRight size={16} aria-hidden="true" />
+                </span>
+              </Link>
+            )}
             <section className="home-explore-promo home-explore-promo-asset" aria-label="For film asset owners">
               <span className="home-explore-promo-art">
                 <img src="/assets/explore-assets.svg" alt="" />
@@ -3339,7 +3624,6 @@ function Home({
     {openPostMenuId && (() => {
       const menuPost = visiblePosts.find((post) => String(post.id) === openPostMenuId)
       if (!menuPost) return null
-      const menuAuthorName = menuPost.authorName || name
       const isMenuPostSaved = savedPostIds.includes(String(menuPost.id))
       return (
         <div
@@ -3354,10 +3638,12 @@ function Home({
               <small>{isMenuPostSaved ? 'Remove this post from your saved items' : 'Save for later'}</small>
             </span>
           </button>
-          <button type="button" role="menuitem" onClick={() => handleCopyPostLink(menuPost.id)}>
-            <Link2 size={18} aria-hidden="true" />
-            <span><strong>Copy link to post</strong></span>
-          </button>
+          {!menuPost.shareCountDisabled && (
+            <button type="button" role="menuitem" onClick={() => handleCopyPostLink(menuPost.id)}>
+              <Link2 size={18} aria-hidden="true" />
+              <span><strong>Copy link to post</strong></span>
+            </button>
+          )}
           <button type="button" role="menuitem" onClick={() => handleHidePostsByAuthor(menuPost)}>
             <EyeOff size={18} aria-hidden="true" />
             <span><strong>Hide posts </strong></span>
@@ -3442,6 +3728,125 @@ function Home({
             </button>
           </div>
         </form>
+      </div>
+    )}
+    {postLikesDialog && (
+      <div
+        className="home-post-likes-backdrop"
+        role="presentation"
+        onMouseDown={(event) => {
+          if (event.target === event.currentTarget) setPostLikesDialog(null)
+        }}
+      >
+        <section
+          className="home-post-likes-sheet"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="home-post-likes-title"
+        >
+          <div className="home-post-likes-handle" aria-hidden="true" />
+          <header className="home-post-likes-header">
+            <div>
+              <h2 id="home-post-likes-title">Likes</h2>
+              <p>{postLikesDialog.likesCount ?? 0} {Number(postLikesDialog.likesCount) === 1 ? 'like' : 'likes'}</p>
+            </div>
+            <button
+              type="button"
+              className="home-post-likes-close"
+              aria-label="Close likes"
+              onClick={() => setPostLikesDialog(null)}
+            >
+              <X size={20} aria-hidden="true" />
+            </button>
+          </header>
+          <div className="home-post-likes-content">
+            {isLoadingPostLikers ? (
+              <p className="home-post-likes-message" role="status">Loading likes…</p>
+            ) : postLikersError ? (
+              <div className="home-post-likes-message" role="alert">
+                <p>{postLikersError}</p>
+                <button type="button" onClick={() => setPostLikesDialog((current) => ({ ...current }))}>
+                  Try again
+                </button>
+              </div>
+            ) : postLikers.length ? (
+              <ul className="home-post-likers-list">
+                {postLikers.map((liker) => {
+                  const likerName = String(liker.name || 'TrueHunt member').trim()
+                  const likerImage = liker.profileImageUrl || liker.avatar || ''
+                  const likerId = getConnectionProfileId(liker)
+                  const isCurrentUser = isSameConnectionProfile(liker, {
+                    userId: currentUserId,
+                    id: profileDetails.id,
+                    email: accountEmail || profileDetails.email,
+                  })
+                  const isConnected = connectedProfiles.some((profile) => (
+                    isSameConnectionProfile(profile, liker)
+                  ))
+                  const isPending = Boolean(liker.isOutgoingPending)
+                    || (Boolean(liker.isPending) && !liker.isIncomingPending)
+                  const isConnecting = connectingLikerIds.includes(likerId)
+                  const connectionError = likerConnectionErrors[likerId]
+                  const initials = likerName
+                    .split(/\s+/)
+                    .map((part) => part[0])
+                    .join('')
+                    .slice(0, 2)
+
+                  return (
+                    <li key={liker.userId || liker.id || likerName}>
+                      <div className="home-post-liker-row">
+                      <div className="home-post-liker-profile">
+                        <span className={`home-post-liker-avatar${likerImage ? '' : ' is-placeholder'}`}>
+                          {likerImage ? <img src={likerImage} alt="" /> : initials || 'TH'}
+                        </span>
+                        <span className="home-post-liker-details">
+                          <strong>{likerName}</strong>
+                          {(liker.headline || liker.role) && <small>{liker.headline || liker.role}</small>}
+                        </span>
+                      </div>
+                      {!isCurrentUser && (isConnected ? (
+                        <button
+                          type="button"
+                          className="home-post-liker-action is-profile"
+                          onClick={() => {
+                            setPostLikesDialog(null)
+                            onViewConnection?.({
+                              ...liker,
+                              userId: liker.userId || liker.id || '',
+                              profileImageUrl: likerImage,
+                            })
+                          }}
+                        >
+                          View profile
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="home-post-liker-action"
+                          disabled={isPending || isConnecting || !likerId}
+                          onClick={() => connectWithLiker(liker)}
+                        >
+                          {isConnecting ? 'Connecting…' : isPending ? 'Requested' : 'Connect'}
+                        </button>
+                      ))}
+                      </div>
+                      {connectionError && <p className="home-post-liker-error" role="alert">{connectionError}</p>}
+                    </li>
+                  )
+                })}
+              </ul>
+            ) : (
+              <p className="home-post-likes-message">
+                {postLikesDialog.localOnly || !/^\d+$/.test(String(postLikesDialog.id))
+                  ? 'Likes are not available for this post.'
+                  : Number(postLikesDialog.likesCount) > 0
+                    ? 'Liker profiles are not available to display.'
+                    : 'No likes yet.'}
+              </p>
+            )}
+          </div>
+        </section>
       </div>
     )}
     <Article

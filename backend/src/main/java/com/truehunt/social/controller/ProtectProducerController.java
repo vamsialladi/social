@@ -198,4 +198,13 @@ public class ProtectProducerController {
     public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getActivityLogs(@PathVariable String projectId) {
         return ResponseEntity.ok(ApiResponse.success(protectProducerService.getActivityLogs(projectId)));
     }
+
+    // Checklists
+    @PatchMapping("/projects/{projectId}/checklists")
+    public ResponseEntity<ApiResponse<ProtectProjectDto>> updateChecklists(
+            @PathVariable String projectId,
+            @RequestBody(required = false) Map<String, Object> checklists
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(protectProducerService.updateChecklists(projectId, checklists)));
+    }
 }

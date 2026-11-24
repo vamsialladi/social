@@ -103,4 +103,28 @@ public class InvestorAccessController {
                 investorAccessService.deletePublishedListing(id, resolveCaller(user, userEmail, userId))
         ));
     }
+
+    @PostMapping("/listings/{id}/not-interested")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> hideListing(
+            @PathVariable String id,
+            @AuthenticationPrincipal UserDetails user,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(
+                investorAccessService.hideListing(id, resolveCaller(user, userEmail, userId))
+        ));
+    }
+
+    @DeleteMapping("/listings/{id}/not-interested")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> unhideListing(
+            @PathVariable String id,
+            @AuthenticationPrincipal UserDetails user,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(
+                investorAccessService.unhideListing(id, resolveCaller(user, userEmail, userId))
+        ));
+    }
 }

@@ -526,7 +526,7 @@ class BackendFrontendContractIntegrationTest {
         mockMvc.perform(get("/api/settings")
                         .header("X-User-Id", userIdB))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.theme").value("dark"));
+                .andExpect(jsonPath("$.data.theme").value("light"));
 
         // Per-user notifications filter and mark-all-read by caller
         notificationRepository.save(new NotificationEntity(emailA, "Title A", "For A only", "INFO"));

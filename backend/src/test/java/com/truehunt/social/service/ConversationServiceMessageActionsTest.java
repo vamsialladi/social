@@ -2,10 +2,13 @@ package com.truehunt.social.service;
 
 import com.truehunt.social.exception.BadRequestException;
 import com.truehunt.social.exception.UnauthorizedException;
+import com.truehunt.social.dto.ChatMessageDto;
+import com.truehunt.social.model.ConnectionGroupEntity;
 import com.truehunt.social.model.ConversationEntity;
 import com.truehunt.social.model.MessageEntity;
 import com.truehunt.social.model.ProfileEntity;
 import com.truehunt.social.model.UserAccountEntity;
+import com.truehunt.social.repository.ConnectionGroupRepository;
 import com.truehunt.social.repository.ConversationRepository;
 import com.truehunt.social.repository.MessageRepository;
 import com.truehunt.social.repository.ProfileRepository;
@@ -18,6 +21,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.security.Principal;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -197,6 +202,103 @@ class ConversationServiceMessageActionsTest {
 
         assertEquals("https://example.com/other.png", result.get("profileImageUrl"));
         assertEquals("https://example.com/other.png", result.get("avatar"));
+    }
+
+    @Test
+    void groupConversationIsCreatedForTheOwnerAndItsMembers() {
+        ConnectionGroupRepository groupRepository = mock(ConnectionGroupRepository.class);
+        ConversationService service = new ConversationService(
+                conversationRepository,
+                messageRepository,
+                messageService,
+                userAccountRepository,
+                profileRepository,
+                null,
+                groupRepository);
+        UserAccountEntity owner = account(OWNER_EMAIL, "owner-id");
+        UserAccountEntity other = account(OTHER_EMAIL, "other-id");
+        when(userAccountRepository.findByPublicUserId("owner-id")).thenReturn(Optional.of(owner));
+        when(userAccountRepository.findByPublicUserId("other-id")).thenReturn(Optional.of(other));
+        when(conversationRepository.findFirstByConnectionGroupId(42L)).thenReturn(Optional.empty());
+
+        ConnectionGroupEntity group = new ConnectionGroupEntity();
+        group.setId(42L);
+        group.setOwnerId("owner-id");
+        group.setName("Production Crew");
+        group.setImageUrl("https://example.com/group.png");
+        group.setMemberProfileIds(List.of("other-id"));
+
+        Map<String, Object> result = service.getOrCreateGroupConversation(group, OWNER_EMAIL);
+
+        assertEquals("Production Crew", result.get("name"));
+        assertEquals("https://example.com/group.png", result.get("profileImageUrl"));
+        assertEquals(true, result.get("isGroupConversation"));
+        assertEquals(List.of(OWNER_EMAIL, OTHER_EMAIL), result.get("groupParticipantIds"));
+        verify(conversationRepository).save(any(ConversationEntity.class));
+    }
+
+    @Test
+    void groupMessagesArePersistedOnceAndDeliveredToEveryParticipant() {
+        SimpMessagingTemplate messagingTemplate = mock(SimpMessagingTemplate.class);
+        MessageService service = new MessageService(
+                messageRepository,
+                conversationRepository,
+                userAccountRepository,
+                profileRepository,
+                messagingTemplate);
+        ConversationEntity groupConversation = new ConversationEntity();
+        groupConversation.setId(42L);
+        groupConversation.setConnectionGroupId(7L);
+        groupConversation.setName("Production Crew");
+        groupConversation.setGroupParticipantIds(List.of(OWNER_EMAIL, OTHER_EMAIL));
+        when(conversationRepository.findById(42L)).thenReturn(Optional.of(groupConversation));
+        when(userAccountRepository.findByEmail(OWNER_EMAIL)).thenReturn(Optional.of(account(OWNER_EMAIL, "owner-id")));
+        when(userAccountRepository.findByEmail(OTHER_EMAIL)).thenReturn(Optional.of(account(OTHER_EMAIL, "other-id")));
+        when(messageRepository.save(any(MessageEntity.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(conversationRepository.save(any(ConversationEntity.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        ChatMessageDto request = new ChatMessageDto();
+        request.setConversationId(42L);
+        request.setContent("Hello, team");
+        service.processAndSendMessage(request, (Principal) () -> OWNER_EMAIL);
+
+        assertEquals("Hello, team", groupConversation.getThread().get(0).get("content"));
+        assertEquals("group:7", groupConversation.getThread().get(0).get("receiverId"));
+        verify(messageRepository).save(any(MessageEntity.class));
+        verify(messagingTemplate).convertAndSendToUser(
+                org.mockito.ArgumentMatchers.eq(OWNER_EMAIL),
+                org.mockito.ArgumentMatchers.eq("/queue/messages"),
+                any(ChatMessageDto.class));
+        verify(messagingTemplate).convertAndSendToUser(
+                org.mockito.ArgumentMatchers.eq(OTHER_EMAIL),
+                org.mockito.ArgumentMatchers.eq("/queue/messages"),
+                any(ChatMessageDto.class));
+    }
+
+    @Test
+    void groupConversationDtoKeepsTheGroupNameAndTracksReadStatePerMember() {
+        ConversationEntity groupConversation = new ConversationEntity();
+        groupConversation.setConnectionGroupId(42L);
+        groupConversation.setName("Production Crew");
+        groupConversation.setGroupParticipantIds(List.of(OWNER_EMAIL, OTHER_EMAIL));
+        String sentAt = LocalDateTime.now().toString();
+        Map<String, Object> groupMessage = new HashMap<>();
+        groupMessage.put("id", "group-message");
+        groupMessage.put("senderId", OWNER_EMAIL);
+        groupMessage.put("sentAt", sentAt);
+        groupMessage.put("content", "Call time is 9 AM");
+        groupConversation.setThread(List.of(groupMessage));
+
+        Map<String, Object> unreadDto = groupConversation.toDto(OTHER_EMAIL, java.util.Set.of(OTHER_EMAIL));
+        assertEquals("Production Crew", unreadDto.get("name"));
+        assertEquals(true, unreadDto.get("isGroupConversation"));
+        assertEquals(true, unreadDto.get("unread"));
+
+        groupConversation.setGroupReadAt(Map.of(OTHER_EMAIL, sentAt));
+        Map<String, Object> readDto = groupConversation.toDto(OTHER_EMAIL, java.util.Set.of(OTHER_EMAIL));
+        assertEquals(false, readDto.get("unread"));
     }
 
     private static UserAccountEntity account(String email, String publicUserId) {

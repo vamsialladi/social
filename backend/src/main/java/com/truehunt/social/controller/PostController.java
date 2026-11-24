@@ -3,10 +3,14 @@ package com.truehunt.social.controller;
 import com.truehunt.social.dto.ApiResponse;
 import com.truehunt.social.dto.CommentRequest;
 import com.truehunt.social.dto.CreatePostRequest;
+import com.truehunt.social.exception.UnauthorizedException;
 import com.truehunt.social.service.InvestorAccessService;
 import com.truehunt.social.service.PostService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
@@ -40,13 +44,57 @@ public class PostController {
         return null;
     }
 
+    private void requireAuthenticatedUser() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated()
+                || authentication instanceof AnonymousAuthenticationToken) {
+            throw new UnauthorizedException("Sign in to view or create casting profiles.");
+        }
+    }
+
     @GetMapping("/posts")
     public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getPosts(
             @RequestParam(required = false, defaultValue = "") String type,
             @RequestHeader(value = "X-User-Email", required = false) String userEmail,
             @RequestHeader(value = "X-User-Id", required = false) String userId
     ) {
+        if ("casting".equalsIgnoreCase(type)) {
+            requireAuthenticatedUser();
+        }
         return ResponseEntity.ok(ApiResponse.success(postService.getPosts(type, resolveIdentity(userEmail, userId))));
+    }
+
+    @GetMapping("/posts/{id}/likes")
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getPostLikes(
+            @PathVariable String id,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(postService.getPostLikes(id, resolveIdentity(userEmail, userId))));
+    }
+
+    @GetMapping("/posts/saved")
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getSavedPosts(
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(postService.getSavedPosts(resolveIdentity(userEmail, userId))));
+    }
+
+    @GetMapping("/posts/hidden")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getHiddenContent(
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(postService.getHiddenContent(resolveIdentity(userEmail, userId))));
+    }
+
+    @GetMapping("/reports/me")
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getMyReports(
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(postService.getMyReports(resolveIdentity(userEmail, userId))));
     }
 
     @GetMapping("/posts/{id}")
@@ -55,7 +103,11 @@ public class PostController {
             @RequestHeader(value = "X-User-Email", required = false) String userEmail,
             @RequestHeader(value = "X-User-Id", required = false) String userId
     ) {
-        return ResponseEntity.ok(ApiResponse.success(postService.getPostById(id, resolveIdentity(userEmail, userId))));
+        Map<String, Object> post = postService.getPostById(id, resolveIdentity(userEmail, userId));
+        if ("casting".equalsIgnoreCase(String.valueOf(post.get("type")))) {
+            requireAuthenticatedUser();
+        }
+        return ResponseEntity.ok(ApiResponse.success(post));
     }
 
     @GetMapping("/opportunities")
@@ -72,6 +124,10 @@ public class PostController {
             @RequestHeader(value = "X-User-Email", required = false) String userEmail,
             @RequestHeader(value = "X-User-Id", required = false) String userId
     ) {
+        if (postReq != null && "casting".equalsIgnoreCase(postReq.getType())) {
+            requireAuthenticatedUser();
+            postReq.setAudience("public");
+        }
         return ResponseEntity.ok(ApiResponse.success(postService.createPost(postReq, resolveIdentity(userEmail, userId))));
     }
 
@@ -134,6 +190,79 @@ public class PostController {
             @RequestHeader(value = "X-User-Id", required = false) String userId
     ) {
         return ResponseEntity.ok(ApiResponse.success(postService.likePost(id, resolveIdentity(userEmail, userId))));
+    }
+
+    @PostMapping("/posts/{id}/share")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> sharePost(
+            @PathVariable String id,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(postService.sharePost(id, resolveIdentity(userEmail, userId))));
+    }
+
+    @PostMapping("/posts/{id}/save")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> savePost(
+            @PathVariable String id,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(postService.savePost(id, resolveIdentity(userEmail, userId))));
+    }
+
+    @DeleteMapping("/posts/{id}/save")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> unsavePost(
+            @PathVariable String id,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(postService.unsavePost(id, resolveIdentity(userEmail, userId))));
+    }
+
+    @PostMapping("/posts/{id}/report")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> reportPost(
+            @PathVariable String id,
+            @RequestBody(required = false) Map<String, Object> req,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(postService.reportPost(id, req, resolveIdentity(userEmail, userId))));
+    }
+
+    @PostMapping("/posts/{id}/not-interested")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> hidePost(
+            @PathVariable String id,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(postService.hidePost(id, resolveIdentity(userEmail, userId))));
+    }
+
+    @DeleteMapping("/posts/{id}/not-interested")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> unhidePost(
+            @PathVariable String id,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(postService.unhidePost(id, resolveIdentity(userEmail, userId))));
+    }
+
+    @PostMapping("/posts/hide-author/{authorId:.+}")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> hideAuthor(
+            @PathVariable String authorId,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(postService.hideAuthor(authorId, resolveIdentity(userEmail, userId))));
+    }
+
+    @DeleteMapping("/posts/hide-author/{authorId:.+}")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> unhideAuthor(
+            @PathVariable String authorId,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(postService.unhideAuthor(authorId, resolveIdentity(userEmail, userId))));
     }
 
     @PostMapping("/posts/{id}/comments")
@@ -204,11 +333,12 @@ public class PostController {
     @PostMapping("/posts/{id}/apply")
     public ResponseEntity<ApiResponse<Map<String, Object>>> applyToOpportunity(
             @PathVariable String id,
+            @RequestBody(required = false) Map<String, Object> body,
             @RequestHeader(value = "X-User-Email", required = false) String userEmail,
             @RequestHeader(value = "X-User-Id", required = false) String userId
     ) {
         return ResponseEntity.ok(ApiResponse.success(
-                postService.applyToOpportunity(id, resolveIdentity(userEmail, userId))
+                postService.applyToOpportunity(id, resolveIdentity(userEmail, userId), body)
         ));
     }
 

@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import './Article.css'
 import api from '../../api'
+import MediaSafetyStatus from '../../components/common/MediaSafetyStatus.jsx'
+import { useMediaSafety } from '../../hooks/useMediaSafety.js'
 
 function Article({ hidden, onBack, onPublish }) {
   const [title, setTitle] = useState('')
@@ -12,6 +14,8 @@ function Article({ hidden, onBack, onPublish }) {
   const fileInputRef = useRef(null)
   const mediaKindRef = useRef('')
   const mediaRef = useRef(null)
+  const mediaSafety = useMediaSafety(media?.file)
+  const isMediaBlocked = Boolean(media?.file && mediaSafety.isBlocked)
 
   useEffect(() => {
     mediaRef.current = media
@@ -74,7 +78,7 @@ function Article({ hidden, onBack, onPublish }) {
     event.preventDefault()
     const articleTitle = title.trim()
     const articleContent = content.trim()
-    if (!articleTitle || !articleContent || isPublishing) return
+    if (!articleTitle || !articleContent || isPublishing || isMediaBlocked) return
 
     setIsPublishing(true)
     setPublishError('')
@@ -188,6 +192,14 @@ function Article({ hidden, onBack, onPublish }) {
           required
         />
 
+        {media?.file && (
+          <MediaSafetyStatus
+            safety={mediaSafety}
+            blockedMessage={`This article ${mediaSafety.kind} has high adult content, so we can’t publish it.`}
+            safeMessage="Safe content verified. Ready to publish."
+          />
+        )}
+
         {publishError && <p className="article-publish-error" role="alert">{publishError}</p>}
 
         <footer className="article-editor-footer">
@@ -195,7 +207,7 @@ function Article({ hidden, onBack, onPublish }) {
           <button
             className="article-publish-button"
             type="submit"
-            disabled={isPublishing || !title.trim() || !content.trim()}
+            disabled={isPublishing || isMediaBlocked || !title.trim() || !content.trim()}
           >
             {isPublishing ? 'Publishing…' : 'Publish article'}
           </button>

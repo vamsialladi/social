@@ -2,6 +2,7 @@ package com.truehunt.social.controller;
 
 import com.truehunt.social.dto.ApiResponse;
 import com.truehunt.social.dto.ConnectionRequestDto;
+import com.truehunt.social.exception.UnauthorizedException;
 import com.truehunt.social.service.ConnectionService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -22,15 +23,15 @@ public class ConnectionController {
     }
 
     private String resolveUserIdentifier(String userEmail, String userId) {
-        if (userId != null && !userId.isBlank()) {
-            return userId.trim();
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.isAuthenticated() && !"anonymousUser".equals(auth.getPrincipal())) {
+            return auth.getName();
         }
         if (userEmail != null && !userEmail.isBlank()) {
             return userEmail.trim();
         }
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth != null && auth.isAuthenticated() && !"anonymousUser".equals(auth.getPrincipal())) {
-            return auth.getName();
+        if (userId != null && !userId.isBlank()) {
+            return userId.trim();
         }
         return null;
     }
@@ -57,6 +58,68 @@ public class ConnectionController {
             @RequestHeader(value = "X-User-Id", required = false) String userId
     ) {
         return ResponseEntity.ok(ApiResponse.success(connectionService.getConnectedProfiles(resolveUserIdentifier(userEmail, userId))));
+    }
+
+    @GetMapping("/followers")
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getFollowers(
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(connectionService.getFollowers(resolveUserIdentifier(userEmail, userId))));
+    }
+
+    @GetMapping("/mutual/{profileId}")
+    public ResponseEntity<ApiResponse<Map<String, Integer>>> getMutualConnectionsCount(
+            @PathVariable String profileId,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId
+    ) {
+        String viewerIdentifier = resolveUserIdentifier(userEmail, userId);
+        if (viewerIdentifier == null) {
+            throw new UnauthorizedException("Sign in to view mutual connections.");
+        }
+        return ResponseEntity.ok(ApiResponse.success(Map.of(
+                "count",
+                connectionService.getMutualConnectionsCount(viewerIdentifier, profileId)
+        )));
+    }
+
+    @GetMapping("/profiles/{profileId}/followers")
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getProfileFollowers(
+            @PathVariable String profileId,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId
+    ) {
+        requireViewerIdentifier(userEmail, userId);
+        return ResponseEntity.ok(ApiResponse.success(connectionService.getProfileFollowers(profileId)));
+    }
+
+    @GetMapping("/profiles/{profileId}/mutual")
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getProfileMutualConnections(
+            @PathVariable String profileId,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId
+    ) {
+        String viewerIdentifier = requireViewerIdentifier(userEmail, userId);
+        return ResponseEntity.ok(ApiResponse.success(
+                connectionService.getProfileMutualConnections(viewerIdentifier, profileId)
+        ));
+    }
+
+    private String requireViewerIdentifier(String userEmail, String userId) {
+        String viewerIdentifier = resolveUserIdentifier(userEmail, userId);
+        if (viewerIdentifier == null) {
+            throw new UnauthorizedException("Sign in to view profile connections.");
+        }
+        return viewerIdentifier;
+    }
+
+    @GetMapping("/catch-up")
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getCatchUp(
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(connectionService.getCatchUp(resolveUserIdentifier(userEmail, userId))));
     }
 
     private String extractProfileId(Map<String, String> req, String... fallbacks) {

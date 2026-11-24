@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { 
   Plus, 
   Heart, 
@@ -6,11 +6,10 @@ import {
   Share2, 
   Image as ImageIcon, 
   Film, 
-  Send, 
   Clock, 
-  Sparkles 
 } from 'lucide-react';
 import { useNotification } from '../../context/NotificationContext';
+import { api as socialApi } from '../../api';
 
 export default function ProfileActivity({ profile, isOwner, onOpenPostModal }) {
   const { showNotification } = useNotification();
@@ -22,15 +21,35 @@ export default function ProfileActivity({ profile, isOwner, onOpenPostModal }) {
 
   const displayedPosts = activeTab === 'media' ? mediaPosts : posts;
 
-  const handleLike = (postId, initialLikes) => {
+  const handleLike = async (postId) => {
     const isLiked = !!likedPosts[postId];
     setLikedPosts(prev => ({
       ...prev,
       [postId]: !isLiked
     }));
+    if (/^\d+$/.test(String(postId))) {
+      try {
+        const res = await socialApi.likePost(postId);
+        if (typeof res?.liked === 'boolean') {
+          setLikedPosts(prev => ({ ...prev, [postId]: res.liked }));
+        }
+      } catch {
+        // preserve optimistic toggle
+      }
+    }
   };
 
-  const handleSharePost = (postId) => {
+  const handleSharePost = async (post) => {
+    const postId = typeof post === 'object' ? post?.id : post;
+    if (typeof post === 'object' && post?.shareCountDisabled) return;
+    if (/^\d+$/.test(String(postId))) {
+      try {
+        const res = await socialApi.sharePost(postId);
+        if (res?.shareCountDisabled || res?.allowed === false) return;
+      } catch {
+        // ignore network errors
+      }
+    }
     if (navigator.clipboard) {
       navigator.clipboard.writeText(`${window.location.origin}/profile/${profile.id}#post-${postId}`);
       showNotification('Post link copied to clipboard!', 'info');
@@ -48,7 +67,7 @@ export default function ProfileActivity({ profile, isOwner, onOpenPostModal }) {
       if (diffDays === 1) return 'Yesterday';
       if (diffDays < 30) return `${diffDays}d ago`;
       return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-    } catch (e) {
+    } catch {
       return 'Recently';
     }
   };
@@ -255,18 +274,20 @@ export default function ProfileActivity({ profile, isOwner, onOpenPostModal }) {
                   </div>
 
                   <button
-                    onClick={() => handleSharePost(post.id)}
+                    onClick={() => handleSharePost(post)}
+                    disabled={Boolean(post.shareCountDisabled)}
                     style={{
                       background: 'none',
                       border: 'none',
                       fontSize: '13px',
                       color: 'var(--color-text-muted)',
-                      cursor: 'pointer',
+                      cursor: post.shareCountDisabled ? 'not-allowed' : 'pointer',
+                      opacity: post.shareCountDisabled ? 0.45 : 1,
                       display: 'inline-flex',
                       alignItems: 'center',
                       gap: '4px'
                     }}
-                    title="Share post"
+                    title={post.shareCountDisabled ? 'Sharing is turned off' : 'Share post'}
                   >
                     <Share2 size={14} />
                     <span className="hide-on-mobile">Share</span>

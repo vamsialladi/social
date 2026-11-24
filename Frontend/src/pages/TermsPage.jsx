@@ -1,5 +1,4 @@
-import React from 'react';
-import { FileText, ArrowLeft, AlertTriangle } from 'lucide-react';
+import { FileText, ArrowLeft } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { OFFICIAL_CONTACT } from '../constants/contactInfo';
 

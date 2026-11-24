@@ -1,0 +1,241 @@
+.casting-add-button {
+  display: inline-flex;
+  min-width: 190px;
+  min-height: 46px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 20px;
+  border: 1px solid #8b2332;
+  border-radius: 9px;
+  background: #8b2332;
+  box-shadow: 0 4px 12px rgba(139, 35, 50, 0.18);
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: background-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.casting-add-button:hover {
+  transform: translateY(-1px);
+  background: #741b28;
+  box-shadow: 0 6px 16px rgba(139, 35, 50, 0.24);
+}
+
+.casting-add-button:active {
+  transform: translateY(0);
+}
+
+.casting-add-button:focus-visible {
+  outline: 3px solid rgba(139, 35, 50, 0.3);
+  outline-offset: 3px;
+}
+
+.casting-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.casting-talent-identity {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+}
+
+.casting-profile-avatar {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  flex: 0 0 52px;
+  overflow: hidden;
+  place-items: center;
+  border-radius: 50%;
+  background: #f8ecee;
+  color: #8b2332;
+  padding: 0;
+  border: 0;
+  cursor: pointer;
+  transition: box-shadow 160ms ease;
+}
+
+.casting-profile-avatar:hover:not(:disabled) {
+  box-shadow: 0 0 0 3px rgba(139, 35, 50, 0.2);
+}
+
+.casting-profile-avatar:focus-visible,
+.casting-profile-name-link:focus-visible {
+  outline: 3px solid rgba(139, 35, 50, 0.3);
+  outline-offset: 3px;
+}
+
+.casting-profile-avatar:disabled,
+.casting-profile-name-link:disabled {
+  cursor: default;
+}
+
+.casting-profile-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.casting-talent-name {
+  margin: 0;
+  color: #202124;
+  font-size: 20px;
+  overflow-wrap: anywhere;
+}
+
+.casting-profile-name-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.casting-profile-name-link:hover:not(:disabled) {
+  color: #8b2332;
+  text-decoration: underline;
+}
+
+.casting-height-conversion {
+  color: #586270;
+  font-size: 13px;
+}
+
+.casting-interest-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+  border-radius: 30px;
+}
+
+.casting-interest-row .home-investor-interest {
+  transition: background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+.casting-interest-row .home-investor-interest{
+  background: #fff;
+  border: 1px solid #8b2332;
+}
+
+.casting-interest-row .home-investor-interest:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: #8b2332;
+  background: #8b2332;
+  box-shadow: 0 4px 12px rgba(139, 35, 50, 0.2);
+  color: #fff;
+}
+
+.casting-interest-row .home-investor-interest:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.casting-interest-row .home-investor-interest:focus-visible {
+  outline: 3px solid rgba(139, 35, 50, 0.3);
+  outline-offset: 3px;
+}
+
+.casting-owner-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
+.casting-edit-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  border: 1px solid #c9d4e0;
+  border-radius: 7px;
+  background: #fff;
+  color: #34404d;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.casting-edit-button:hover:not(:disabled) {
+  border-color: #8b2332;
+  background: #f8ecee;
+  color: #8b2332;
+}
+
+.casting-edit-button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+@media (max-width: 600px) {
+  .casting-add-button {
+    width: 100%;
+  }
+
+  .casting-card-header {
+    align-items: flex-start;
+  }
+
+  .casting-owner-actions {
+    gap: 5px;
+  }
+}
+
+.cinemans-page.is-dark .casting-page {
+  background: #15171b !important;
+  color: #e5e7eb !important;
+}
+
+.cinemans-page.is-dark .casting-page-card {
+  border-color: #393d45 !important;
+  background: #202329 !important;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.24);
+  color: #e5e7eb !important;
+}
+
+.cinemans-page.is-dark .casting-page-card :is(h1, h2, h3, label, p:not([role="status"])) {
+  color: #e5e7eb !important;
+}
+
+.cinemans-page.is-dark .casting-page-card :is(input, textarea, select) {
+  border-color: #444953 !important;
+  background: #282c33 !important;
+  color: #e5e7eb !important;
+  color-scheme: dark;
+}
+
+.cinemans-page.is-dark .casting-page-card > button:first-of-type {
+  color: #a8d4ff !important;
+}
+
+.cinemans-page.is-dark .casting-page-card .casting-profile-avatar,
+.cinemans-page.is-dark .casting-page-card .casting-edit-button,
+.cinemans-page.is-dark .casting-page-card .home-investor-interest {
+  border-color: #444953 !important;
+  background: #282c33 !important;
+  color: #e5e7eb !important;
+}
+
+.cinemans-page.is-dark .casting-page-card .casting-profile-avatar {
+  background: #30353d !important;
+}
+
+.cinemans-page.is-dark .casting-page-card .casting-edit-button:hover:not(:disabled) {
+  border-color: #59616d !important;
+  background: #30353d !important;
+  color: #e5e7eb !important;
+}
+
+.cinemans-page.is-dark .casting-page-card .casting-interest-row .home-investor-interest:hover:not(:disabled) {
+  border-color: #8b2332 !important;
+  background: #8b2332 !important;
+  color: #fff !important;
+}

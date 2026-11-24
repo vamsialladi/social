@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Pencil, Sparkles, Award, Target, Compass } from 'lucide-react';
+import { useState } from 'react';
+import { Pencil, Award, Target, Compass } from 'lucide-react';
 
 export default function ProfileAbout({ profile, isOwner, onEdit }) {
   const [expanded, setExpanded] = useState(false);

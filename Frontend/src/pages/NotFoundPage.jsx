@@ -1,7 +1,5 @@
-import React from 'react';
 import { Link } from 'react-router-dom';
 import { Film, Home, Users, Briefcase } from 'lucide-react';
-import TrueHuntLogo from '../components/common/TrueHuntLogo';
 
 export default function NotFoundPage() {
   return (

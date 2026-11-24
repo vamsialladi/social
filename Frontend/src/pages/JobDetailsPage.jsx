@@ -1,17 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   Building2, 
   MapPin, 
   Clock, 
-  Calendar, 
   ArrowLeft, 
   CheckCircle2, 
-  Send, 
   Share2, 
   Briefcase, 
   ShieldCheck, 
-  DollarSign 
 } from 'lucide-react';
 import { LATEST_OPPORTUNITIES } from '../services/mockData';
 import { api } from '../services/api';
@@ -53,9 +50,9 @@ export default function JobDetailsPage() {
 
         const data = await api.jobs.getById(id);
         setJob(data || LATEST_OPPORTUNITIES[0]);
-      } catch (e) {
+      } catch (error) {
         if (id.startsWith(SOCIAL_OPPORTUNITY_ID_PREFIX)) {
-          console.error('Could not load the social-page opportunity:', e);
+          console.error('Could not load the social-page opportunity:', error);
           setJob(null);
         } else {
           setJob(LATEST_OPPORTUNITIES[0]);
@@ -107,7 +104,7 @@ export default function JobDetailsPage() {
       setApplied(true);
       setShowApplyModal(false);
       showNotification(`Application submitted successfully for ${job.title}! (Demo Sync)`, 'success');
-    } catch (e) {
+    } catch {
       showNotification('Failed to submit application', 'error');
     } finally {
       setSubmitting(false);

@@ -12,9 +12,12 @@ public class InvestmentInterestEntity {
 
     private String investorId;
     private String investorName;
+    private String projectId;
     private String projectTitle;
     private String producerName;
     private String producerEmail;
+    private String phone;
+    private String interestType;
     private String budgetRequested;
     private String lookbookUrl;
 
@@ -36,6 +39,9 @@ public class InvestmentInterestEntity {
     public String getInvestorName() { return investorName; }
     public void setInvestorName(String investorName) { this.investorName = investorName; }
 
+    public String getProjectId() { return projectId; }
+    public void setProjectId(String projectId) { this.projectId = projectId; }
+
     public String getProjectTitle() { return projectTitle; }
     public void setProjectTitle(String projectTitle) { this.projectTitle = projectTitle; }
 
@@ -44,6 +50,12 @@ public class InvestmentInterestEntity {
 
     public String getProducerEmail() { return producerEmail; }
     public void setProducerEmail(String producerEmail) { this.producerEmail = producerEmail; }
+
+    public String getPhone() { return phone; }
+    public void setPhone(String phone) { this.phone = phone; }
+
+    public String getInterestType() { return interestType; }
+    public void setInterestType(String interestType) { this.interestType = interestType; }
 
     public String getBudgetRequested() { return budgetRequested; }
     public void setBudgetRequested(String budgetRequested) { this.budgetRequested = budgetRequested; }

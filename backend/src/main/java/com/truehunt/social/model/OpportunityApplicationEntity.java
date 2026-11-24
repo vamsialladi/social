@@ -23,6 +23,15 @@ public class OpportunityApplicationEntity {
     @Column(name = "applicant_identity", nullable = false, length = 255)
     private String applicantIdentity;
 
+    @Column(name = "applicant_name", length = 255)
+    private String applicantName;
+
+    @Column(name = "experience", length = 255)
+    private String experience;
+
+    @Column(name = "note", length = 1000)
+    private String note;
+
     private LocalDateTime appliedAt = LocalDateTime.now();
 
     public OpportunityApplicationEntity() {}
@@ -40,6 +49,15 @@ public class OpportunityApplicationEntity {
 
     public String getApplicantIdentity() { return applicantIdentity; }
     public void setApplicantIdentity(String applicantIdentity) { this.applicantIdentity = applicantIdentity; }
+
+    public String getApplicantName() { return applicantName; }
+    public void setApplicantName(String applicantName) { this.applicantName = applicantName; }
+
+    public String getExperience() { return experience; }
+    public void setExperience(String experience) { this.experience = experience; }
+
+    public String getNote() { return note; }
+    public void setNote(String note) { this.note = note; }
 
     public LocalDateTime getAppliedAt() { return appliedAt; }
     public void setAppliedAt(LocalDateTime appliedAt) { this.appliedAt = appliedAt; }

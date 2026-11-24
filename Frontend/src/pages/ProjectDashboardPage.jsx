@@ -1,40 +1,18 @@
-import React, { useState, useEffect } from 'react';
-import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   Shield,
-  Film,
-  Tv,
-  Clapperboard,
-  ArrowLeft,
-  Calendar,
-  DollarSign,
   Clock,
   CheckCircle2,
   AlertTriangle,
   FileText,
-  FileCheck,
   Plus,
-  ChevronRight,
-  Users,
   Sliders,
-  Lock,
-  Sparkles,
-  Check,
   X,
   AlertCircle,
   Upload,
-  CheckSquare,
   Square,
-  Eye,
   TrendingUp,
-  Play,
-  Video,
-  Layers,
-  Music,
-  Globe,
-  Flag,
-  Share2,
-  Trash2,
   Edit3
 } from 'lucide-react';
 import { api } from '../services/api';
@@ -42,7 +20,6 @@ import { useNotification } from '../context/NotificationContext';
 
 export default function ProjectDashboardPage() {
   const { category, projectId, stage: routeStage } = useParams();
-  const location = useLocation();
   const navigate = useNavigate();
   const { showNotification } = useNotification();
 
@@ -146,6 +123,17 @@ export default function ProjectDashboardPage() {
         setEditSpentBudget(proj.spentBudget || '');
         setEditStartDate(proj.startDate || '');
         setEditTargetReleaseDate(proj.targetReleaseDate || '');
+        if (proj.checklists) {
+          if (Array.isArray(proj.checklists.readinessChecklist)) {
+            setReadinessChecklist(proj.checklists.readinessChecklist);
+          }
+          if (Array.isArray(proj.checklists.qcChecklist)) {
+            setQcChecklist(proj.checklists.qcChecklist);
+          }
+          if (Array.isArray(proj.checklists.releaseChecklist)) {
+            setReleaseChecklist(proj.checklists.releaseChecklist);
+          }
+        }
       }
     } catch (err) {
       showNotification('Failed to load project: ' + err.message, 'error');
@@ -355,7 +343,7 @@ export default function ProjectDashboardPage() {
       setTaskAssignedTo('');
       setTaskApprovalReq(false);
       loadProject();
-    } catch (err) {
+    } catch {
       showNotification('Failed to add task', 'error');
     }
   };
@@ -365,7 +353,7 @@ export default function ProjectDashboardPage() {
       await api.protectProducer.updateTask(projectId, taskId, { status: newStatus });
       showNotification(`Task status updated to ${newStatus}`, 'success');
       loadProject();
-    } catch (err) {
+    } catch {
       showNotification('Failed to update task status', 'error');
     }
   };
@@ -378,7 +366,7 @@ export default function ProjectDashboardPage() {
       });
       showNotification(`Task ${approvalStatus.toLowerCase()} with recorded timestamp!`, 'success');
       loadProject();
-    } catch (err) {
+    } catch {
       showNotification('Failed to process approval', 'error');
     }
   };
@@ -404,7 +392,7 @@ export default function ProjectDashboardPage() {
       setDocNotes('');
       setDocUploadedBy('');
       loadProject();
-    } catch (err) {
+    } catch {
       showNotification('Failed to register document', 'error');
     }
   };
@@ -414,7 +402,7 @@ export default function ProjectDashboardPage() {
       await api.protectProducer.verifyDocument(projectId, docId, !currentVerified);
       showNotification(`Document ${!currentVerified ? 'verified' : 'marked unverified'}`, 'success');
       loadProject();
-    } catch (err) {
+    } catch {
       showNotification('Failed to update document verification', 'error');
     }
   };
@@ -425,7 +413,7 @@ export default function ProjectDashboardPage() {
       await api.protectProducer.toggleMilestone(projectId, mlsId);
       showNotification('Milestone status toggled!', 'success');
       loadProject();
-    } catch (err) {
+    } catch {
       showNotification('Failed to update milestone', 'error');
     }
   };
@@ -450,7 +438,7 @@ export default function ProjectDashboardPage() {
       setRiskMitigation('');
       setRiskOwner('');
       loadProject();
-    } catch (err) {
+    } catch {
       showNotification('Failed to log risk', 'error');
     }
   };
@@ -460,7 +448,7 @@ export default function ProjectDashboardPage() {
       await api.protectProducer.updateRisk(projectId, riskId, { status: newStatus });
       showNotification(`Risk marked as ${newStatus}`, 'success');
       loadProject();
-    } catch (err) {
+    } catch {
       showNotification('Failed to update risk status', 'error');
     }
   };
@@ -482,7 +470,7 @@ export default function ProjectDashboardPage() {
       setEpTitle('');
       setEpNumber('');
       loadProject();
-    } catch (err) {
+    } catch {
       showNotification('Failed to add episode', 'error');
     }
   };
@@ -492,14 +480,23 @@ export default function ProjectDashboardPage() {
       await api.protectProducer.updateEpisode(projectId, epId, { status: newStatus });
       showNotification(`Episode updated to ${newStatus}`, 'success');
       loadProject();
-    } catch (err) {
+    } catch {
       showNotification('Failed to update episode status', 'error');
     }
   };
 
   // Checklist toggles
   const toggleChecklistItem = (setChecklist, id) => {
-    setChecklist(prev => prev.map(item => item.id === id ? { ...item, checked: !item.checked } : item));
+    setChecklist(prev => {
+      const updated = prev.map(item => item.id === id ? { ...item, checked: !item.checked } : item);
+      const key = setChecklist === setReadinessChecklist
+        ? 'readinessChecklist'
+        : setChecklist === setQcChecklist
+          ? 'qcChecklist'
+          : 'releaseChecklist';
+      api.protectProducer.updateChecklists(projectId, { [key]: updated }).catch(() => {});
+      return updated;
+    });
     showNotification('Checklist item updated', 'info');
   };
 

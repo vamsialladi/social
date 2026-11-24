@@ -79,9 +79,12 @@ public class InvestorService {
             entity.setId(id);
             entity.setInvestorId(req.getInvestorId());
             entity.setInvestorName(req.getInvestorName());
+            entity.setProjectId(req.getProjectId());
             entity.setProjectTitle(req.getProjectTitle());
             entity.setProducerName(req.getProducerName());
             entity.setProducerEmail(req.getProducerEmail());
+            entity.setPhone(req.getPhone());
+            entity.setInterestType(req.getInterestType());
             entity.setBudgetRequested(req.getBudgetRequested());
             entity.setLookbookUrl(req.getLookbookUrl());
             entity.setSynopsis(req.getSynopsis());

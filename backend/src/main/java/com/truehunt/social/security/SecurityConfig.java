@@ -51,6 +51,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // Static / uploads / console / websocket
                         .requestMatchers("/h2-console/**", "/uploads/**", "/favicon.ico", "/ws/**").permitAll()
+                        .requestMatchers("/actuator/health").permitAll()
                         // API endpoints permitAll by default, security filter authenticates when header/token provided
                         .requestMatchers("/api/**").permitAll()
                         .anyRequest().permitAll()

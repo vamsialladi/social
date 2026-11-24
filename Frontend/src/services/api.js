@@ -75,8 +75,8 @@ async function fetchWithFallback(endpoint, options = {}, fallbackData = null) {
         const parsedUser = JSON.parse(storedUser);
         userEmail = parsedUser?.email || '';
         userId = parsedUser?.userId || parsedUser?.id || '';
-      } catch (e) {
-        // ignore
+      } catch (error) {
+        console.warn('Could not parse the cached user while building request headers:', error);
       }
     }
     const headers = {
@@ -291,6 +291,26 @@ export const api = {
     getFaqs: async () => {
       const res = await fetchWithFallback('/faqs', { method: 'GET' }, FAQS_DATA);
       return res.data || FAQS_DATA;
+    }
+  },
+
+  // Contact Us
+  contact: {
+    submit: async (payload) => {
+      return await fetchWithFallback('/contact', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+    }
+  },
+
+  // LCM / Zine Wood Beta Waitlist
+  lcm: {
+    joinBeta: async (email) => {
+      return await fetchWithFallback('/lcm/beta-signup', {
+        method: 'POST',
+        body: JSON.stringify({ email })
+      });
     }
   },
 
@@ -729,6 +749,21 @@ export const api = {
       const fallback = proj?.recentActivity || [];
       const res = await fetchWithFallback(`/protect-producer/projects/${projectId}/activity`, { method: 'GET' }, fallback);
       return res.data || fallback;
+    },
+
+    // Stage Checklists
+    updateChecklists: async (projectId, checklists) => {
+      const res = await fetchWithFallback(`/protect-producer/projects/${projectId}/checklists`, {
+        method: 'PATCH',
+        body: JSON.stringify(checklists)
+      });
+      const localProjects = getLocalProjects();
+      const idx = localProjects.findIndex(p => p.id === projectId);
+      if (idx !== -1) {
+        localProjects[idx].checklists = { ...(localProjects[idx].checklists || {}), ...checklists };
+        saveLocalProjects(localProjects);
+      }
+      return res;
     }
   },
 
@@ -744,8 +779,8 @@ export const api = {
       try {
         const u = localStorage.getItem('truehunt_user');
         if (u) storedUser = JSON.parse(u);
-      } catch (e) {
-        // Ignore parse error
+      } catch (error) {
+        console.warn('Could not parse the cached user profile:', error);
       }
 
       const defaultUserFallback = {
@@ -890,8 +925,8 @@ function getLocalProjects() {
   if (stored) {
     try {
       return JSON.parse(stored);
-    } catch (e) {
-      // ignore
+    } catch (error) {
+      console.warn('Could not read cached producer projects:', error);
     }
   }
   localStorage.setItem('truehunt_protect_projects', JSON.stringify(PROTECT_PRODUCER_DEMO_PROJECTS));

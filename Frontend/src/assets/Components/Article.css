@@ -56,7 +56,6 @@
 
 .article-editor {
   display: grid;
-  grid-template-rows: auto minmax(110px, 150px) auto auto auto;
   gap: 18px;
   flex: 1;
   min-height: min-content;
