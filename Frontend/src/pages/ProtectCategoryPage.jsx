@@ -1,23 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   Shield,
-  Film,
-  Tv,
-  Clapperboard,
   ArrowLeft,
   Plus,
   Search,
   Filter,
-  Calendar,
-  DollarSign,
-  CheckCircle2,
-  AlertTriangle,
-  FileText,
   ChevronRight,
-  Users,
-  Clock,
-  Sparkles,
+  Clapperboard,
   X
 } from 'lucide-react';
 import { api } from '../services/api';
@@ -51,11 +41,7 @@ export default function ProtectCategoryPage() {
   const [targetRuntime, setTargetRuntime] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => {
-    loadCategoryAndProjects();
-  }, [category]);
-
-  const loadCategoryAndProjects = async () => {
+  const loadCategoryAndProjects = useCallback(async () => {
     setLoading(true);
     try {
       const allCategories = api.protectProducer.getCategories();
@@ -69,7 +55,11 @@ export default function ProtectCategoryPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [category]);
+
+  useEffect(() => {
+    loadCategoryAndProjects();
+  }, [loadCategoryAndProjects]);
 
   const handleCreateProject = async (e) => {
     e.preventDefault();

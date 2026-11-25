@@ -22,15 +22,15 @@ public class ConnectionController {
     }
 
     private String resolveUserIdentifier(String userEmail, String userId) {
-        if (userId != null && !userId.isBlank()) {
-            return userId.trim();
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.isAuthenticated() && !"anonymousUser".equals(auth.getPrincipal())) {
+            return auth.getName();
         }
         if (userEmail != null && !userEmail.isBlank()) {
             return userEmail.trim();
         }
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth != null && auth.isAuthenticated() && !"anonymousUser".equals(auth.getPrincipal())) {
-            return auth.getName();
+        if (userId != null && !userId.isBlank()) {
+            return userId.trim();
         }
         return null;
     }
@@ -57,6 +57,49 @@ public class ConnectionController {
             @RequestHeader(value = "X-User-Id", required = false) String userId
     ) {
         return ResponseEntity.ok(ApiResponse.success(connectionService.getConnectedProfiles(resolveUserIdentifier(userEmail, userId))));
+    }
+
+    @GetMapping("/mutual/{profileId}")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getMutualConnectionsCount(
+            @PathVariable String profileId,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(
+                connectionService.getMutualConnectionsCount(profileId, resolveUserIdentifier(userEmail, userId))));
+    }
+
+    @GetMapping("/profiles/{profileId}/followers")
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getProfileFollowers(
+            @PathVariable String profileId
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(connectionService.getProfileFollowers(profileId)));
+    }
+
+    @GetMapping("/profiles/{profileId}/mutual")
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getProfileMutualConnections(
+            @PathVariable String profileId,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(
+                connectionService.getProfileMutualConnections(profileId, resolveUserIdentifier(userEmail, userId))));
+    }
+
+    @GetMapping("/followers")
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getFollowers(
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(connectionService.getFollowers(resolveUserIdentifier(userEmail, userId))));
+    }
+
+    @GetMapping("/catch-up")
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getCatchUp(
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(connectionService.getCatchUp(resolveUserIdentifier(userEmail, userId))));
     }
 
     private String extractProfileId(Map<String, String> req, String... fallbacks) {

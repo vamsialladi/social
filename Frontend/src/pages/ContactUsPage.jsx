@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { 
   Mail, 
   Phone, 
@@ -7,7 +7,6 @@ import {
   ExternalLink, 
   Send, 
   CheckCircle2, 
-  Clock, 
   ShieldCheck, 
   ArrowRight,
   MessageSquare
@@ -15,6 +14,7 @@ import {
 import { Link } from 'react-router-dom';
 import { OFFICIAL_CONTACT } from '../constants/contactInfo';
 import { useNotification } from '../context/NotificationContext';
+import { api } from '../services/api';
 
 export default function ContactUsPage() {
   const [fullName, setFullName] = useState('');
@@ -26,14 +26,18 @@ export default function ContactUsPage() {
   const [submitted, setSubmitted] = useState(false);
   const { showNotification } = useNotification();
 
-  const handleContactSubmit = (e) => {
+  const handleContactSubmit = async (e) => {
     e.preventDefault();
     setSubmitting(true);
-    setTimeout(() => {
-      setSubmitting(false);
+    try {
+      await api.contact.submit({ fullName, email, phone, subject, message });
       setSubmitted(true);
       showNotification('Thank you! Your message has been routed to our team.', 'success');
-    }, 600);
+    } catch (err) {
+      showNotification(err.message || 'Could not submit your message. Please try again.', 'error');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (

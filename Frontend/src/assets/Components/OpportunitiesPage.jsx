@@ -184,6 +184,11 @@ export default function OpportunitiesPage({ onClose, onPublish, initialData, isE
       return false
     }
 
+    if (step === 4 && form.applicationDeadline && form.applicationDeadline < today) {
+      setError('Application deadline cannot be in the past.')
+      return false
+    }
+
     if (step === 4 && form.auditionDate === today && form.applicationDeadline === today) {
       setError('Application deadline cannot be today when the audition is today.')
       return false
@@ -197,8 +202,7 @@ export default function OpportunitiesPage({ onClose, onPublish, initialData, isE
     if (validateStep()) setStep((current) => Math.min(5, current + 1))
   }
 
-  async function publish(event) {
-    event.preventDefault()
+  async function publish() {
     if (step < 5) {
       continueToNextStep()
       return
@@ -270,7 +274,10 @@ export default function OpportunitiesPage({ onClose, onPublish, initialData, isE
         </div>
       </header>
 
-      <form className="opportunity-wizard-form" onSubmit={publish}>
+      <form
+        className="opportunity-wizard-form"
+        onSubmit={(event) => event.preventDefault()}
+      >
         <div className="opportunity-wizard-content">
           <div className="opportunity-form-panel">
             {step === 1 && (
@@ -503,7 +510,7 @@ export default function OpportunitiesPage({ onClose, onPublish, initialData, isE
                     <input className="opportunity-input opportunity-date-input" type="date" min={today} value={form.auditionDate} onChange={(event) => updateField('auditionDate', event.target.value)} />
                   </Field>
                   <Field label="Application deadline" optional>
-                    <input className="opportunity-input opportunity-date-input" type="date" value={form.applicationDeadline} onChange={(event) => updateField('applicationDeadline', event.target.value)} />
+                    <input className="opportunity-input opportunity-date-input" type="date" min={today} value={form.applicationDeadline} onChange={(event) => updateField('applicationDeadline', event.target.value)} />
                   </Field>
                 </div>
               </section>
@@ -551,7 +558,12 @@ export default function OpportunitiesPage({ onClose, onPublish, initialData, isE
                   Continue <ArrowRight size={17} aria-hidden="true" />
                 </button>
               ) : (
-                <button className="opportunity-continue-button" type="submit" disabled={isPublishing}>
+                <button
+                  className="opportunity-continue-button"
+                  type="button"
+                  onClick={() => publish()}
+                  disabled={isPublishing}
+                >
                   <BriefcaseBusiness size={17} aria-hidden="true" />
                   {isPublishing ? 'Saving…' : isEditing ? 'Save changes' : 'Publish opportunity'}
                 </button>

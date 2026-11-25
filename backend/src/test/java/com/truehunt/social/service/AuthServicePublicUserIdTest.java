@@ -2,6 +2,7 @@ package com.truehunt.social.service;
 
 import com.truehunt.social.dto.AuthResponse;
 import com.truehunt.social.dto.RegisterRequest;
+import com.truehunt.social.exception.BadRequestException;
 import com.truehunt.social.exception.ConflictException;
 import com.truehunt.social.model.ProfileEntity;
 import com.truehunt.social.model.UserAccountEntity;
@@ -15,6 +16,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import java.util.Optional;
 import java.util.regex.Pattern;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
@@ -60,6 +62,7 @@ class AuthServicePublicUserIdTest {
         AuthResponse response = authService.register(request);
 
         assertTrue(Pattern.matches("thPAM\\d{5}", response.getUserId()));
+        assertEquals("STUDIO", response.getRole());
     }
 
     @Test
@@ -69,6 +72,14 @@ class AuthServicePublicUserIdTest {
         AuthResponse response = authService.register(request);
 
         assertTrue(Pattern.matches("thscAM\\d{5}", response.getUserId()));
+        assertEquals("TALENT", response.getRole());
+    }
+
+    @Test
+    void doesNotAllowPublicRegistrationToCreateAnAdminAccount() {
+        assertThrows(BadRequestException.class, () -> authService.register(registration("ADMIN")));
+        verify(userAccountRepository, never()).save(any(UserAccountEntity.class));
+        verify(profileRepository, never()).save(any(ProfileEntity.class));
     }
 
     @Test

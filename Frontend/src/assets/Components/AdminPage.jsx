@@ -5,6 +5,9 @@ import {
   Activity,
   BriefcaseBusiness,
   Check,
+  Eye,
+  EyeOff,
+  Flag,
   FileText,
   LayoutDashboard,
   LogOut,
@@ -21,12 +24,9 @@ const adminSections = [
   { id: 'investors', label: 'Investor requests', Icon: ShieldCheck },
   { id: 'members', label: 'Members', Icon: UsersRound },
   { id: 'posts', label: 'Posts', Icon: FileText },
+  { id: 'reports', label: 'Post reports', Icon: Flag },
   { id: 'opportunities', label: 'Opportunities', Icon: BriefcaseBusiness },
 ]
-
-const demoAdminCredentials = import.meta.env.DEV
-  ? { email: 'truehunt@gmail.com', password: 'truehunt@2026' }
-  : null
 
 function getDisplayName(profile) {
   return String(profile?.name || profile?.authorName || 'Unnamed member')
@@ -51,8 +51,9 @@ function formatDate(value) {
 
 export default function AdminPage() {
   const [adminUser, setAdminUser] = useState(null)
-  const [email, setEmail] = useState(demoAdminCredentials?.email || '')
-  const [password, setPassword] = useState(demoAdminCredentials?.password || '')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false)
   const [loginError, setLoginError] = useState('')
   const [isSigningIn, setIsSigningIn] = useState(false)
   const [activeSection, setActiveSection] = useState('overview')
@@ -60,6 +61,7 @@ export default function AdminPage() {
   const [posts, setPosts] = useState([])
   const [opportunities, setOpportunities] = useState([])
   const [investorRequests, setInvestorRequests] = useState([])
+  const [reports, setReports] = useState([])
   const [search, setSearch] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [loadError, setLoadError] = useState('')
@@ -69,6 +71,7 @@ export default function AdminPage() {
   const [deletingPostId, setDeletingPostId] = useState(null)
   const [deletingOpportunityId, setDeletingOpportunityId] = useState(null)
   const [reviewingInvestorRequestId, setReviewingInvestorRequestId] = useState(null)
+  const [reviewingReportId, setReviewingReportId] = useState(null)
 
   useEffect(() => {
     if (!adminUser) return undefined
@@ -78,14 +81,16 @@ export default function AdminPage() {
       setIsLoading(true)
       setLoadError('')
       try {
-        const [accountData, postData, opportunityData, investorRequestData] = await Promise.all([
+        const [accountData, postData, opportunityData, investorRequestData, reportData] = await Promise.all([
           socialApi.getAdminAccounts(),
           socialApi.getPosts(),
           socialApi.getOpportunities(),
           socialApi.getAdminInvestorRequests(),
+          socialApi.getAdminReports(),
         ])
         if (!Array.isArray(accountData) || !Array.isArray(postData)
-          || !Array.isArray(opportunityData) || !Array.isArray(investorRequestData)) {
+          || !Array.isArray(opportunityData) || !Array.isArray(investorRequestData)
+          || !Array.isArray(reportData)) {
           throw new Error('The admin dashboard received an invalid response.')
         }
         if (isCurrent) {
@@ -93,6 +98,7 @@ export default function AdminPage() {
           setPosts(postData.filter((post) => String(post.type || '').toLowerCase() !== 'opportunity'))
           setOpportunities(opportunityData)
           setInvestorRequests(investorRequestData)
+          setReports(reportData)
         }
       } catch (error) {
         console.error('Could not load admin dashboard data:', error)
@@ -206,6 +212,24 @@ export default function AdminPage() {
     }
   }
 
+  async function handleReportStatusChange(report, status) {
+    if (report?.id == null || reviewingReportId != null) return
+
+    setActionError('')
+    setReviewingReportId(report.id)
+    try {
+      const updatedReport = await socialApi.updateAdminReportStatus(report.id, status)
+      setReports((current) => current.map((entry) => (
+        String(entry.id) === String(updatedReport.id) ? updatedReport : entry
+      )))
+    } catch (error) {
+      console.error('Could not update post report status:', error)
+      setActionError(error.message || 'Could not update this report. Please try again.')
+    } finally {
+      setReviewingReportId(null)
+    }
+  }
+
   const filteredProfiles = useMemo(() => {
     const query = search.trim().toLowerCase()
     if (!query) return profiles
@@ -253,6 +277,20 @@ export default function AdminPage() {
     ].some((value) => String(value || '').toLowerCase().includes(query)))
   }, [investorRequests, search])
 
+  const filteredReports = useMemo(() => {
+    const query = search.trim().toLowerCase()
+    if (!query) return reports
+    return reports.filter((report) => [
+      report.authorName,
+      report.reporterEmail,
+      report.title,
+      report.content,
+      report.reason,
+      report.status,
+      report.postId,
+    ].some((value) => String(value || '').toLowerCase().includes(query)))
+  }, [reports, search])
+
   async function handleSignIn(event) {
     event.preventDefault()
     setLoginError('')
@@ -292,6 +330,8 @@ export default function AdminPage() {
     setProfiles([])
     setPosts([])
     setOpportunities([])
+    setInvestorRequests([])
+    setReports([])
     setSearch('')
     setPassword('')
   }
@@ -315,30 +355,35 @@ export default function AdminPage() {
               onChange={(event) => setEmail(event.target.value)}
             />
             <label htmlFor="admin-password">Password</label>
-            <input
-              id="admin-password"
-              type="password"
-              autoComplete="current-password"
-              required
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-            />
-            {demoAdminCredentials && (
-              <div className="admin-demo-credentials">
-                <strong>Demo credentials (development only)</strong>
-                <span>Email: {demoAdminCredentials.email}</span>
-                <span>Password: {demoAdminCredentials.password}</span>
-              </div>
-            )}
+            <div className="admin-password-field">
+              <input
+                id="admin-password"
+                type={isPasswordVisible ? 'text' : 'password'}
+                autoComplete="current-password"
+                required
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+              />
+              <button
+                type="button"
+                className="admin-password-toggle"
+                onClick={() => setIsPasswordVisible((visible) => !visible)}
+                aria-label={isPasswordVisible ? 'Hide password' : 'Show password'}
+                aria-pressed={isPasswordVisible}
+                title={isPasswordVisible ? 'Hide password' : 'Show password'}
+              >
+                {isPasswordVisible
+                  ? <EyeOff size={18} aria-hidden="true" />
+                  : <Eye size={18} aria-hidden="true" />}
+              </button>
+            </div>
             {loginError && <p className="admin-error" role="alert">{loginError}</p>}
             <button type="submit" disabled={isSigningIn}>
               {isSigningIn ? 'Signing in…' : 'Sign in'}
             </button>
           </form>
           <p className="admin-login-note">
-            {demoAdminCredentials
-              ? 'The development admin account is created when the backend starts with the dev profile. Use npm run backend or mvn spring-boot:run.'
-              : 'Administrator access is verified by the sign-in service.'}
+            Administrator access is separate from Social and Production Team accounts.
           </p>
         </section>
       </main>
@@ -609,6 +654,19 @@ export default function AdminPage() {
                                 Reject
                               </button>
                             </span>
+                          ) : request.status === 'PUBLISHED' ? (
+                            <span className="admin-investor-review-actions">
+                              <span className="admin-pill">{request.status}</span>
+                              <button
+                                type="button"
+                                className="admin-investor-review-button is-reject"
+                                onClick={() => handleInvestorRequestReview(request, 'reject')}
+                                disabled={reviewingInvestorRequestId != null}
+                              >
+                                <X size={14} aria-hidden="true" />
+                                Revoke
+                              </button>
+                            </span>
                           ) : <span className="admin-pill">{request.status}</span>}
                         </td>
                       </tr>
@@ -650,6 +708,73 @@ export default function AdminPage() {
                   </article>
                 ))}
                 {!filteredPosts.length && <p className="admin-empty">No matching posts.</p>}
+              </div>
+            </section>
+          )}
+          {activeSection === 'reports' && (
+            <section className="admin-panel admin-directory-panel">
+              <header className="admin-panel-header">
+                <div><h2>Reported posts</h2><p>{filteredReports.length} reports</p></div>
+                <label className="admin-search">
+                  <Search size={16} aria-hidden="true" />
+                  <input
+                    aria-label="Search post reports"
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    placeholder="Search reports"
+                  />
+                </label>
+              </header>
+              <div className="admin-post-list admin-all-posts">
+                {filteredReports.map((report) => {
+                  const isClosed = ['RESOLVED', 'DISMISSED'].includes(String(report.status || '').toUpperCase())
+                  return (
+                    <article className="admin-post-row" key={report.id}>
+                      <div className="admin-post-row-heading">
+                        <div>
+                          <strong>Post by {report.authorName || 'Community member'}</strong>
+                          <small>Reported by {report.reporterEmail || 'Community member'}</small>
+                        </div>
+                        <span className="admin-pill">{report.status || 'OPEN'}</span>
+                      </div>
+                      <p><strong>Reason: {report.reason || 'Not provided'}</strong></p>
+                      <p>{report.title || report.content || 'Shared a post'}</p>
+                      <small>Post ID: {report.postId || '—'} · Reported {formatDate(report.reportedAt)}</small>
+                      {!isClosed && (
+                        <div className="admin-report-actions">
+                          {String(report.status || '').toUpperCase() === 'OPEN' && (
+                            <button
+                              type="button"
+                              className="admin-investor-review-button is-approve"
+                              onClick={() => handleReportStatusChange(report, 'REVIEWED')}
+                              disabled={reviewingReportId != null}
+                            >
+                              <Check size={14} aria-hidden="true" />
+                              {reviewingReportId === report.id ? 'Saving…' : 'Mark reviewed'}
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            className="admin-investor-review-button is-approve"
+                            onClick={() => handleReportStatusChange(report, 'RESOLVED')}
+                            disabled={reviewingReportId != null}
+                          >
+                            Resolve
+                          </button>
+                          <button
+                            type="button"
+                            className="admin-investor-review-button is-reject"
+                            onClick={() => handleReportStatusChange(report, 'DISMISSED')}
+                            disabled={reviewingReportId != null}
+                          >
+                            Dismiss
+                          </button>
+                        </div>
+                      )}
+                    </article>
+                  )
+                })}
+                {!filteredReports.length && <p className="admin-empty">No post reports found.</p>}
               </div>
             </section>
           )}

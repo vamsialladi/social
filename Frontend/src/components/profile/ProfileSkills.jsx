@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Plus, X, Award, Check } from 'lucide-react';
+import { useState } from 'react';
+import { Plus, X, Award } from 'lucide-react';
 import { useNotification } from '../../context/NotificationContext';
 
 export default function ProfileSkills({ skills = [], isOwner, onAddSkill, onRemoveSkill }) {
@@ -15,7 +15,7 @@ export default function ProfileSkills({ skills = [], isOwner, onAddSkill, onRemo
       setNewSkill('');
       setIsAdding(false);
       showNotification(`Added "${newSkill.trim()}" to skills`, 'success');
-    } catch (err) {
+    } catch {
       showNotification('Failed to add skill', 'error');
     }
   };
@@ -24,7 +24,8 @@ export default function ProfileSkills({ skills = [], isOwner, onAddSkill, onRemo
     try {
       await onRemoveSkill(skill);
       showNotification(`Removed "${skill}"`, 'info');
-    } catch (err) { 
+    } catch (error) {
+      console.error('Could not remove the skill:', error);
       showNotification('Failed to remove skill', 'error');
     }
   };

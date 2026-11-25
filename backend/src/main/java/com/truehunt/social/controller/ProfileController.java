@@ -2,10 +2,12 @@ package com.truehunt.social.controller;
 
 import com.truehunt.social.dto.*;
 import com.truehunt.social.security.AuthenticatedUserResolver;
+import com.truehunt.social.service.EndorsementService;
 import com.truehunt.social.service.PostService;
 import com.truehunt.social.service.ProfileService;
 import com.truehunt.social.service.ProfileViewService;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -25,17 +27,20 @@ public class ProfileController {
     private final PostService postService;
     private final ProfileViewService profileViewService;
     private final AuthenticatedUserResolver authenticatedUserResolver;
+    private final EndorsementService endorsementService;
 
     public ProfileController(
             ProfileService profileService,
             PostService postService,
             ProfileViewService profileViewService,
-            AuthenticatedUserResolver authenticatedUserResolver
+            AuthenticatedUserResolver authenticatedUserResolver,
+            EndorsementService endorsementService
     ) {
         this.profileService = profileService;
         this.postService = postService;
         this.profileViewService = profileViewService;
         this.authenticatedUserResolver = authenticatedUserResolver;
+        this.endorsementService = endorsementService;
     }
 
     private String resolveUserIdentifier(HttpServletRequest request, String userEmail, String userId) {
@@ -102,7 +107,12 @@ public class ProfileController {
             @RequestHeader(value = "X-User-Id", required = false) String userId,
             HttpServletRequest request
     ) {
-        ProfileDto profile = profileService.getMyProfile(requireUserIdentifier(request, userEmail, userId));
+        String viewerIdentifier = requireUserIdentifier(request, userEmail, userId);
+        ProfileDto profile = profileService.getMyProfile(viewerIdentifier);
+        profile.setEndorsements(endorsementService.getProfileEndorsements(
+                profile.getUserId(),
+                viewerIdentifier
+        ));
         return ResponseEntity.ok(ApiResponse.success(profile));
     }
 
@@ -129,6 +139,13 @@ public class ProfileController {
     ) {
         String viewerIdentifier = resolveUserIdentifier(request, viewerEmail, viewerId);
         ProfileDto profile = profileService.getProfileById(userId, viewerIdentifier);
+        String profileIdentifier = profile.getUserId() == null || profile.getUserId().isBlank()
+                ? userId
+                : profile.getUserId();
+        profile.setEndorsements(endorsementService.getProfileEndorsements(
+                profileIdentifier,
+                viewerIdentifier
+        ));
         return ResponseEntity.ok(ApiResponse.success(profile));
     }
 
@@ -240,7 +257,7 @@ public class ProfileController {
     // Skills endpoints
     @PostMapping("/skills")
     public ResponseEntity<ApiResponse<ProfileDto>> addSkill(
-            @RequestBody SkillRequest req,
+            @Valid @RequestBody SkillRequest req,
             @RequestHeader(value = "X-User-Email", required = false) String userEmail,
             @RequestHeader(value = "X-User-Id", required = false) String userId,
             HttpServletRequest request

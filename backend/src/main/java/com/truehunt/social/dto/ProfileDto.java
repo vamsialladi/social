@@ -28,6 +28,7 @@ public class ProfileDto {
     private String availability;
     private Boolean verified = false;
     private Integer connectionsCount = 0;
+    private Boolean connectionsVisible = true;
     private Integer followersCount = 0;
     private String websiteUrl;
     private String showreel;
@@ -50,6 +51,7 @@ public class ProfileDto {
 
     private Boolean isOwner = false;
     private Boolean isConnected = false;
+    private Boolean isMutualConnection = false;
     private Boolean isFollowing = false;
     private Boolean isPending = false;
     private Boolean isOutgoingPending = false;
@@ -70,6 +72,7 @@ public class ProfileDto {
     private List<ProjectDto> projects = new ArrayList<>();
     private List<Map<String, Object>> posts = new ArrayList<>();
     private List<Map<String, Object>> credits = new ArrayList<>();
+    private List<Map<String, Object>> endorsements = new ArrayList<>();
 
     public ProfileDto() {}
 
@@ -235,6 +238,14 @@ public class ProfileDto {
 
     public void setConnectionsCount(Integer connectionsCount) {
         this.connectionsCount = connectionsCount;
+    }
+
+    public Boolean getConnectionsVisible() {
+        return connectionsVisible;
+    }
+
+    public void setConnectionsVisible(Boolean connectionsVisible) {
+        this.connectionsVisible = connectionsVisible;
     }
 
     public Integer getFollowersCount() {
@@ -440,6 +451,14 @@ public class ProfileDto {
         this.isConnected = isConnected;
     }
 
+    public Boolean getIsMutualConnection() {
+        return isMutualConnection;
+    }
+
+    public void setIsMutualConnection(Boolean isMutualConnection) {
+        this.isMutualConnection = isMutualConnection;
+    }
+
     public Boolean getIsFollowing() {
         return isFollowing;
     }
@@ -588,5 +607,13 @@ public class ProfileDto {
 
     public void setCredits(List<Map<String, Object>> credits) {
         this.credits = credits;
+    }
+
+    public List<Map<String, Object>> getEndorsements() {
+        return endorsements;
+    }
+
+    public void setEndorsements(List<Map<String, Object>> endorsements) {
+        this.endorsements = endorsements;
     }
 }

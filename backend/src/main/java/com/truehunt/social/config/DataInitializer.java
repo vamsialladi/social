@@ -383,7 +383,14 @@ public class DataInitializer {
             throw new IllegalStateException("Both app.admin.email and app.admin.password must be configured together.");
         }
 
-        UserAccountEntity admin = userAccountRepository.findByEmail(email).orElseGet(() -> {
+        Optional<UserAccountEntity> existingAccount = userAccountRepository.findByEmail(email);
+        if (existingAccount.isPresent() && !"ADMIN".equalsIgnoreCase(existingAccount.get().getRole())) {
+            throw new IllegalStateException(
+                    "The configured administrator email belongs to a non-admin account. Configure a separate admin email."
+            );
+        }
+
+        UserAccountEntity admin = existingAccount.orElseGet(() -> {
             UserAccountEntity account = new UserAccountEntity();
             account.setEmail(email);
             account.setName("TrueHunt Administrator");

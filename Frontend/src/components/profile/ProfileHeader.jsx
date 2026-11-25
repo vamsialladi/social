@@ -14,7 +14,24 @@ import {
   Check
 } from 'lucide-react';
 import { useNotification } from '../../context/NotificationContext';
-import { formatHeightInFeet } from '../../services/formatHeight';
+
+const COVER_COLORS = [
+  '#1F2937',
+  '#312E81',
+  '#155E75',
+];
+
+function formatHeightInFeet(heightCm) {
+  const centimeters = Number(heightCm)
+  if (!Number.isFinite(centimeters) || centimeters <= 0) return ''
+
+  const totalInches = Math.round(centimeters / 2.54)
+  const feet = Math.floor(totalInches / 12)
+  const inches = totalInches % 12
+
+  if (!feet) return `${inches} in`
+  return inches ? `${feet} ft ${inches} in` : `${feet} ft`
+}
 
 function ProfileAvatar({ src, alt, style }) {
   if (src) {
@@ -30,9 +47,33 @@ function ProfileAvatar({ src, alt, style }) {
   );
 }
 
+function getProfileLocationSummary(profile) {
+  const structuredParts = [profile?.district, profile?.state, profile?.country]
+    .map((part) => String(part || '').trim())
+    .filter(Boolean);
+
+  if (structuredParts.length) return structuredParts.join(', ');
+
+  const parts = String(profile?.location || profile?.address || '')
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (parts.length < 2) return '';
+
+  const summaryParts = parts.slice(-3);
+  if (/\b(?:old village|street|road|lane|colony|apartment|flat|plot|door no|house no)\b|\d/i.test(summaryParts[0])) {
+    summaryParts.shift();
+  }
+  return summaryParts.join(', ');
+}
+
 export default function ProfileHeader({ profile, isOwner, onEditProfile, onConnect, onMessage, connected }) {
   const { showNotification } = useNotification();
   const [copied, setCopied] = useState(false);
+  const [coverColor] = useState(
+    () => COVER_COLORS[Math.floor(Math.random() * COVER_COLORS.length)]
+  );
+  const headerLocation = getProfileLocationSummary(profile);
 
   // Compute profile completion score based on real fields
   const calculateCompletionScore = () => {
@@ -58,7 +99,6 @@ export default function ProfileHeader({ profile, isOwner, onEditProfile, onConne
     }
   };
 
-  const defaultCover = 'https://images.unsplash.com/photo-1485846234645-a62644f84728?auto=format&fit=crop&w=1400&q=80';
   return (
     <div 
       className="card"
@@ -76,41 +116,28 @@ export default function ProfileHeader({ profile, isOwner, onEditProfile, onConne
       <div 
         style={{
           height: '210px',
-          backgroundImage: `url(${profile?.coverImage || defaultCover})`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
+          backgroundColor: coverColor,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
           position: 'relative'
         }}
       >
         <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(10, 25, 47, 0.1) 0%, rgba(10, 25, 47, 0.55) 100%)' }} />
-        
-        {/* Owner Edit Cover button */}
-        {isOwner && (
-          <button 
-            onClick={onEditProfile}
-            style={{
-              position: 'absolute',
-              top: '16px',
-              right: '16px',
-              backgroundColor: 'rgba(255, 255, 255, 0.92)',
-              color: 'var(--color-navy)',
-              padding: '7px 14px',
-              borderRadius: 'var(--radius-full)',
-              fontSize: '13px',
-              fontWeight: 600,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
-              backdropFilter: 'blur(4px)',
-              transition: 'all var(--transition-fast)'
-            }}
-            title="Edit cover photo"
-          >
-            <Camera size={15} />
-            <span className="hide-on-mobile">Edit cover</span>
-          </button>
-        )}
+        <span
+          aria-hidden="true"
+          style={{
+            position: 'relative',
+            zIndex: 1,
+            color: '#F97316',
+            fontSize: 'clamp(38px, 7vw, 72px)',
+            fontWeight: 800,
+            letterSpacing: '-0.045em',
+            textShadow: '0 2px 14px rgba(0, 0, 0, 0.45)'
+          }}
+        >
+          TrueHunt
+        </span>
       </div>
 
       {/* 2. Header Content Area */}
@@ -228,22 +255,24 @@ export default function ProfileHeader({ profile, isOwner, onEditProfile, onConne
               </>
             ) : (
               <>
-                <button 
-                  onClick={onConnect}
-                  disabled={connected}
-                  className={`btn ${connected ? 'btn-outline-subtle' : 'btn-maroon'}`}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    borderRadius: 'var(--radius-full)',
-                    padding: '8px 20px',
-                    fontWeight: 600
-                  }}
-                >
-                  {connected ? <Check size={16} color="var(--color-success)" /> : <UserPlus size={16} />}
-                  <span>{connected ? 'Connection Sent' : 'Connect'}</span>
-                </button>
+                {(profile?.connectionsVisible !== false || connected) && (
+                  <button 
+                    onClick={onConnect}
+                    disabled={connected}
+                    className={`btn ${connected ? 'btn-outline-subtle' : 'btn-maroon'}`}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      borderRadius: 'var(--radius-full)',
+                      padding: '8px 20px',
+                      fontWeight: 600
+                    }}
+                  >
+                    {connected ? <Check size={16} color="var(--color-success)" /> : <UserPlus size={16} />}
+                    <span>{connected ? 'Connection Sent' : 'Connect'}</span>
+                  </button>
+                )}
                 <button 
                   onClick={() => onMessage?.(profile)}
                   className="btn btn-outline-navy"
@@ -311,10 +340,10 @@ export default function ProfileHeader({ profile, isOwner, onEditProfile, onConne
               </span>
             ) : null}
 
-            {profile?.location ? (
+            {headerLocation ? (
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                 <MapPin size={14} />
-                {profile.location}
+                {headerLocation}
               </span>
             ) : isOwner ? (
               <span 
@@ -424,11 +453,15 @@ export default function ProfileHeader({ profile, isOwner, onEditProfile, onConne
 
           {/* Connections & Followers Count */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '13px', paddingTop: '4px', borderTop: '1px solid var(--color-border-subtle)' }}>
-            <span style={{ fontWeight: 700, color: 'var(--color-navy)' }}>
-              {profile?.connectionsCount || 0}{' '}
-              <span style={{ fontWeight: 500, color: 'var(--color-text-muted)' }}>connections</span>
-            </span>
-            <span style={{ color: 'var(--color-border)' }}>•</span>
+            {(isOwner || profile?.connectionsVisible !== false) && (
+              <>
+                <span style={{ fontWeight: 700, color: 'var(--color-navy)' }}>
+                  {profile?.connectionsCount || 0}{' '}
+                  <span style={{ fontWeight: 500, color: 'var(--color-text-muted)' }}>connections</span>
+                </span>
+                <span style={{ color: 'var(--color-border)' }}>•</span>
+              </>
+            )}
             <span style={{ fontWeight: 700, color: 'var(--color-navy)' }}>
               {profile?.followersCount || 0}{' '}
               <span style={{ fontWeight: 500, color: 'var(--color-text-muted)' }}>followers</span>

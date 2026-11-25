@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Volume2, VolumeX, FastForward, Film, Video, Radio, Sparkles } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Volume2, VolumeX, FastForward, Film } from 'lucide-react';
 import cinemaSetImg from '../../assets/cinema-hero.jpg';
 import logoImg from '../../assets/truehunt-logo.png';
 import emblemImg from '../../assets/truehunt-emblem.png';
@@ -176,7 +176,9 @@ export default function CinematicIntro({ onComplete }) {
       if (audioCtxRef.current && audioCtxRef.current.state !== 'closed') {
         try {
           audioCtxRef.current.close();
-        } catch {}
+        } catch (error) {
+          console.warn('Could not close the intro audio context:', error);
+        }
       }
     };
   }, []);

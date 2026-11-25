@@ -3,6 +3,7 @@ package com.truehunt.social.service;
 import com.truehunt.social.dto.ProfileDto;
 import com.truehunt.social.dto.ProfileUpdateRequest;
 import com.truehunt.social.exception.BadRequestException;
+import com.truehunt.social.exception.ResourceNotFoundException;
 import com.truehunt.social.model.ProfileEntity;
 import com.truehunt.social.model.UserAccountEntity;
 import com.truehunt.social.model.UserProfileRelationshipEntity;
@@ -17,6 +18,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.beans.factory.ObjectProvider;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -106,6 +108,21 @@ class ProfileServiceUpdateByPublicIdTest {
     }
 
     @Test
+    void unknownUserDoesNotReceiveTheDefaultDemoProfile() {
+        String unknownEmail = "unknown@example.com";
+        when(profileRepository.findByUserId(unknownEmail)).thenReturn(Optional.empty());
+        when(userAccountRepository.findByPublicUserId(unknownEmail)).thenReturn(Optional.empty());
+        when(userAccountRepository.findByPublicUserId("1000001")).thenReturn(Optional.empty());
+        when(profileRepository.findByUserId("1000001")).thenReturn(Optional.empty());
+
+        assertThrows(
+                ResourceNotFoundException.class,
+                () -> profileService.findCurrentProfile(unknownEmail)
+        );
+        verify(profileRepository, never()).save(any(ProfileEntity.class));
+    }
+
+    @Test
     void doesNotPersistASocialProfileForAdminAccount() {
         UserAccountEntity admin = new UserAccountEntity();
         admin.setId(7L);
@@ -183,5 +200,18 @@ class ProfileServiceUpdateByPublicIdTest {
         assertNull(result.getEmail());
         assertNull(result.getProfessionalPhone());
         assertFalse(result.getIsOwner());
+    }
+
+    @Test
+    void publicDirectoryUsesAccountNameWhenProfileNameIsGeneric() {
+        profile.setName("Profile");
+        when(profileRepository.findAll()).thenReturn(List.of(profile));
+        when(userAccountRepository.findAll()).thenReturn(List.of(account));
+        when(userAccountRepository.findByEmail("alex@example.com")).thenReturn(Optional.of(account));
+
+        List<Map<String, Object>> directory = profileService.getPublicDirectory();
+
+        assertEquals(1, directory.size());
+        assertEquals("Alex Morgan", directory.get(0).get("name"));
     }
 }

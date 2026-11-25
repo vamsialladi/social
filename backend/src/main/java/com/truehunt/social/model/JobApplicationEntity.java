@@ -16,6 +16,9 @@ public class JobApplicationEntity {
     private String applicantEmail;
     private String phone;
     private String portfolioLink;
+    private String experience;
+    private String resumeUrl;
+    private String expectedPay;
 
     @Lob
     @Column(columnDefinition = "TEXT")
@@ -46,6 +49,15 @@ public class JobApplicationEntity {
 
     public String getPortfolioLink() { return portfolioLink; }
     public void setPortfolioLink(String portfolioLink) { this.portfolioLink = portfolioLink; }
+
+    public String getExperience() { return experience; }
+    public void setExperience(String experience) { this.experience = experience; }
+
+    public String getResumeUrl() { return resumeUrl; }
+    public void setResumeUrl(String resumeUrl) { this.resumeUrl = resumeUrl; }
+
+    public String getExpectedPay() { return expectedPay; }
+    public void setExpectedPay(String expectedPay) { this.expectedPay = expectedPay; }
 
     public String getPitchNote() { return pitchNote; }
     public void setPitchNote(String pitchNote) { this.pitchNote = pitchNote; }

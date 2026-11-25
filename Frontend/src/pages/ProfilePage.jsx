@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { 
   ArrowLeft, 
-  Share2, 
   Loader2, 
   AlertCircle, 
   RefreshCw,
@@ -168,7 +167,7 @@ export default function ProfilePage() {
   const handleSaveExperience = async (expData) => {
     if (experienceModalState.data) {
       // Update
-      const res = await api.profile.updateExperience(experienceModalState.data.id, expData);
+      await api.profile.updateExperience(experienceModalState.data.id, expData);
       setProfile(prev => ({
         ...prev,
         experiences: (prev.experiences || []).map(e => e.id === experienceModalState.data.id ? { ...e, ...expData } : e)
@@ -296,7 +295,7 @@ export default function ProfilePage() {
         }
       }));
     } catch (err) {
-      showNotification('Failed to send connection invitation', 'error');
+      showNotification(err?.message || 'Failed to send connection invitation', 'error');
     }
   };
 

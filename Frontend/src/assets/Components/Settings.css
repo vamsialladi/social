@@ -731,6 +731,10 @@
   background: #f2f2f2;
 }
 
+.settings-saved-item.is-clickable {
+  cursor: pointer;
+}
+
 .settings-saved-item.is-text-only {
   display: grid;
   grid-column: 1 / -1;
@@ -908,10 +912,26 @@
   opacity: 0;
 }
 
-.settings-saved-text-author .settings-saved-text-remove {
+.settings-saved-item .settings-saved-view-post {
+  right: auto;
+  left: 8px;
+}
+
+.settings-saved-text-author .settings-saved-view-post {
   position: static;
   flex: 0 0 auto;
   margin-left: auto;
+  border: 0;
+  background: #eaf3fb;
+  color: #0a66c2;
+  opacity: 1;
+  white-space: nowrap;
+}
+
+.settings-saved-text-author .settings-saved-text-remove {
+  position: static;
+  flex: 0 0 auto;
+  margin-left: 0;
   border: 1px solid #e8b3b0;
   color: #b3261e;
   opacity: 1;
@@ -945,6 +965,44 @@
 
 .settings-report-item time {
   flex: 0 0 auto;
+}
+
+.settings-report-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: flex-end;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-report-remove {
+  padding: 5px 10px;
+  border: 1px solid #e8b3b0;
+  border-radius: 16px;
+  background: #fff;
+  color: #b3261e;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.settings-report-remove:hover,
+.settings-report-remove:focus-visible {
+  border-color: #b3261e;
+  background: #b3261e;
+  color: #fff;
+}
+
+.settings-report-remove:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.settings-report-error {
+  margin: 0 0 12px;
+  color: #b3261e;
+  font-size: 12px;
 }
 
 .settings-block-search {

@@ -142,6 +142,11 @@ public class AuthService {
             throw new BadRequestException("Name is required.");
         }
 
+        String requestedRole = req.getRole() == null ? "" : req.getRole().trim();
+        if ("ADMIN".equalsIgnoreCase(requestedRole)) {
+            throw new BadRequestException("Administrator accounts must be provisioned separately.");
+        }
+
         PasswordPolicy.requireValid(req.getPassword(), "password");
         PasswordPolicy.requireConfirmed(req.getPassword(), req.getConfirmPassword(), false);
         String normalizedPhone = PhoneNumberPolicy.validateAndNormalize(req.getPhone());
@@ -160,8 +165,9 @@ public class AuthService {
             throw duplicatePhoneConflict();
         }
 
-        String reqRole = req.getRole();
-        String role = ("PRODUCER".equalsIgnoreCase(reqRole) || "STUDIO".equalsIgnoreCase(reqRole)) ? "STUDIO" : "TALENT";
+        String role = ("PRODUCER".equalsIgnoreCase(requestedRole) || "STUDIO".equalsIgnoreCase(requestedRole))
+                ? "STUDIO"
+                : "TALENT";
 
         UserAccountEntity user = new UserAccountEntity();
         String publicUserId = generateUniquePublicUserId(name, role);
@@ -207,9 +213,24 @@ public class AuthService {
             profile.setAddress(user.getHeadquarters());
         }
         profile.setExperience(user.getExperience());
+        profile.setAcceptedTerms(req.getAcceptedTerms());
         if (req.getLanguages() != null) profile.setLanguages(req.getLanguages());
         if (req.getSecondaryCrafts() != null) profile.setSecondaryCrafts(req.getSecondaryCrafts());
         if (req.getSecondarySubCrafts() != null) profile.setSecondarySubCrafts(req.getSecondarySubCrafts());
+        List<String> initialTalents = new ArrayList<>();
+        if (user.getPrimaryCraft() != null && !user.getPrimaryCraft().isBlank()) {
+            initialTalents.add(user.getPrimaryCraft().trim());
+        }
+        if (req.getSecondaryCrafts() != null) {
+            for (String sc : req.getSecondaryCrafts()) {
+                if (sc != null && !sc.isBlank() && !initialTalents.contains(sc.trim())) {
+                    initialTalents.add(sc.trim());
+                }
+            }
+        }
+        if (!initialTalents.isEmpty()) {
+            profile.setTalents(initialTalents);
+        }
         profile.setUpdatedAt(LocalDateTime.now());
         profileRepository.save(profile);
 

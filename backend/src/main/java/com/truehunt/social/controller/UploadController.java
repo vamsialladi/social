@@ -54,10 +54,17 @@ public class UploadController {
                     if (contentType == null) {
                         String lower = filename.toLowerCase();
                         if (lower.endsWith(".png")) contentType = "image/png";
+                        else if (lower.endsWith(".bmp")) contentType = "image/bmp";
                         else if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) contentType = "image/jpeg";
                         else if (lower.endsWith(".webp")) contentType = "image/webp";
                         else if (lower.endsWith(".gif")) contentType = "image/gif";
                         else if (lower.endsWith(".svg")) contentType = "image/svg+xml";
+                        else if (lower.endsWith(".mp4") || lower.endsWith(".m4v")) contentType = "video/mp4";
+                        else if (lower.endsWith(".webm")) contentType = "video/webm";
+                        else if (lower.endsWith(".mov")) contentType = "video/quicktime";
+                        else if (lower.endsWith(".ogg") || lower.endsWith(".ogv")) contentType = "video/ogg";
+                        else if (lower.endsWith(".mkv")) contentType = "video/x-matroska";
+                        else if (lower.endsWith(".avi")) contentType = "video/x-msvideo";
                         else contentType = MediaType.APPLICATION_OCTET_STREAM_VALUE;
                     }
                     return ResponseEntity.ok()

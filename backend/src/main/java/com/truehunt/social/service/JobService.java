@@ -99,6 +99,9 @@ public class JobService {
             entity.setApplicantEmail(app.getApplicantEmail());
             entity.setPhone(app.getApplicantPhone());
             entity.setPortfolioLink(app.getPortfolioLink());
+            entity.setExperience(app.getExperience());
+            entity.setResumeUrl(app.getResumeUrl());
+            entity.setExpectedPay(app.getExpectedPay());
             entity.setPitchNote(app.getPitchNote());
             entity.setStatus("SUBMITTED");
             entity.setSubmittedAt(LocalDateTime.now());

@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Building2, Film, MapPin, CheckCircle2, Search, ExternalLink, Users, Calendar } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Film, MapPin, CheckCircle2, Search } from 'lucide-react';
 import { ENTERTAINMENTS_DATA } from '../services/mockData';
 import { api } from '../services/api';
 
@@ -14,8 +14,8 @@ export default function EntertainmentsPage() {
       try {
         const data = await api.entertainments.getAll();
         if (data) setStudios(data);
-      } catch (e) {
-        console.warn('Using mock entertainment data');
+      } catch (error) {
+        console.warn('Using mock entertainment data because the directory could not be loaded:', error);
       }
     }
     loadStudios();

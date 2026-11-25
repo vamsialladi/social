@@ -1,0 +1,21 @@
+.media-safety {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #d5e6dc;
+  border-radius: 7px;
+  background: #f3fbf6;
+  color: #17653a;
+  font-size: 13px;
+}
+
+.media-safety.is-rejected {
+  border-color: #f0caca;
+  background: #fff3f3;
+  color: #b3261e;
+}
+
+.media-safety p {
+  margin: 0;
+  font-weight: 600;
+}

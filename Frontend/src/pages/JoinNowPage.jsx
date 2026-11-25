@@ -200,6 +200,11 @@ export default function JoinNowPage() {
     setCaptchaInput('');
   };
 
+  const showRegistrationError = (message) => {
+    setErrorMsg(message);
+    refreshCaptcha();
+  };
+
   const isPasswordSectionValid = isPasswordValid(password) && password === confirmPassword;
 
   const handleRegister = async (e) => {
@@ -207,19 +212,19 @@ export default function JoinNowPage() {
     setErrorMsg('');
 
     if (!agreeTerms) {
-      setErrorMsg('Please agree to the Terms of Service & Privacy Policy.');
+      showRegistrationError('Please agree to the Terms of Service & Privacy Policy.');
       return;
     }
 
     if (!firstName.trim() || !lastName.trim()) {
-      setErrorMsg('First name and last name are required.');
+      showRegistrationError('First name and last name are required.');
       return;
     }
 
     const emailValidationError = getEmailValidationError(email);
     if (emailValidationError) {
       setEmailError(emailValidationError);
-      setErrorMsg(emailValidationError);
+      showRegistrationError(emailValidationError);
       return;
     }
     setEmailError('');
@@ -227,40 +232,41 @@ export default function JoinNowPage() {
     const phoneValidationError = getIndianPhoneError(phoneNumber);
     if (phoneValidationError) {
       setPhoneError(phoneValidationError);
-      setErrorMsg(phoneValidationError);
+      showRegistrationError(phoneValidationError);
       return;
     }
     setPhoneError('');
 
     const passwordError = getPasswordValidationMessage(password);
     if (passwordError) {
-      setErrorMsg(passwordError);
+      showRegistrationError(passwordError);
       return;
     }
 
     if (password !== confirmPassword) {
-      setErrorMsg('Password and confirm password do not match.');
+      showRegistrationError('Password and confirm password do not match.');
       return;
     }
 
     if (!otpRequested || !/^\d{6}$/.test(phoneOtp)) {
-      setErrorMsg('Request and enter the 6-digit OTP sent to your phone number.');
+      showRegistrationError('Request and enter the 6-digit OTP sent to your phone number.');
       return;
     }
 
     if (selectedRole === 'STUDIO' && (!companyName.trim() || !headquarters.trim())) {
-      setErrorMsg('Production banner name and headquarters are required.');
+      showRegistrationError('Production banner name and headquarters are required.');
       return;
     }
 
     if (!captchaInput.trim()) {
       setCaptchaError('Please enter the CAPTCHA code shown.');
+      showRegistrationError('Please enter the CAPTCHA code shown.');
       return;
     }
 
-    if (captchaInput.trim().toLowerCase() !== captchaCode.toLowerCase()) {
+    if (captchaInput.trim() !== captchaCode) {
       setCaptchaError('Check CAPTCHA and try again. A new code has been generated.');
-      refreshCaptcha();
+      showRegistrationError('Check CAPTCHA and try again. A new code has been generated.');
       return;
     }
     setCaptchaError('');
@@ -360,7 +366,7 @@ export default function JoinNowPage() {
           navigate('/protect-producer');
         }
       } else {
-        setErrorMsg(res.message || 'Registration failed');
+        showRegistrationError(res.message || 'Registration failed');
       }
     } catch (err) {
       const message = err.message || 'An error occurred during registration.';
@@ -379,7 +385,7 @@ export default function JoinNowPage() {
       if (isPhoneError) {
         setPhoneError(backendPhoneError || message);
       }
-      setErrorMsg(backendEmailError || backendPhoneError || message);
+      showRegistrationError(backendEmailError || backendPhoneError || message);
     } finally {
       setLoading(false);
     }
@@ -1007,11 +1013,20 @@ export default function JoinNowPage() {
               className="form-control"
               value={captchaInput}
               onChange={(e) => {
-                setCaptchaInput(e.target.value);
+                const nextInput = e.target.value;
+                setCaptchaInput(nextInput);
                 if (captchaError) setCaptchaError('');
+                if (
+                  nextInput.trim().length >= captchaCode.length
+                  && nextInput.trim() !== captchaCode
+                ) {
+                  setCaptchaError('Check CAPTCHA and try again. A new code has been generated.');
+                  refreshCaptcha();
+                }
               }}
               placeholder="Enter CAPTCHA"
               autoComplete="off"
+              maxLength={captchaCode.length}
               aria-invalid={Boolean(captchaError)}
               aria-describedby={captchaError ? 'captcha-error' : undefined}
               required

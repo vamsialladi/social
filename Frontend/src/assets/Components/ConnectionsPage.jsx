@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { ArrowLeft, MessageCircle, UsersRound } from 'lucide-react'
 import api from '../../api'
 import './StylePage.css'
@@ -47,6 +47,7 @@ function profilesMatch(first, second) {
 }
 
 export default function ConnectionsPage({
+  isActive,
   onBack,
   backLabel = 'Back to profile',
   onMessage,
@@ -63,6 +64,27 @@ export default function ConnectionsPage({
     .filter(Boolean)
     .map((value) => String(value).trim().toLowerCase())
     .join('|')
+
+  const loadConnections = useCallback(async () => {
+    try {
+      const data = await api.getConnectedProfiles()
+      const list = Array.isArray(data) ? data : []
+      const unique = []
+      list.forEach((item) => {
+        if (!item) return
+        const alreadyAdded = unique.some((existing) => profilesMatch(existing, item))
+        if (!alreadyAdded) {
+          unique.push(item)
+        }
+      })
+      setProfiles(unique)
+    } catch (error) {
+      console.error('Failed to load connections page:', error)
+      setLoadError('Could not load your connections. Please try again later.')
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
 
   useEffect(() => {
     function handleConnectionChanged(event) {
@@ -91,14 +113,21 @@ export default function ConnectionsPage({
       if (hasParticipants) {
         const isSender = matchesCurrentUser(senderProfile) || matchesCurrentUser(senderId)
         const isReceiver = matchesCurrentUser(receiverProfile) || matchesCurrentUser(receiverId)
-        if (isSender === isReceiver) return
+        if (isSender === isReceiver) {
+          loadConnections()
+          return
+        }
         targetProfile = isSender
           ? receiverProfile || { id: receiverId }
           : senderProfile || { id: senderId }
       } else {
         targetProfile = profile || (detail.profileId ? { id: detail.profileId } : null)
       }
-      if (!targetProfile || (!connected && pending)) return
+
+      if (!targetProfile || (!connected && pending)) {
+        loadConnections()
+        return
+      }
 
       setProfiles((currentProfiles) => {
         if (!connected) {
@@ -111,31 +140,33 @@ export default function ConnectionsPage({
         }
         return [...currentProfiles, targetProfile]
       })
+      loadConnections()
     }
 
     window.addEventListener('truehunt-connection-changed', handleConnectionChanged)
     return () => window.removeEventListener('truehunt-connection-changed', handleConnectionChanged)
-  }, [currentUserIdentityKey])
+  }, [currentUserIdentityKey, loadConnections])
 
   useEffect(() => {
-    let isCurrent = true
-    async function loadConnections() {
-      try {
-        const data = await api.getConnectedProfiles()
-        if (isCurrent) setProfiles(Array.isArray(data) ? data : [])
-      } catch (error) {
-        console.error('Failed to load connections page:', error)
-        if (isCurrent) setLoadError('Could not load your connections. Please try again later.')
-      } finally {
-        if (isCurrent) setIsLoading(false)
+    if (isActive !== false) {
+      loadConnections()
+    }
+
+    function refreshWhenVisible() {
+      if (!document.hidden && isActive !== false) {
+        loadConnections()
       }
     }
 
-    loadConnections()
+    window.addEventListener('truehunt-settings-updated', loadConnections)
+    window.addEventListener('focus', refreshWhenVisible)
+    document.addEventListener('visibilitychange', refreshWhenVisible)
     return () => {
-      isCurrent = false
+      window.removeEventListener('truehunt-settings-updated', loadConnections)
+      window.removeEventListener('focus', refreshWhenVisible)
+      document.removeEventListener('visibilitychange', refreshWhenVisible)
     }
-  }, [])
+  }, [isActive, loadConnections, currentUserIdentityKey])
 
   async function disconnectProfile(profile) {
     const profileId = String(
@@ -235,6 +266,7 @@ export default function ConnectionsPage({
                   isConnected: true,
                 }
                 const isFollowing = Boolean(profile.isFollowing || profile.following)
+                const role = profile.role || profile.headline || profile.subCraft || profile.primaryCraft || profile.craft || ''
 
                 return (
                   <li className="social-connection-item" key={profileId || name}>
@@ -259,7 +291,7 @@ export default function ConnectionsPage({
                       }}
                     >
                       <strong>{name}</strong>
-                      {profile.role && <small>{profile.role}</small>}
+                      {role && <small>{role}</small>}
                     </span>
                     <div className="social-connection-actions">
                       <button

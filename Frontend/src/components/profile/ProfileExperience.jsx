@@ -1,4 +1,4 @@
-import React from 'react';
+
 import { Plus, Briefcase, Pencil, Trash2, Calendar, MapPin } from 'lucide-react';
 import { useNotification } from '../../context/NotificationContext';
 
@@ -10,7 +10,7 @@ export default function ProfileExperience({ experiences = [], isOwner, onAdd, on
       try {
         await onDelete(id);
         showNotification('Experience removed successfully', 'info');
-      } catch (e) {
+      } catch {
         showNotification('Failed to delete experience', 'error');
       }
     }

@@ -1,5 +1,4 @@
-import React from 'react';
-import { Plus, Film, ExternalLink, Pencil, Trash2, Calendar, Award } from 'lucide-react';
+import { Plus, Film, ExternalLink, Pencil, Trash2 } from 'lucide-react';
 import { useNotification } from '../../context/NotificationContext';
 
 export default function ProfileProjects({ projects = [], credits = [], isOwner, onAdd, onEdit, onDelete }) {
@@ -10,7 +9,7 @@ export default function ProfileProjects({ projects = [], credits = [], isOwner, 
       try {
         await onDelete(id);
         showNotification('Project removed successfully', 'info');
-      } catch (e) {
+      } catch {
         showNotification('Failed to delete project', 'error');
       }
     }

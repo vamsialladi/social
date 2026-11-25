@@ -31,10 +31,12 @@ public class SupportService {
             entity.setId(id);
             entity.setName(req.getName());
             entity.setEmail(req.getEmail());
+            entity.setPhone(req.getPhone());
             entity.setSubject(req.getSubject());
             entity.setCategory(req.getCategory());
             entity.setMessage(req.getMessage());
             entity.setPriority(req.getPriority());
+            entity.setClientTimestamp(req.getTimestamp());
             entity.setStatus("OPEN");
             entity.setCreatedAt(LocalDateTime.now());
             supportTicketRepository.save(entity);

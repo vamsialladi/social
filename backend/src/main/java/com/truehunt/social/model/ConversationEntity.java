@@ -26,6 +26,27 @@ public class ConversationEntity {
     private String user1Name;
     private String user2Name;
 
+    @Column(name = "connection_group_id")
+    private Long connectionGroupId;
+
+    @Lob
+    @Column(name = "group_participant_ids", columnDefinition = "TEXT")
+    private String groupParticipantIdsJson = "[]";
+
+    @Lob
+    @Column(name = "group_hidden_participant_ids", columnDefinition = "TEXT")
+    private String groupHiddenParticipantIdsJson = "[]";
+
+    @Lob
+    @Column(name = "group_read_at", columnDefinition = "TEXT")
+    private String groupReadAtJson = "{}";
+
+    @Lob
+    @Column(name = "group_cleared_at", columnDefinition = "TEXT")
+    private String groupClearedAtJson = "{}";
+
+    private String groupImageUrl;
+
     private String name;
     private String initials;
     private String color = "blue";
@@ -42,6 +63,11 @@ public class ConversationEntity {
     private String description;
 
     private String mailbox = "Focused";
+
+    private boolean user1Hidden = false;
+    private boolean user2Hidden = false;
+    private LocalDateTime user1HiddenAt;
+    private LocalDateTime user2HiddenAt;
 
     @Lob
     @Column(columnDefinition = "TEXT")
@@ -65,6 +91,51 @@ public class ConversationEntity {
 
     public String getUser2Name() { return user2Name; }
     public void setUser2Name(String user2Name) { this.user2Name = user2Name; }
+
+    public Long getConnectionGroupId() { return connectionGroupId; }
+    public void setConnectionGroupId(Long connectionGroupId) { this.connectionGroupId = connectionGroupId; }
+
+    public boolean isGroupConversation() { return connectionGroupId != null; }
+
+    public List<String> getGroupParticipantIds() {
+        return readJsonList(groupParticipantIdsJson);
+    }
+
+    public void setGroupParticipantIds(List<String> participantIds) {
+        groupParticipantIdsJson = writeJson(participantIds == null ? List.of() : participantIds);
+    }
+
+    public List<String> getGroupHiddenParticipantIds() {
+        return readJsonList(groupHiddenParticipantIdsJson);
+    }
+
+    public void setGroupHiddenParticipantIds(List<String> participantIds) {
+        groupHiddenParticipantIdsJson = writeJson(participantIds == null ? List.of() : participantIds);
+    }
+
+    public Map<String, String> getGroupReadAt() {
+        if (groupReadAtJson == null || groupReadAtJson.isBlank()) return new HashMap<>();
+        try {
+            return MAPPER.readValue(groupReadAtJson, new TypeReference<Map<String, String>>() {});
+        } catch (Exception e) {
+            return new HashMap<>();
+        }
+    }
+
+    public void setGroupReadAt(Map<String, String> readAt) {
+        groupReadAtJson = writeJson(readAt == null ? Map.of() : readAt);
+    }
+
+    public Map<String, String> getGroupClearedAt() {
+        return readJsonMap(groupClearedAtJson);
+    }
+
+    public void setGroupClearedAt(Map<String, String> clearedAt) {
+        groupClearedAtJson = writeJson(clearedAt == null ? Map.of() : clearedAt);
+    }
+
+    public String getGroupImageUrl() { return groupImageUrl; }
+    public void setGroupImageUrl(String groupImageUrl) { this.groupImageUrl = groupImageUrl; }
 
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
@@ -101,6 +172,18 @@ public class ConversationEntity {
 
     public String getMailbox() { return mailbox; }
     public void setMailbox(String mailbox) { this.mailbox = mailbox; }
+
+    public boolean isUser1Hidden() { return user1Hidden; }
+    public void setUser1Hidden(boolean user1Hidden) { this.user1Hidden = user1Hidden; }
+
+    public boolean isUser2Hidden() { return user2Hidden; }
+    public void setUser2Hidden(boolean user2Hidden) { this.user2Hidden = user2Hidden; }
+
+    public LocalDateTime getUser1HiddenAt() { return user1HiddenAt; }
+    public void setUser1HiddenAt(LocalDateTime user1HiddenAt) { this.user1HiddenAt = user1HiddenAt; }
+
+    public LocalDateTime getUser2HiddenAt() { return user2HiddenAt; }
+    public void setUser2HiddenAt(LocalDateTime user2HiddenAt) { this.user2HiddenAt = user2HiddenAt; }
 
     public LocalDateTime getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
@@ -201,7 +284,10 @@ public class ConversationEntity {
             else if (!n2Clean.isEmpty() && cleanIdentifiers.contains(n2Clean)) isUser2 = true;
         }
 
-        if (isUser1 && user2Name != null && !user2Name.isBlank()) {
+        if (isGroupConversation()) {
+            displayName = name != null ? name : "";
+            displayInitials = computeInitials(displayName);
+        } else if (isUser1 && user2Name != null && !user2Name.isBlank()) {
             displayName = user2Name;
             displayInitials = computeInitials(user2Name);
         } else if (isUser2 && user1Name != null && !user1Name.isBlank()) {
@@ -221,7 +307,11 @@ public class ConversationEntity {
             String lastSenderClean = lastSender != null ? String.valueOf(lastSender).trim().toLowerCase(Locale.ROOT) : "";
             String lastReceiverClean = lastReceiver != null ? String.valueOf(lastReceiver).trim().toLowerCase(Locale.ROOT) : "";
 
-            if (!lastSenderClean.isEmpty() && cleanIdentifiers.contains(lastSenderClean)) {
+            if (isGroupConversation()) {
+                effectiveUnread = !lastSenderClean.isEmpty()
+                        && !cleanIdentifiers.contains(lastSenderClean)
+                        && isGroupMessageUnread(lastMsg, cleanIdentifiers);
+            } else if (!lastSenderClean.isEmpty() && cleanIdentifiers.contains(lastSenderClean)) {
                 effectiveUnread = false;
             } else if (!lastReceiverClean.isEmpty() && cleanIdentifiers.contains(lastReceiverClean)) {
                 boolean isLastRead = "READ".equalsIgnoreCase(String.valueOf(lastMsg.get("status")))
@@ -244,10 +334,23 @@ public class ConversationEntity {
         dto.put("user2Id", user2Id);
         dto.put("user1Name", user1Name);
         dto.put("user2Name", user2Name);
+        dto.put("isGroupConversation", isGroupConversation());
+        if (isGroupConversation()) {
+            dto.put("connectionGroupId", connectionGroupId);
+            dto.put("groupParticipantIds", getGroupParticipantIds());
+            dto.put("groupImageUrl", groupImageUrl);
+        }
+
+        LocalDateTime callerHiddenAt = isGroupConversation()
+                ? getGroupCutoff(cleanIdentifiers)
+                : isUser1 ? user1HiddenAt : (isUser2 ? user2HiddenAt : null);
 
         if (!cleanIdentifiers.isEmpty()) {
             List<Map<String, Object>> adaptedThread = new ArrayList<>();
             for (Map<String, Object> msg : thread) {
+                if (callerHiddenAt != null && isMessageBeforeCutoff(msg, callerHiddenAt)) {
+                    continue;
+                }
                 Map<String, Object> adaptedMsg = new HashMap<>(msg);
                 Object msgSenderId = msg.get("senderId");
                 Object msgReceiverId = msg.get("receiverId");
@@ -270,11 +373,100 @@ public class ConversationEntity {
                 adaptedThread.add(adaptedMsg);
             }
             dto.put("thread", adaptedThread);
+            if (callerHiddenAt != null) {
+                if (adaptedThread.isEmpty()) {
+                    dto.put("preview", "");
+                } else {
+                    Object lastContent = adaptedThread.get(adaptedThread.size() - 1).get("content");
+                    if (lastContent != null) {
+                        dto.put("preview", String.valueOf(lastContent));
+                    }
+                }
+            }
         } else {
             dto.put("thread", thread);
         }
 
         return dto;
+    }
+
+    private boolean isGroupMessageUnread(Map<String, Object> message, Set<String> callerIdentifiers) {
+        LocalDateTime sentAt;
+        try {
+            sentAt = LocalDateTime.parse(String.valueOf(message.get("sentAt")));
+        } catch (Exception e) {
+            return true;
+        }
+        LocalDateTime cutoff = getGroupCutoff(callerIdentifiers);
+        if (cutoff != null && !sentAt.isAfter(cutoff)) return false;
+
+        Map<String, String> readAt = getGroupReadAt();
+        String callerReadAt = readAt.entrySet().stream()
+                .filter(entry -> callerIdentifiers.contains(entry.getKey().trim().toLowerCase(Locale.ROOT)))
+                .map(Map.Entry::getValue)
+                .filter(Objects::nonNull)
+                .findFirst()
+                .orElse(null);
+        if (callerReadAt == null) return true;
+        try {
+            return sentAt.isAfter(LocalDateTime.parse(callerReadAt));
+        } catch (Exception e) {
+            return true;
+        }
+    }
+
+    private LocalDateTime getGroupCutoff(Set<String> callerIdentifiers) {
+        return getGroupClearedAt().entrySet().stream()
+                .filter(entry -> callerIdentifiers.contains(entry.getKey().trim().toLowerCase(Locale.ROOT)))
+                .map(Map.Entry::getValue)
+                .filter(Objects::nonNull)
+                .map(value -> {
+                    try {
+                        return LocalDateTime.parse(value);
+                    } catch (Exception e) {
+                        return null;
+                    }
+                })
+                .filter(Objects::nonNull)
+                .findFirst()
+                .orElse(null);
+    }
+
+    private List<String> readJsonList(String json) {
+        if (json == null || json.isBlank()) return new ArrayList<>();
+        try {
+            return MAPPER.readValue(json, new TypeReference<List<String>>() {});
+        } catch (Exception e) {
+            return new ArrayList<>();
+        }
+    }
+
+    private Map<String, String> readJsonMap(String json) {
+        if (json == null || json.isBlank()) return new HashMap<>();
+        try {
+            return MAPPER.readValue(json, new TypeReference<Map<String, String>>() {});
+        } catch (Exception e) {
+            return new HashMap<>();
+        }
+    }
+
+    private String writeJson(Object value) {
+        try {
+            return MAPPER.writeValueAsString(value);
+        } catch (Exception e) {
+            return "[]";
+        }
+    }
+
+    private boolean isMessageBeforeCutoff(Map<String, Object> msg, LocalDateTime cutoff) {
+        Object sentAtObj = msg.get("sentAt");
+        if (sentAtObj == null) return false;
+        try {
+            LocalDateTime sentAt = LocalDateTime.parse(String.valueOf(sentAtObj));
+            return !sentAt.isAfter(cutoff);
+        } catch (Exception ignored) {
+            return false;
+        }
     }
 
     private String computeInitials(String title) {

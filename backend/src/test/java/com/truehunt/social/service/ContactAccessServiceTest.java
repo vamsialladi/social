@@ -26,13 +26,15 @@ class ContactAccessServiceTest {
 
     private ContactAccessRequestRepository requestRepository;
     private ProfileService profileService;
+    private NotificationService notificationService;
     private ContactAccessService contactAccessService;
 
     @BeforeEach
     void setUp() {
         requestRepository = mock(ContactAccessRequestRepository.class);
         profileService = mock(ProfileService.class);
-        contactAccessService = new ContactAccessService(requestRepository, profileService);
+        notificationService = mock(NotificationService.class);
+        contactAccessService = new ContactAccessService(requestRepository, profileService, notificationService);
 
         ProfileDto requester = profile(REQUESTER_ID, "Casey Requester");
         ProfileDto owner = profile(OWNER_ID, "Riley Owner");
@@ -56,6 +58,10 @@ class ContactAccessServiceTest {
         Map<String, Object> status = contactAccessService.getStatus(OWNER_ID, "requester@example.com");
 
         assertEquals("ACCEPTED", status.get("status"));
+        assertEquals(
+                "Riley Owner accepted your request. You can now access their contact details.",
+                status.get("message")
+        );
         assertEquals(false, status.containsKey("phone"));
         assertEquals("+15559876543", status.get("professionalPhone"));
         assertEquals("owner@example.com", status.get("email"));
@@ -124,6 +130,30 @@ class ContactAccessServiceTest {
 
         assertEquals("ACCEPTED", request.getStatus());
         verify(requestRepository).save(request);
+        verify(notificationService).createNotification(
+                REQUESTER_ID,
+                "Contact Details Request Accepted",
+                "Riley Owner accepted your request. You can now access their contact details.",
+                "contact-access"
+        );
+    }
+
+    @Test
+    void rejectingRequestNotifiesRequester() {
+        ContactAccessRequestEntity request = request("PENDING");
+        when(requestRepository.findById(1L)).thenReturn(Optional.of(request));
+        when(requestRepository.save(any(ContactAccessRequestEntity.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        contactAccessService.rejectRequest(1L, "owner@example.com");
+
+        assertEquals("REJECTED", request.getStatus());
+        verify(notificationService).createNotification(
+                REQUESTER_ID,
+                "Contact Details Request Rejected",
+                "Riley Owner rejected your request to access their contact details.",
+                "contact-access"
+        );
     }
 
     private static ProfileDto profile(String id, String name) {

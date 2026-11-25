@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { X, Camera, Image as ImageIcon, Loader2 } from 'lucide-react';
 import { useNotification } from '../../context/NotificationContext';
 import { api } from '../../api';
+import MediaSafetyStatus from '../common/MediaSafetyStatus.jsx';
+import { useMediaSafety } from '../../hooks/useMediaSafety.js';
 
 function ProfileAvatar({ src, alt }) {
   if (src) {
@@ -27,6 +29,8 @@ export default function EditProfileModal({ profile, onClose, onSave }) {
   const { showNotification } = useNotification();
   const [loading, setLoading] = useState(false);
   const [avatarFile, setAvatarFile] = useState(null);
+  const avatarSafety = useMediaSafety(avatarFile);
+  const isAvatarBlocked = Boolean(avatarFile && avatarSafety.isBlocked);
   const [avatarPreview, setAvatarPreview] = useState(
     profile?.avatar || profile?.profileImageUrl || '',
   );
@@ -72,6 +76,13 @@ export default function EditProfileModal({ profile, onClose, onSave }) {
     e.preventDefault();
     if (!formData.name.trim()) {
       showNotification('Full name is required', 'error');
+      return;
+    }
+    if (isAvatarBlocked) {
+      showNotification(
+        avatarSafety.error || 'Wait for profile photo moderation to finish before saving.',
+        'error',
+      );
       return;
     }
     setLoading(true);
@@ -143,6 +154,13 @@ export default function EditProfileModal({ profile, onClose, onSave }) {
                   setAvatarPreview(file ? URL.createObjectURL(file) : formData.avatar);
                 }}
               />
+              {avatarFile && (
+                <MediaSafetyStatus
+                  safety={avatarSafety}
+                  blockedMessage="This profile photo has high adult content and cannot be used."
+                  safeMessage="Safe content verified. Ready to use."
+                />
+              )}
             </div>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '18px' }}>
@@ -335,7 +353,7 @@ export default function EditProfileModal({ profile, onClose, onSave }) {
             <button 
               type="submit" 
               className="btn btn-maroon" 
-              disabled={loading}
+              disabled={loading || isAvatarBlocked}
               style={{ minWidth: '110px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
             >
               {loading ? (

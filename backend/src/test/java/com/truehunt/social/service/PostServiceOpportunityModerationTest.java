@@ -200,12 +200,17 @@ class PostServiceOpportunityModerationTest {
         CreatePostRequest request = new CreatePostRequest();
         request.setTitle("New title");
         request.setContent("New text");
+        request.setOpportunityDetails(Map.of("fullName", "Updated casting name", "age", "31"));
         request.setMedia(Map.of("url", "/uploads/new.mp4", "kind", "video"));
 
         Map<String, Object> updated = postService.updatePost("12", request, "owner@example.com");
 
         assertEquals("New title", updated.get("title"));
         assertEquals("New text", updated.get("content"));
+        assertEquals(
+                "Updated casting name",
+                ((Map<?, ?>) updated.get("opportunityDetails")).get("fullName")
+        );
         assertEquals("/uploads/new.mp4", ((Map<?, ?>) updated.get("media")).get("url"));
         assertEquals("video", ((Map<?, ?>) updated.get("media")).get("kind"));
         verify(postRepository).save(existing);

@@ -21,8 +21,8 @@ class WebSocketService {
     if (this.client) {
       try {
         this.client.deactivate()
-      } catch (err) {
-        // ignore
+      } catch (error) {
+        console.warn('Could not deactivate the previous WebSocket connection:', error)
       }
     }
 
@@ -31,7 +31,9 @@ class WebSocketService {
     try {
       const u = localStorage.getItem('truehunt_user')
       if (u) parsedUser = JSON.parse(u)
-    } catch {}
+    } catch (error) {
+      console.warn('Could not parse the cached WebSocket user:', error)
+    }
 
     this.currentEmail = (userEmail || parsedUser?.email || 'pro@truehunt.in').trim()
     this.currentUserId = String(parsedUser?.userId || parsedUser?.publicUserId || parsedUser?.id || '').trim()
@@ -51,10 +53,10 @@ class WebSocketService {
       reconnectDelay: 3000,
       heartbeatIncoming: 10000,
       heartbeatOutgoing: 10000,
-      debug: (str) => {
-        // console.debug('[STOMP]', str)
+      debug: (message) => {
+        if (import.meta.env.DEV) console.debug('[STOMP]', message)
       },
-      onConnect: (frame) => {
+      onConnect: () => {
         this.connected = true
         this.notifyStatus(true)
 
@@ -69,7 +71,9 @@ class WebSocketService {
             window.dispatchEvent(new CustomEvent('truehunt-connection-changed', {
               detail: event,
             }))
-          } catch (e) {}
+          } catch (error) {
+            console.warn('Could not dispatch a connection update:', error)
+          }
         })
 
         // 3. Direct connection notifications remain public topics; messages use the private queue above.
@@ -80,7 +84,9 @@ class WebSocketService {
               window.dispatchEvent(new CustomEvent('truehunt-connection-changed', {
                 detail: event,
               }))
-            } catch (e) {}
+            } catch (error) {
+              console.warn('Could not dispatch a connection update:', error)
+            }
           })
           if (emailLower !== this.currentEmail) {
             this.doSubscribe(`/topic/user.${this.currentEmail}.connections`, (event) => {
@@ -88,7 +94,9 @@ class WebSocketService {
                 window.dispatchEvent(new CustomEvent('truehunt-connection-changed', {
                   detail: event,
                 }))
-              } catch (e) {}
+              } catch (error) {
+                console.warn('Could not dispatch a connection update:', error)
+              }
             })
           }
         }
@@ -98,7 +106,9 @@ class WebSocketService {
               window.dispatchEvent(new CustomEvent('truehunt-connection-changed', {
                 detail: event,
               }))
-            } catch (e) {}
+            } catch (error) {
+              console.warn('Could not dispatch a connection update:', error)
+            }
           })
         }
         // 4. Resubscribe any registered destinations
@@ -135,8 +145,8 @@ class WebSocketService {
       if (sub) {
         try {
           sub.unsubscribe()
-        } catch (e) {
-          // ignore
+        } catch (error) {
+          console.warn(`Could not unsubscribe from ${destination}:`, error)
         }
       }
     }
@@ -216,15 +226,17 @@ class WebSocketService {
     })
     try {
       window.dispatchEvent(new CustomEvent('truehunt-message-received', { detail: message }))
-    } catch (e) {}
+    } catch (error) {
+      console.warn('Could not dispatch the received-message event:', error)
+    }
   }
 
   disconnect() {
     if (this.client) {
       try {
         this.client.deactivate()
-      } catch (e) {
-        // ignore
+      } catch (error) {
+        console.warn('Could not deactivate the WebSocket connection:', error)
       }
       this.client = null
     }

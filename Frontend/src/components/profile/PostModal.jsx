@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { X, Image as ImageIcon, Send, Loader2 } from 'lucide-react';
 import { useNotification } from '../../context/NotificationContext';
 

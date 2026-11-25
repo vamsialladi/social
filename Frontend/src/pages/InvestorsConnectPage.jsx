@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { TrendingUp, Landmark, ShieldAlert, CheckCircle2, Send, Filter, MapPin, DollarSign, Info } from 'lucide-react';
+import { CheckCircle2, Send, MapPin, Info } from 'lucide-react';
 import { INVESTORS_CONNECT_DATA } from '../services/mockData';
 import { api } from '../services/api';
 import socialApi from '../api';
@@ -123,7 +123,7 @@ export default function InvestorsConnectPage() {
       setBudgetRequested('');
       setLookbookUrl('');
       setSynopsis('');
-    } catch (e) {
+    } catch {
       showNotification('Failed to submit pitch', 'error');
     } finally {
       setSubmitting(false);

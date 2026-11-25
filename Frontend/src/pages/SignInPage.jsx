@@ -53,7 +53,7 @@ export default function SignInPage() {
         const connectTalent = location.state?.connectTalent;
         const returnTo = location.state?.returnTo;
         if (connectTalent) {
-          navigate('/social/profile', { state: { connectTalent } });
+          navigate('/social/home', { state: { connectTalent } });
         } else if (typeof returnTo === 'string' && returnTo.startsWith('/') && !returnTo.startsWith('//')) {
           navigate(returnTo);
         } else {

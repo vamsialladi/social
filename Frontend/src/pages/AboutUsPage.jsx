@@ -1,20 +1,13 @@
-import React from 'react';
 import { 
   Film, 
   Shield, 
   TrendingUp, 
   Smartphone, 
   Users, 
-  Building2, 
-  MapPin, 
-  Mail, 
-  Phone, 
-  ExternalLink,
   ArrowRight,
   CheckCircle2
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { OFFICIAL_CONTACT } from '../constants/contactInfo';
 import OfficeContactCard from '../components/common/OfficeContactCard';
 
 export default function AboutUsPage() {

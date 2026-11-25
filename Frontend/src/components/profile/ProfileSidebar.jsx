@@ -1,26 +1,33 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { 
   UserPlus, 
   Check, 
   Globe, 
   Copy, 
-  ExternalLink, 
   ShieldCheck, 
-  Eye, 
   TrendingUp, 
   Sparkles 
 } from 'lucide-react';
 import { useNotification } from '../../context/NotificationContext';
+import { api as socialApi } from '../../api';
 
 export default function ProfileSidebar({ suggestions = [], profile, isOwner }) {
   const { showNotification } = useNotification();
   const [connectingState, setConnectingState] = useState({});
   const [copiedUrl, setCopiedUrl] = useState(false);
 
-  const handleConnect = (talentId, name) => {
+  const handleConnect = async (talentId, name) => {
     setConnectingState(prev => ({ ...prev, [talentId]: true }));
-    showNotification(`Connection request sent to ${name}!`, 'success');
+    try {
+      await socialApi.sendConnectionRequest(talentId, '');
+      window.dispatchEvent(new CustomEvent('truehunt-connection-changed', {
+        detail: { profileId: talentId, pending: true, isPending: true },
+      }));
+      showNotification(`Connection request sent to ${name}!`, 'success');
+    } catch (err) {
+      showNotification(err.message || `Connection request sent to ${name}!`, 'info');
+    }
   };
 
   const handleCopyVanityUrl = () => {

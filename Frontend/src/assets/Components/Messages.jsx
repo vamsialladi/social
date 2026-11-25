@@ -10,12 +10,12 @@ import {
   SquarePen,
   Star,
   X,
-  Wifi,
-  WifiOff,
 } from 'lucide-react'
 import './Messages.css'
 import api from '../../api'
 import { websocketService } from '../../services/websocket'
+import MediaSafetyStatus from '../../components/common/MediaSafetyStatus.jsx'
+import { getMediaKind, useMediaSafety } from '../../hooks/useMediaSafety.js'
 
 const categories = ['Opportunities', 'Unread', 'Connections', 'InMail', 'Starred']
 const mailboxOptions = ['Focused', 'Archived', ]
@@ -70,6 +70,10 @@ function writeHiddenConversationData(storageKey, data) {
 }
 
 function getConversationContactName(conversation, user) {
+  if (conversation?.isGroupConversation) {
+    return String(conversation.name || '').trim()
+  }
+
   const myIdentifiers = new Set([
     user?.email,
     user?.userId,
@@ -211,7 +215,9 @@ function isMessageOutgoing(msg, currentConversation, user) {
     try {
       const u = localStorage.getItem('truehunt_user')
       if (u) effectiveUser = JSON.parse(u)
-    } catch {}
+    } catch (error) {
+      console.warn('Could not read the cached user for message identity:', error)
+    }
   }
 
   const myEmail = (effectiveUser?.email || '').trim().toLowerCase()
@@ -295,12 +301,14 @@ function Messages({
   const [replyText, setReplyText] = useState('')
   const [replyValidationError, setReplyValidationError] = useState('')
   const [replyAttachment, setReplyAttachment] = useState(null)
+  const replyAttachmentMediaSafety = useMediaSafety(
+    getMediaKind(replyAttachment) === 'image' ? replyAttachment : null,
+  )
   const [isSendingReply, setIsSendingReply] = useState(false)
   const [isConnectPromptOpen, setIsConnectPromptOpen] = useState(false)
   const [isSendingConnectionRequest, setIsSendingConnectionRequest] = useState(false)
   const [connectionRequestError, setConnectionRequestError] = useState('')
   const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false)
-  const [expandedMessageTimeId, setExpandedMessageTimeId] = useState(null)
   const [isMobileDetailOpen, setIsMobileDetailOpen] = useState(
     () => Boolean(initialProfileConversation && window.innerWidth <= 740),
   )
@@ -316,6 +324,7 @@ function Messages({
   const emojiPickerRef = useRef(null)
   const conversationMenuRef = useRef(null)
   const previousInboxRequest = useRef(resetToInboxRequest)
+  const autoReadAttemptRef = useRef({ conversationId: null, attempted: false })
 
   const currentUser = useMemo(() => readStoredUser(), [])
   const hiddenConversationStorageKey = getHiddenConversationStorageKey(currentUser)
@@ -670,7 +679,9 @@ function Messages({
     try {
       const u = localStorage.getItem('truehunt_user')
       if (u) currentUser = JSON.parse(u)
-    } catch {}
+    } catch (error) {
+      console.warn('Could not read the cached user for incoming messages:', error)
+    }
 
     const content = newMsg.content
     const msgId = newMsg.id || `msg-${Date.now()}`
@@ -794,7 +805,7 @@ function Messages({
               }
             }
 
-            const hasFreshPartnerName = Boolean(
+            const hasFreshPartnerName = !m.isGroupConversation && Boolean(
               otherName && !genericContactNames.has(otherName.trim().toLowerCase())
             )
             const nextName = hasFreshPartnerName ? otherName.trim() : m.name
@@ -891,7 +902,9 @@ function Messages({
     try {
       const u = localStorage.getItem('truehunt_user')
       if (u) storedUser = JSON.parse(u)
-    } catch {}
+    } catch (error) {
+      console.warn('Could not read the cached user for reply identity:', error)
+    }
 
     const token = localStorage.getItem('truehunt_token') || ''
     const email = storedUser?.email || 'pro@truehunt.in'
@@ -956,6 +969,7 @@ function Messages({
       setSearch('')
       setIsMobileDetailOpen(window.innerWidth <= 740)
       setIsDesktopChatOpen(window.innerWidth > 740)
+      void markConversationRead(conversation.id)
       return
     }
 
@@ -994,7 +1008,7 @@ function Messages({
     })
 
     setSelectedId(existingConversation?.id || profileConversation.id)
-    if (existingConversation?.unread) {
+    if (existingConversation) {
       void markConversationRead(existingConversation.id)
     }
     setActiveCategory('')
@@ -1105,11 +1119,12 @@ function Messages({
 
   async function markConversationRead(id) {
     const selectedMessage = messages.find((message) => String(message.id) === String(id))
-    if (!selectedMessage?.unread) return
-
-    setMessages((currentMessages) => currentMessages.map((message) => (
-      String(message.id) === String(id) ? { ...message, unread: false } : message
-    )))
+    const wasUnread = Boolean(selectedMessage?.unread)
+    if (wasUnread) {
+      setMessages((currentMessages) => currentMessages.map((message) => (
+        String(message.id) === String(id) ? { ...message, unread: false } : message
+      )))
+    }
 
     if (!/^\d+$/.test(String(id))) return
 
@@ -1117,12 +1132,31 @@ function Messages({
       await api.markConversationAsRead(id)
       await loadBackendConversations(mailbox)
     } catch (error) {
-      setMessages((currentMessages) => currentMessages.map((message) => (
-        String(message.id) === String(id) ? { ...message, unread: true } : message
-      )))
+      if (wasUnread) {
+        setMessages((currentMessages) => currentMessages.map((message) => (
+          String(message.id) === String(id) ? { ...message, unread: true } : message
+        )))
+      }
       console.warn('Could not mark conversation as read:', error)
     }
   }
+
+  useEffect(() => {
+    const conversationId = selectedId == null ? '' : String(selectedId)
+    if (autoReadAttemptRef.current.conversationId !== conversationId) {
+      autoReadAttemptRef.current = { conversationId, attempted: false }
+    }
+
+    const isConversationVisible = isActive
+      && (window.innerWidth <= 740 ? isMobileDetailOpen : isDesktopChatOpen)
+    if (!conversationId || !isConversationVisible || autoReadAttemptRef.current.attempted) return
+
+    const selectedConversation = messages.find((message) => String(message.id) === conversationId)
+    if (!selectedConversation?.unread) return
+
+    autoReadAttemptRef.current.attempted = true
+    void markConversationRead(selectedId)
+  }, [isActive, isDesktopChatOpen, isMobileDetailOpen, mailbox, messages, selectedId])
 
   function handleSelectMessage(id) {
     void markConversationRead(id)
@@ -1300,6 +1334,11 @@ function Messages({
     setMessages((currentMessages) => currentMessages.filter(
       (conversation) => String(conversation.id) !== conversationId,
     ))
+    if (/^\d+$/.test(conversationId)) {
+      api.hideConversation(conversationId).catch((error) => {
+        console.warn('Could not persist hidden conversation on backend:', error)
+      })
+    }
     setSelectedId(null)
     setIsMobileDetailOpen(false)
     setIsDesktopChatOpen(false)
@@ -1314,12 +1353,20 @@ function Messages({
     const content = replyText.trim()
 
     if (isSendingReply || !selectedMessage || (!content && !replyAttachment)) return
+    if (getMediaKind(replyAttachment) === 'image' && replyAttachmentMediaSafety.isBlocked) {
+      setReplyValidationError(
+        replyAttachmentMediaSafety.error || 'Wait for image moderation to finish before sending.',
+      )
+      return
+    }
 
     let currentUser = null
     try {
       const u = localStorage.getItem('truehunt_user')
       if (u) currentUser = JSON.parse(u)
-    } catch {}
+    } catch (error) {
+      console.warn('Could not read the cached user for reply identity:', error)
+    }
 
     const myIdentity = currentUser?.email || currentUser?.userId || 'me'
     const myEmail = (currentUser?.email || '').trim().toLowerCase()
@@ -1405,25 +1452,51 @@ function Messages({
     }
     setReplyValidationError('')
 
-    let targetReceiverId = ''
-    if (selectedMessage.profile?.email && !isMe(selectedMessage.profile.email)) {
-      targetReceiverId = selectedMessage.profile.email
-    } else if (selectedMessage.profile?.userId && !isMe(selectedMessage.profile.userId)) {
-      targetReceiverId = selectedMessage.profile.userId
-    } else if (selectedMessage.user1Id && !isMe(selectedMessage.user1Id)) {
-      targetReceiverId = selectedMessage.user1Id
-    } else if (selectedMessage.user2Id && !isMe(selectedMessage.user2Id)) {
-      targetReceiverId = selectedMessage.user2Id
-    } else if (selectedMessage.profile?.id && !isMe(selectedMessage.profile.id)) {
-      targetReceiverId = selectedMessage.profile.id
-    } else if (selectedMessage.name && !isMe(selectedMessage.name)) {
-      targetReceiverId = selectedMessage.name
-    } else {
-      targetReceiverId = selectedMessage.user2Id || selectedMessage.user1Id || selectedMessage.name
-    }
+    const targetReceiverId = (() => {
+      if (selectedMessage.isGroupConversation) return `group:${selectedMessage.connectionGroupId}`
+      if (selectedMessage.profile?.email && !isMe(selectedMessage.profile.email)) {
+        return selectedMessage.profile.email
+      }
+      if (selectedMessage.profile?.userId && !isMe(selectedMessage.profile.userId)) {
+        return selectedMessage.profile.userId
+      }
+      if (selectedMessage.user1Id && !isMe(selectedMessage.user1Id)) return selectedMessage.user1Id
+      if (selectedMessage.user2Id && !isMe(selectedMessage.user2Id)) return selectedMessage.user2Id
+      if (selectedMessage.profile?.id && !isMe(selectedMessage.profile.id)) return selectedMessage.profile.id
+      if (selectedMessage.name && !isMe(selectedMessage.name)) return selectedMessage.name
+      return selectedMessage.user2Id || selectedMessage.user1Id || selectedMessage.name
+    })()
 
     const messageId = `msg-${Date.now()}`
-    const attachment = replyAttachment
+    let attachment = replyAttachment
+    if (typeof File !== 'undefined' && replyAttachment instanceof File) {
+      try {
+        const uploaded = await api.uploadMedia(replyAttachment, 'chat-attachment')
+        attachment = {
+          name: uploaded?.fileName || replyAttachment.name,
+          fileName: uploaded?.fileName || replyAttachment.name,
+          url: uploaded?.url || '',
+          contentType: uploaded?.contentType || replyAttachment.type || '',
+          sizeBytes: uploaded?.sizeBytes || replyAttachment.size || 0,
+          kind: uploaded?.kind || 'file',
+        }
+      } catch (uploadError) {
+        console.warn('Chat attachment upload fallback:', uploadError)
+        if (
+          uploadError.code === 'MEDIA_CONTENT_REJECTED'
+          || uploadError.code === 'MEDIA_SCAN_FAILED'
+        ) {
+          setReplyValidationError(uploadError.message || 'The selected image could not be approved.')
+          return
+        }
+        attachment = {
+          name: replyAttachment.name,
+          fileName: replyAttachment.name,
+          contentType: replyAttachment.type || '',
+          sizeBytes: replyAttachment.size || 0,
+        }
+      }
+    }
 
     const sentAt = new Date().toISOString()
     const outgoingItem = {
@@ -2024,6 +2097,9 @@ function Messages({
                             </time>
                           )}
                           <div className={bubbleClassName}>
+                            {selectedMessage.isGroupConversation && !isOutgoing && message.senderName && (
+                              <span className="conversation-group-sender-name">{message.senderName}</span>
+                            )}
                             {editingMessageId === String(message.id) ? (
                               <form className="conversation-message-edit" onSubmit={saveEditedMessage}>
                                 <textarea
@@ -2166,6 +2242,13 @@ function Messages({
                       </button>
                     </div>
                   )}
+                  {getMediaKind(replyAttachment) === 'image' && (
+                    <MediaSafetyStatus
+                      safety={replyAttachmentMediaSafety}
+                      blockedMessage="This image has high adult content and cannot be sent."
+                      safeMessage="Safe content verified. Ready to send."
+                    />
+                  )}
                   <div className="message-reply-actions">
                     <div>
                       <input
@@ -2212,7 +2295,11 @@ function Messages({
                       className="reply-send-button"
                       type="submit"
                       aria-label={isSendingReply ? 'Sending message' : 'Send message'}
-                      disabled={isSendingReply || (!replyText.trim() && !replyAttachment)}
+                      disabled={
+                        isSendingReply
+                        || (!replyText.trim() && !replyAttachment)
+                        || (getMediaKind(replyAttachment) === 'image' && replyAttachmentMediaSafety.isBlocked)
+                      }
                     >
                       <Send size={17} />
                     </button>

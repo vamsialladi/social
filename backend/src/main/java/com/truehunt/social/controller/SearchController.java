@@ -8,7 +8,9 @@ import com.truehunt.social.model.PostEntity;
 import com.truehunt.social.repository.NetworkProfileRepository;
 import com.truehunt.social.repository.PostRepository;
 import com.truehunt.social.service.JobService;
+import com.truehunt.social.service.SettingsService;
 import com.truehunt.social.service.TalentService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -26,15 +28,26 @@ public class SearchController {
     private final NetworkProfileRepository networkProfileRepository;
     private final TalentService talentService;
     private final JobService jobService;
+    private final SettingsService settingsService;
 
     public SearchController(PostRepository postRepository,
                             NetworkProfileRepository networkProfileRepository,
                             TalentService talentService,
                             JobService jobService) {
+        this(postRepository, networkProfileRepository, talentService, jobService, null);
+    }
+
+    @Autowired
+    public SearchController(PostRepository postRepository,
+                            NetworkProfileRepository networkProfileRepository,
+                            TalentService talentService,
+                            JobService jobService,
+                            SettingsService settingsService) {
         this.postRepository = postRepository;
         this.networkProfileRepository = networkProfileRepository;
         this.talentService = talentService;
         this.jobService = jobService;
+        this.settingsService = settingsService;
     }
 
     @GetMapping
@@ -50,11 +63,27 @@ public class SearchController {
                 .collect(Collectors.toList());
 
         List<Map<String, Object>> matchedPosts = postRepository.findAll().stream()
+                .filter(p -> !"private".equalsIgnoreCase(p.getAudience())
+                        && !"connections".equalsIgnoreCase(p.getAudience()))
                 .filter(p -> q.isEmpty() ||
                         (p.getContent() != null && p.getContent().toLowerCase().contains(q)) ||
                         (p.getTitle() != null && p.getTitle().toLowerCase().contains(q)) ||
                         (p.getAuthorName() != null && p.getAuthorName().toLowerCase().contains(q)))
-                .map(PostEntity::toDto)
+                .map(p -> {
+                    Map<String, Object> dto = p.toDto();
+                    if (settingsService != null) {
+                        if (!settingsService.isLikeCountEnabledForAuthor(p.getAuthorId())) {
+                            dto.put("likesCount", 0);
+                            dto.put("liked", false);
+                            dto.put("likeCountDisabled", true);
+                        }
+                        if (!settingsService.isShareCountEnabledForAuthor(p.getAuthorId())) {
+                            dto.put("sharesCount", 0);
+                            dto.put("shareCountDisabled", true);
+                        }
+                    }
+                    return dto;
+                })
                 .collect(Collectors.toList());
 
         List<TalentDto> matchedTalents = talentService.search(q, null, null);

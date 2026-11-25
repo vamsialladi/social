@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { NavLink, Link, useNavigate, useLocation } from 'react-router-dom';
+import { useState, useEffect, useRef } from 'react';
+import { NavLink, Link, useLocation } from 'react-router-dom';
 import {
   Film,
   Users,
@@ -119,7 +119,6 @@ export default function Navbar() {
       : 'Tollywood';
   });
   const { user, logout, isAuthenticated } = useAuth();
-  const navigate = useNavigate();
   const location = useLocation();
 
   // Close mobile menu on route change
@@ -171,8 +170,8 @@ export default function Navbar() {
           justifyContent: 'space-between',
           height: '70px',
           width: '100%',
-          maxWidth: '1440px',
-          margin: '0 auto',
+          maxWidth: 'none',
+          margin: '0',
           padding: '0 24px',
           boxSizing: 'border-box'
         }}

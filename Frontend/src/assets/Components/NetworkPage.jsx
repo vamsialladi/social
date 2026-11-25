@@ -1,10 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import api from '../../api'
+import MediaSafetyStatus from '../../components/common/MediaSafetyStatus.jsx'
+import { useMediaSafety } from '../../hooks/useMediaSafety.js'
 import ProfileBanner from './ProfileBanner.jsx'
 import {
   ArrowLeft,
   Check,
+  Image,
   MessageCircle,
+  MoreVertical,
+  Network,
+  Trash2,
   UserPlus,
   UserRound,
   UsersRound,
@@ -17,9 +23,55 @@ const networkSections = [
   { label: 'Connections', Icon: UsersRound },
   { label: 'Following & followers', Icon: UserRound },
   { label: 'Requests', Icon: UserPlus },
+  { label: 'Groups', Icon: Network },
+  { label: 'Banner', Icon: Image },
 ]
 
 const demoNetworkProfileIdentifiers = new Set([])
+const groupPhotoMimeTypesByExtension = {
+  avif: 'image/avif',
+  bmp: 'image/bmp',
+  gif: 'image/gif',
+  jpeg: 'image/jpeg',
+  jpg: 'image/jpeg',
+  png: 'image/png',
+  webp: 'image/webp',
+}
+const MAX_GROUP_PHOTO_SIZE_BYTES = 10 * 1024 * 1024
+
+function normalizeGroupPhotoFile(file) {
+  const type = String(file.type || '').toLowerCase()
+  const knownTypes = Object.values(groupPhotoMimeTypesByExtension)
+  if (knownTypes.includes(type)) return file
+
+  const extension = file.name.split('.').pop()?.toLowerCase() || ''
+  const inferredType = groupPhotoMimeTypesByExtension[extension]
+  const canInferType = !type || type === 'application/octet-stream'
+    || ['image/pjpeg', 'image/jpg', 'image/x-png', 'image/x-ms-bmp'].includes(type)
+  if (!canInferType || !inferredType) return null
+
+  return new File([file], file.name, { type: inferredType, lastModified: file.lastModified })
+}
+
+function getProfileLocationSummary(profile) {
+  const structuredParts = [profile?.district, profile?.state, profile?.country]
+    .map((part) => String(part || '').trim())
+    .filter(Boolean)
+
+  if (structuredParts.length) return structuredParts.join(', ')
+
+  const parts = String(profile?.location || profile?.address || '')
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean)
+  if (parts.length < 2) return ''
+
+  const summaryParts = parts.slice(-3)
+  if (/\b(?:old village|street|road|lane|colony|apartment|flat|plot|door no|house no)\b|\d/i.test(summaryParts[0])) {
+    summaryParts.shift()
+  }
+  return summaryParts.join(', ')
+}
 
 function getProfileKey(profileOrId) {
   const id = typeof profileOrId === 'object' && profileOrId !== null
@@ -37,7 +89,7 @@ function getProfileKey(profileOrId) {
 }
 
 function getProfileIdentityKeys(profile) {
-  return [
+  return Array.from(new Set([
     profile?.id,
     profile?.userId,
     profile?.user_id,
@@ -50,12 +102,20 @@ function getProfileIdentityKeys(profile) {
     profile?.email,
   ]
     .filter(Boolean)
-    .map((identifier) => String(identifier).trim().toLowerCase())
+    .map((identifier) => String(identifier).trim().toLowerCase())))
 }
 
 function profilesMatch(first, second) {
   const secondKeys = new Set(getProfileIdentityKeys(second))
   return getProfileIdentityKeys(first).some((key) => secondKeys.has(key))
+}
+
+function getUniqueProfiles(profiles) {
+  return profiles.reduce((unique, profile) => {
+    if (!profile || unique.some((existing) => profilesMatch(existing, profile))) return unique
+    unique.push(profile)
+    return unique
+  }, [])
 }
 
 function isDemoNetworkProfile(profile) {
@@ -75,7 +135,7 @@ function getProfileName(...profiles) {
     ]
     const name = candidates
       .map((candidate) => String(candidate || '').trim().replace(/\s+/g, ' '))
-      .find((candidate) => candidate && !['truehunt member', 'cinema professional', 'member'].includes(candidate.toLowerCase()))
+      .find((candidate) => candidate && !['truehunt member', 'cinema professional', 'member', 'profile'].includes(candidate.toLowerCase()))
     if (name) return name
   }
   return ''
@@ -108,7 +168,66 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
   const [followError, setFollowError] = useState('')
   const [connectDialogProfile, setConnectDialogProfile] = useState(null)
   const [connectionNote, setConnectionNote] = useState('')
+  const [followerProfiles, setFollowerProfiles] = useState([])
+  const [catchUpUpdates, setCatchUpUpdates] = useState([])
+  const [connectionGroups, setConnectionGroups] = useState([])
+  const [loadingConnectionGroups, setLoadingConnectionGroups] = useState(false)
+  const [groupLoadError, setGroupLoadError] = useState('')
+  const [groupError, setGroupError] = useState('')
+  const [addingGroupMembersId, setAddingGroupMembersId] = useState('')
+  const [selectedGroupMemberIds, setSelectedGroupMemberIds] = useState([])
+  const [isAddingGroupMembers, setIsAddingGroupMembers] = useState(false)
+  const [groupMembersError, setGroupMembersError] = useState('')
+  const [isGroupFormOpen, setIsGroupFormOpen] = useState(false)
+  const [groupNameDraft, setGroupNameDraft] = useState('')
+  const [isSavingGroup, setIsSavingGroup] = useState(false)
+  const [editingGroupId, setEditingGroupId] = useState('')
+  const [selectedGroupId, setSelectedGroupId] = useState('')
+  const [viewingGroupFollowersId, setViewingGroupFollowersId] = useState('')
+  const [groupPosts, setGroupPosts] = useState([])
+  const [groupPostsPreview, setGroupPostsPreview] = useState(null)
+  const [canViewGroupPosts, setCanViewGroupPosts] = useState(false)
+  const [loadingGroupPosts, setLoadingGroupPosts] = useState(false)
+  const [groupPostsError, setGroupPostsError] = useState('')
+  const [groupPostText, setGroupPostText] = useState('')
+  const [groupPostFile, setGroupPostFile] = useState(null)
+  const [groupPostPreviewUrl, setGroupPostPreviewUrl] = useState('')
+  const [isCreatingGroupPost, setIsCreatingGroupPost] = useState(false)
+  const [deletingGroupPostId, setDeletingGroupPostId] = useState('')
+  const [openGroupMenuId, setOpenGroupMenuId] = useState('')
+  const [openingGroupConversationId, setOpeningGroupConversationId] = useState('')
+  const [deletingGroupId, setDeletingGroupId] = useState('')
+  const [updatingGroupFollowId, setUpdatingGroupFollowId] = useState('')
+  const [groupPhotoFile, setGroupPhotoFile] = useState(null)
+  const [groupPhotoUrl, setGroupPhotoUrl] = useState('')
+  const [groupPhotoPreview, setGroupPhotoPreview] = useState('')
+  const [groupPhotoError, setGroupPhotoError] = useState('')
+  const [connectingWithOthersEnabled, setConnectingWithOthersEnabled] = useState(() => {
+    try {
+      const stored = localStorage.getItem('truehunt_user')
+      const user = stored ? JSON.parse(stored) : null
+      const email = user?.email || ''
+      if (email) {
+        const settings = localStorage.getItem(`truehunt-social-settings:${String(email).trim().toLowerCase()}`)
+        if (settings) {
+          const parsed = JSON.parse(settings)
+          if (parsed.notifications) {
+            if (parsed.notifications.connections === false || parsed.notifications['connecting-with-others'] === false) {
+              return false
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('Could not read cached connection notification preferences:', error)
+    }
+    return true
+  })
   const relationshipOverrides = useRef(new Map())
+  const connectionGroupsLoadVersion = useRef(0)
+  const groupPhotoPreviewObjectUrl = useRef('')
+  const groupPostPreviewObjectUrl = useRef('')
+  const groupPostMediaSafety = useMediaSafety(groupPostFile)
   const currentUserIdentityKey = JSON.stringify(currentUserIdentifiers
     .filter(Boolean)
     .map((identifier) => String(identifier).trim().toLowerCase()))
@@ -120,18 +239,601 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
     const keys = getProfileIdentityKeys(profile)
     return keys.some((k) => pendingProfiles.includes(k)) || Boolean(profile.isPending)
   }
-  const suggestionProfiles = profiles.filter((profile) => (
-    !isProfileConnected(profile) && !isProfilePending(profile)
-  ))
+  const isProfileFollowed = (profile) => (
+    getProfileIdentityKeys(profile).some((key) => followedProfiles.includes(key))
+    || Boolean(profile.isFollowing)
+  )
+  const connectionSectionProfiles = getUniqueProfiles(
+    profiles.filter((profile) => isProfileConnected(profile)),
+  )
+  const followingProfiles = getUniqueProfiles(
+    profiles.filter((profile) => isProfileFollowed(profile)),
+  )
+  const followingAndFollowerProfiles = getUniqueProfiles([
+    ...followingProfiles,
+    ...followerProfiles,
+  ])
+  const requestSectionProfiles = getUniqueProfiles(
+    profiles.filter((profile) => isProfilePending(profile)),
+  )
+  const suggestionProfiles = !connectingWithOthersEnabled ? [] : getUniqueProfiles(profiles.filter((profile) => (
+    !isProfileConnected(profile)
+    && !isProfilePending(profile)
+    && !isProfileFollowed(profile)
+    && profile.canConnect !== false
+  )))
   const displayedProfiles = (
     activeSection === 'connections'
-      ? profiles.filter((profile) => isProfileConnected(profile))
+      ? connectionSectionProfiles
       : activeSection === 'following'
-        ? profiles.filter((profile) => getProfileIdentityKeys(profile).some((k) => followedProfiles.includes(k)) || Boolean(profile.isFollowing))
+        ? followingAndFollowerProfiles
         : activeSection === 'requests'
-          ? profiles.filter((profile) => isProfilePending(profile))
+          ? requestSectionProfiles
           : []
   )
+  useEffect(() => {
+    if (!isActive || isAdmin) return undefined
+
+    let isCurrent = true
+    let lastLoadStartedAt = 0
+    async function loadGroups() {
+      if (!isCurrent || Date.now() - lastLoadStartedAt < 1000) return
+      lastLoadStartedAt = Date.now()
+      setLoadingConnectionGroups(true)
+      setGroupLoadError('')
+      const loadVersion = ++connectionGroupsLoadVersion.current
+      try {
+        const groups = await api.getConnectionGroups()
+        if (isCurrent && loadVersion === connectionGroupsLoadVersion.current) {
+          setConnectionGroups(Array.isArray(groups) ? groups : [])
+        }
+      } catch (error) {
+        console.warn('Could not load connection groups:', error)
+        if (isCurrent && loadVersion === connectionGroupsLoadVersion.current) {
+          setGroupLoadError(error.message || 'Could not load your groups. Please try again.')
+        }
+      } finally {
+        if (isCurrent && loadVersion === connectionGroupsLoadVersion.current) {
+          setLoadingConnectionGroups(false)
+        }
+      }
+    }
+
+    function refreshWhenVisible() {
+      if (!document.hidden) void loadGroups()
+    }
+
+    void loadGroups()
+    window.addEventListener('focus', refreshWhenVisible)
+    document.addEventListener('visibilitychange', refreshWhenVisible)
+
+    return () => {
+      isCurrent = false
+      window.removeEventListener('focus', refreshWhenVisible)
+      document.removeEventListener('visibilitychange', refreshWhenVisible)
+    }
+  }, [currentUserIdentityKey, isActive, isAdmin])
+
+  useEffect(() => () => {
+    if (groupPhotoPreviewObjectUrl.current) {
+      URL.revokeObjectURL(groupPhotoPreviewObjectUrl.current)
+    }
+    if (groupPostPreviewObjectUrl.current) {
+      URL.revokeObjectURL(groupPostPreviewObjectUrl.current)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!openGroupMenuId) return undefined
+
+    function closeGroupMenu(event) {
+      if (event.type === 'keydown' && event.key !== 'Escape') return
+      if (event.type === 'pointerdown' && event.target.closest('.network-group-card-actions')) return
+      setOpenGroupMenuId('')
+    }
+
+    document.addEventListener('pointerdown', closeGroupMenu)
+    document.addEventListener('keydown', closeGroupMenu)
+    return () => {
+      document.removeEventListener('pointerdown', closeGroupMenu)
+      document.removeEventListener('keydown', closeGroupMenu)
+    }
+  }, [openGroupMenuId])
+
+  const selectedConnectionGroup = connectionGroups.find(
+    (group) => String(group.id) === selectedGroupId,
+  )
+  const selectedGroupProfiles = selectedConnectionGroup
+    ? (selectedConnectionGroup.memberProfileIds || []).map((memberId) => {
+      const profile = findProfileByIdentity(memberId)
+      if (profile) return profile
+      const isCurrentUser = currentUserIdentifiers.some((identifier) => (
+        String(identifier).trim().toLowerCase() === String(memberId).trim().toLowerCase()
+      ))
+      return isCurrentUser ? { id: memberId, userId: memberId, name: 'You' } : null
+    }).filter(Boolean)
+    : []
+  const selectedGroupMemberKeys = new Set(
+    (selectedConnectionGroup?.memberProfileIds || []).map((memberId) => String(memberId).trim().toLowerCase()),
+  )
+  const currentUserIdentityKeys = new Set(currentUserIdentifiers
+    .filter(Boolean)
+    .map((identifier) => String(identifier).trim().toLowerCase()))
+  const creatorConnectionKeys = new Set(connectionSectionProfiles.flatMap(getProfileIdentityKeys))
+  const creatorFollowerKeys = new Set(followerProfiles.flatMap(getProfileIdentityKeys))
+  const addGroupMemberProfiles = selectedConnectionGroup
+    ? getUniqueProfiles([...connectionSectionProfiles, ...followerProfiles]).filter((profile) => {
+      const identityKeys = getProfileIdentityKeys(profile)
+      return !identityKeys.some((key) => (
+        selectedGroupMemberKeys.has(key) || currentUserIdentityKeys.has(key)
+      ))
+    })
+    : []
+  const selectedGroupMembersKey = (selectedConnectionGroup?.memberProfileIds || []).join('|')
+  const addingGroupMembers = connectionGroups.find(
+    (group) => String(group.id) === addingGroupMembersId,
+  )
+  const viewingConnectionGroup = connectionGroups.find(
+    (group) => String(group.id) === viewingGroupFollowersId,
+  )
+
+  useEffect(() => {
+    if (!isActive || activeSection !== 'groups' || !selectedGroupId) return undefined
+
+    let isCurrent = true
+    let lastLoadStartedAt = 0
+    async function loadGroupPosts() {
+      if (!isCurrent || Date.now() - lastLoadStartedAt < 1000) return
+      lastLoadStartedAt = Date.now()
+      setLoadingGroupPosts(true)
+      setGroupPostsError('')
+      try {
+        const feed = await api.getConnectionGroupPosts(selectedGroupId)
+        if (isCurrent) {
+          setCanViewGroupPosts(Boolean(feed?.canViewAll))
+          setGroupPosts(Array.isArray(feed?.posts) ? feed.posts : [])
+          setGroupPostsPreview(feed?.preview || null)
+        }
+      } catch (error) {
+        console.error('Could not load group member posts:', error)
+        if (isCurrent) setGroupPostsError(error.message || 'Could not load posts from this group.')
+      } finally {
+        if (isCurrent) setLoadingGroupPosts(false)
+      }
+    }
+
+    function refreshWhenVisible() {
+      if (!document.hidden) void loadGroupPosts()
+    }
+
+    void loadGroupPosts()
+    window.addEventListener('focus', refreshWhenVisible)
+    document.addEventListener('visibilitychange', refreshWhenVisible)
+
+    return () => {
+      isCurrent = false
+      window.removeEventListener('focus', refreshWhenVisible)
+      document.removeEventListener('visibilitychange', refreshWhenVisible)
+    }
+  }, [activeSection, currentUserIdentityKey, isActive, selectedGroupId, selectedGroupMembersKey])
+
+  function handleGroupPostFileChange(event) {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+
+    const supportedType = file.type.startsWith('image/') || file.type.startsWith('video/')
+    if (!supportedType) {
+      setGroupError('Choose an image or video file.')
+      return
+    }
+    if (file.size > 50 * 1024 * 1024) {
+      setGroupError('Group post attachments must be no larger than 50 MB.')
+      return
+    }
+
+    if (groupPostPreviewObjectUrl.current) {
+      URL.revokeObjectURL(groupPostPreviewObjectUrl.current)
+    }
+    groupPostPreviewObjectUrl.current = URL.createObjectURL(file)
+    setGroupPostFile(file)
+    setGroupPostPreviewUrl(groupPostPreviewObjectUrl.current)
+    setGroupError('')
+  }
+
+  function cancelGroupPostDraft() {
+    if (groupPostPreviewObjectUrl.current) {
+      URL.revokeObjectURL(groupPostPreviewObjectUrl.current)
+      groupPostPreviewObjectUrl.current = ''
+    }
+    setGroupPostFile(null)
+    setGroupPostPreviewUrl('')
+    setGroupPostText('')
+    setGroupError('')
+  }
+
+  async function handleCreateGroupPost(event) {
+    event.preventDefault()
+    if (!selectedConnectionGroup?.isOwner || isCreatingGroupPost || groupPostMediaSafety.isBlocked) return
+
+    const content = groupPostText.trim()
+    if (!content && !groupPostFile) {
+      setGroupError('Write a message or attach an image or video.')
+      return
+    }
+
+    setIsCreatingGroupPost(true)
+    setGroupError('')
+    try {
+      let mediaUrl = ''
+      let mediaType = ''
+      if (groupPostFile) {
+        const upload = await api.uploadMedia(groupPostFile, 'connection-group-post')
+        if (!upload?.url) {
+          throw new Error('The group attachment upload did not return a media URL.')
+        }
+        mediaUrl = upload.url
+        mediaType = groupPostFile.type
+      }
+
+      const post = await api.createConnectionGroupPost(selectedConnectionGroup.id, {
+        content,
+        mediaUrl,
+        mediaType,
+      })
+      setGroupPosts((current) => [post, ...current])
+      setGroupPostsPreview(post.mediaType?.startsWith('image/')
+        ? { imageUrl: post.mediaUrl, createdAt: post.createdAt }
+        : groupPostsPreview)
+      setGroupPostText('')
+      setGroupPostFile(null)
+      setGroupPostPreviewUrl('')
+      if (groupPostPreviewObjectUrl.current) {
+        URL.revokeObjectURL(groupPostPreviewObjectUrl.current)
+        groupPostPreviewObjectUrl.current = ''
+      }
+    } catch (error) {
+      console.error('Could not publish group post:', error)
+      setGroupError(error.message || 'Could not publish this group post. Please try again.')
+    } finally {
+      setIsCreatingGroupPost(false)
+    }
+  }
+
+  async function handleDeleteGroupPost(post) {
+    if (!selectedConnectionGroup?.isOwner || deletingGroupPostId) return
+    if (!window.confirm('Delete this group update and its text and attachment? This cannot be undone.')) return
+
+    const postId = String(post.id)
+    setDeletingGroupPostId(postId)
+    setGroupError('')
+    try {
+      await api.deleteConnectionGroupPost(selectedConnectionGroup.id, post.id)
+      setGroupPosts((current) => current.filter((item) => String(item.id) !== postId))
+    } catch (error) {
+      console.error('Could not delete group update:', error)
+      setGroupError(error.message || 'Could not delete this group update. Please try again.')
+    } finally {
+      setDeletingGroupPostId('')
+    }
+  }
+
+  function updateGroupPhotoSelection(file, savedImageUrl = '') {
+    if (groupPhotoPreviewObjectUrl.current) {
+      URL.revokeObjectURL(groupPhotoPreviewObjectUrl.current)
+    }
+    groupPhotoPreviewObjectUrl.current = file ? URL.createObjectURL(file) : ''
+    setGroupPhotoFile(file)
+    setGroupPhotoPreview(groupPhotoPreviewObjectUrl.current)
+    setGroupPhotoUrl(file ? '' : savedImageUrl)
+    setGroupPhotoError('')
+  }
+
+  function handleGroupPhotoChange(event) {
+    const selectedFile = event.target.files?.[0]
+    event.target.value = ''
+    if (!selectedFile) return
+
+    const file = normalizeGroupPhotoFile(selectedFile)
+    if (!file) {
+      const selectedType = selectedFile.type || selectedFile.name.split('.').pop()?.toUpperCase() || 'unknown'
+      setGroupPhotoError(
+        `The selected file type (${selectedType}) is not supported. Choose an AVIF, BMP, GIF, JPEG, PNG, or WebP image.`,
+      )
+      return
+    }
+    if (file.size > MAX_GROUP_PHOTO_SIZE_BYTES) {
+      const sizeInMegabytes = (file.size / (1024 * 1024)).toFixed(2)
+      setGroupPhotoError(`Group photos must be no larger than 10 MB. This file is ${sizeInMegabytes} MB.`)
+      return
+    }
+
+    setGroupError('')
+    setGroupPhotoError('')
+    updateGroupPhotoSelection(file)
+  }
+
+  async function resolveGroupPhotoUrl() {
+    if (!groupPhotoFile) return groupPhotoUrl
+
+    const uploadedPhoto = await api.uploadMedia(groupPhotoFile, 'connection-group-photo')
+    if (!uploadedPhoto?.url) {
+      throw new Error('The group photo upload did not return an image URL.')
+    }
+    return uploadedPhoto.url
+  }
+
+  function renderGroupPhotoField(inputId) {
+    const preview = groupPhotoPreview || groupPhotoUrl
+    return (
+      <div className="network-group-photo-field">
+        <label htmlFor={inputId}>Group photo</label>
+        <div className="network-group-photo-field-controls">
+          {preview ? (
+            <img className="network-group-photo-preview" src={preview} alt="Group photo preview" />
+          ) : (
+            <span className="network-group-photo-preview is-empty" aria-hidden="true">
+              <Image size={20} />
+            </span>
+          )}
+          <div>
+            <input
+              id={inputId}
+              type="file"
+              accept="image/*"
+              onChange={handleGroupPhotoChange}
+              disabled={isSavingGroup}
+            />
+            <small aria-live="polite">
+              {groupPhotoFile ? `Selected: ${groupPhotoFile.name}` : 'Optional · maximum 10 MB'}
+            </small>
+            {groupPhotoError && <small className="network-connection-error" role="alert">{groupPhotoError}</small>}
+            {preview && (
+              <button
+                type="button"
+                className="network-group-photo-remove"
+                disabled={isSavingGroup}
+                onClick={() => updateGroupPhotoSelection(null)}
+              >
+                Remove photo
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  async function handleCreateGroup(event) {
+    event.preventDefault()
+    if (isSavingGroup) return
+
+    const name = groupNameDraft.trim()
+    if (!name) {
+      setGroupError('Enter a group name.')
+      return
+    }
+    setIsSavingGroup(true)
+    setGroupError('')
+    try {
+      const createdGroup = await api.createConnectionGroup(
+        name,
+        [],
+        await resolveGroupPhotoUrl(),
+      )
+      setConnectionGroups((current) => [createdGroup, ...current])
+      setGroupNameDraft('')
+      updateGroupPhotoSelection(null)
+      setIsGroupFormOpen(false)
+    } catch (error) {
+      console.error('Could not create connection group:', error)
+      setGroupError(error.message || 'Could not create this group. Please try again.')
+    } finally {
+      setIsSavingGroup(false)
+    }
+  }
+
+  async function handleUpdateGroup(event, group) {
+    event.preventDefault()
+    if (isSavingGroup) return
+
+    const name = groupNameDraft.trim()
+    if (!name) {
+      setGroupError('Enter a group name.')
+      return
+    }
+
+    setIsSavingGroup(true)
+    setGroupError('')
+    try {
+      const updatedGroup = await api.updateConnectionGroup(
+        group.id,
+        name,
+        group.memberProfileIds || [],
+        await resolveGroupPhotoUrl(),
+      )
+      connectionGroupsLoadVersion.current += 1
+      setLoadingConnectionGroups(false)
+      setConnectionGroups((current) => current.map((item) => (
+        String(item.id) === String(updatedGroup.id) ? updatedGroup : item
+      )))
+      setSelectedGroupId((current) => (String(current) === String(group.id) ? String(updatedGroup.id) : current))
+      setEditingGroupId('')
+      setGroupNameDraft('')
+      updateGroupPhotoSelection(null)
+    } catch (error) {
+      console.error('Could not update connection group:', error)
+      setGroupError(error.message || 'Could not update this group. Please try again.')
+    } finally {
+      setIsSavingGroup(false)
+    }
+  }
+
+  function openGroupMemberPicker(group) {
+    if (!group?.isOwner || isAddingGroupMembers) return
+    setSelectedGroupId(String(group.id))
+    setSelectedGroupMemberIds([])
+    setGroupMembersError('')
+    setAddingGroupMembersId(String(group.id))
+  }
+
+  async function handleAddGroupMembers() {
+    const group = connectionGroups.find((item) => String(item.id) === addingGroupMembersId)
+    if (!group?.isOwner || isAddingGroupMembers) return
+
+    const memberProfileIds = addGroupMemberProfiles
+      .filter((profile) => selectedGroupMemberIds.includes(getProfileKey(profile)))
+      .map((profile) => getProfileKey(profile))
+      .filter(Boolean)
+    if (!memberProfileIds.length) {
+      setGroupMembersError('Select at least one profile to add.')
+      return
+    }
+
+    setIsAddingGroupMembers(true)
+    setGroupMembersError('')
+    try {
+      const updatedGroup = await api.addConnectionGroupMembers(group.id, memberProfileIds)
+      setConnectionGroups((current) => current.map((item) => (
+        String(item.id) === String(updatedGroup.id) ? updatedGroup : item
+      )))
+      setAddingGroupMembersId('')
+      setSelectedGroupMemberIds([])
+    } catch (error) {
+      console.error('Could not add group members:', error)
+      setGroupMembersError(error.message || 'Could not add these members. Please try again.')
+    } finally {
+      setIsAddingGroupMembers(false)
+    }
+  }
+
+  async function handleDeleteGroup(group) {
+    if (deletingGroupId || isSavingGroup) return
+    if (!window.confirm(`Delete "${group.name}" and all its members? This cannot be undone.`)) return
+
+    const groupId = String(group.id)
+    setDeletingGroupId(groupId)
+    setGroupError('')
+    try {
+      await api.deleteConnectionGroup(group.id)
+      setConnectionGroups((current) => current.filter((item) => String(item.id) !== groupId))
+      setSelectedGroupId((current) => current === groupId ? '' : current)
+      if (editingGroupId === groupId) {
+        setEditingGroupId('')
+        setGroupNameDraft('')
+        updateGroupPhotoSelection(null)
+      }
+    } catch (error) {
+      console.error('Could not delete connection group:', error)
+      setGroupError(error.message || 'Could not delete this group. Please try again.')
+    } finally {
+      setDeletingGroupId('')
+    }
+  }
+
+  async function toggleGroupFollow(group) {
+    const groupId = String(group.id)
+    if (updatingGroupFollowId) return
+
+    setUpdatingGroupFollowId(groupId)
+    setGroupError('')
+    try {
+      const updatedGroup = group.isFollowing
+        ? await api.unfollowConnectionGroup(group.id)
+        : await api.followConnectionGroup(group.id)
+      setConnectionGroups((current) => current.map((item) => (
+        String(item.id) === groupId ? updatedGroup : item
+      )))
+    } catch (error) {
+      console.error('Could not update connection group follow status:', error)
+      setGroupError(error.message || 'Could not update this group follow. Please try again.')
+    } finally {
+      setUpdatingGroupFollowId('')
+    }
+  }
+
+  function getGroupFollowers(group) {
+    const followerIds = new Set((group.followerUserIds || []).filter(Boolean).map(
+      (id) => String(id).trim().toLowerCase(),
+    ))
+    const profileIds = Array.from(new Set([
+      ...(group.memberProfileIds || []),
+      ...(group.followerUserIds || []),
+    ].filter(Boolean).map((id) => String(id).trim())))
+    const profilesByKey = new Map()
+
+    profileIds.forEach((profileId) => {
+      const profile = findProfileByIdentity(profileId)
+      const isCurrentUser = currentUserIdentifiers.some((identifier) => (
+        String(identifier).trim().toLowerCase() === profileId.toLowerCase()
+      ))
+      const resolvedProfile = profile || {
+        id: profileId,
+        userId: profileId,
+        name: isCurrentUser ? 'You' : 'Group member',
+        isGroupProfilePlaceholder: true,
+      }
+      const key = getProfileKey(resolvedProfile) || profileId.toLowerCase()
+      profilesByKey.set(key, {
+        ...resolvedProfile,
+        groupRelationship: followerIds.has(profileId.toLowerCase()) ? 'Follower' : 'Member',
+      })
+    })
+
+    return Array.from(profilesByKey.values())
+  }
+
+  function startEditingGroup(group) {
+    const groupId = String(group.id)
+    setGroupError('')
+    setIsGroupFormOpen(false)
+    setOpenGroupMenuId('')
+    setEditingGroupId(groupId)
+    setGroupNameDraft(group.name)
+    updateGroupPhotoSelection(null, group.imageUrl || '')
+  }
+
+  async function handleOpenGroupConversation(group) {
+    if (openingGroupConversationId) return
+
+    const groupId = String(group.id)
+    setOpeningGroupConversationId(groupId)
+    setGroupError('')
+    try {
+      const conversation = await api.openConnectionGroupConversation(group.id)
+      if (!conversation?.id) {
+        throw new Error('Could not open this group conversation. Please try again.')
+      }
+      onMessage?.(conversation)
+    } catch (error) {
+      console.error('Could not open the group conversation:', error)
+      setGroupError(error.message || 'Could not open this group conversation. Please try again.')
+    } finally {
+      setOpeningGroupConversationId('')
+    }
+  }
+
+  function renderGroupPhoto(imageUrl = '', isLarge = false) {
+    if (imageUrl) {
+      return (
+        <span
+          className={`network-group-photo is-custom${isLarge ? ' is-large' : ''}`}
+          aria-hidden="true"
+        >
+          <img src={imageUrl} alt="" />
+        </span>
+      )
+    }
+
+    return (
+      <span
+        className={`network-group-photo${isLarge ? ' is-large' : ''}`}
+        aria-hidden="true"
+      >
+        <UsersRound size={isLarge ? 30 : 24} aria-hidden="true" />
+      </span>
+    )
+  }
 
   function openConversation(profile) {
     if (!profile?.name) return
@@ -151,17 +853,31 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
 
   function getInvitationProfile(invitation) {
     const profile = invitation?.profile || {}
+    const matchedProfile = profiles.find((candidate) => (
+      profilesMatch(candidate, profile) || profilesMatch(candidate, invitation)
+    ))
     const profileId = getProfileKey(profile)
       || getProfileKey(invitation?.profileId)
       || getProfileKey(invitation?.senderId)
       || getProfileKey(invitation?.userId)
       || getProfileKey(invitation)
-    const name = getProfileName(profile, invitation) || 'Profile'
+    const name = getProfileName(profile, matchedProfile, invitation) || 'Profile'
+    const profileImageUrl = profile.profileImageUrl
+      || profile.avatar
+      || matchedProfile?.profileImageUrl
+      || matchedProfile?.avatar
+      || ''
     return {
+      ...matchedProfile,
       ...profile,
-      id: profile.id || profile.userId || invitation?.profileId || invitation?.senderId || invitation?.userId || profileId,
-      userId: profile.userId || profile.id || invitation?.profileId || invitation?.senderId || invitation?.userId || profileId,
+      id: matchedProfile?.id || profile.id || profile.userId || invitation?.profileId || invitation?.senderId || invitation?.userId || profileId,
+      userId: matchedProfile?.userId || profile.userId || profile.id || invitation?.profileId || invitation?.senderId || invitation?.userId || profileId,
       name,
+      initials: profile.initials || matchedProfile?.initials || name.split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || 'TH',
+      profileImageUrl,
+      avatar: profile.avatar || profileImageUrl,
+      role: profile.role || matchedProfile?.role || matchedProfile?.headline || 'Cinema Professional',
+      location: profile.location || matchedProfile?.location || matchedProfile?.address || '',
     }
   }
 
@@ -178,12 +894,16 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
 
     const normalizedCurrentUserIdentifiers = new Set(JSON.parse(currentUserIdentityKey || '[]'))
     try {
-      const [registeredProfiles, serverConnected, suggestionsData, invitationsData] = await Promise.all([
+      const [registeredProfiles, serverConnected, suggestionsData, invitationsData, followersData, catchUpData] = await Promise.all([
         api.getProfileDirectory().catch(() => []),
         api.getConnectedProfiles().catch(() => []),
         api.getNetworkSuggestions().catch(() => []),
         api.getInvitations().catch(() => []),
+        api.getFollowers().catch(() => []),
+        api.getNetworkCatchUp().catch(() => []),
       ])
+      setFollowerProfiles(Array.isArray(followersData) ? followersData : [])
+      setCatchUpUpdates(Array.isArray(catchUpData) ? catchUpData : [])
 
       const networkProfiles = Array.isArray(suggestionsData)
         ? suggestionsData.filter((profile) => !isDemoNetworkProfile(profile))
@@ -272,9 +992,11 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
           const registeredProfile = (Array.isArray(registeredProfiles) ? registeredProfiles : []).find((item) => (
             profilesMatch(item, profile)
           ))
-          const profileImageUrl = registeredProfile
-            ? registeredProfile.profileImageUrl || registeredProfile.avatar || ''
-            : profile.profileImageUrl || profile.avatar || ''
+          const profileImageUrl = registeredProfile?.profileImageUrl
+            || registeredProfile?.avatar
+            || profile.profileImageUrl
+            || profile.avatar
+            || ''
           const id = String(profile.id || profile.userId)
           const name = getProfileName(profile) || 'Profile'
           const nameParts = name.split(/\s+/)
@@ -336,14 +1058,32 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
         }
       }
 
-      setProfiles(allProfiles)
+      const profilesWithPendingAvatars = await Promise.all(allProfiles.map(async (profile) => {
+        if (!profile.isPending || profile.profileImageUrl || profile.avatar) return profile
+
+        const profileId = profile.userId || profile.id
+        if (!profileId) return profile
+
+        try {
+          const fullProfile = await api.getProfileById(profileId)
+          const profileImageUrl = fullProfile?.profileImageUrl || fullProfile?.avatar || ''
+          return profileImageUrl
+            ? { ...profile, profileImageUrl, avatar: profileImageUrl }
+            : profile
+        } catch (error) {
+          console.warn(`Could not load the profile image for ${profile.name}:`, error)
+          return profile
+        }
+      }))
+
+      setProfiles(profilesWithPendingAvatars)
       const allConnectedKeys = Array.from(new Set([
         ...connectedList.flatMap((p) => getProfileIdentityKeys(p)),
         ...allProfiles.filter((profile) => profile.isConnected).flatMap((profile) => getProfileIdentityKeys(profile)),
       ])).filter(Boolean)
       setConnectedProfiles(allConnectedKeys)
-      setFollowedProfiles(allProfiles.filter((profile) => profile.isFollowing).flatMap((profile) => getProfileIdentityKeys(profile)))
-      setPendingProfiles(allProfiles.filter((profile) => profile.isPending).flatMap((profile) => getProfileIdentityKeys(profile)))
+      setFollowedProfiles(profilesWithPendingAvatars.filter((profile) => profile.isFollowing).flatMap((profile) => getProfileIdentityKeys(profile)))
+      setPendingProfiles(profilesWithPendingAvatars.filter((profile) => profile.isPending).flatMap((profile) => getProfileIdentityKeys(profile)))
     } catch (err) {
       console.warn('Network profiles load error:', err)
     } finally {
@@ -382,8 +1122,23 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
       setActiveSection('grow')
     }
 
+    function handleSettingsUpdate(event) {
+      const notifs = event.detail?.notifications || event.detail?.notificationPreferences
+      if (notifs) {
+        if (notifs.connections === false || notifs['connecting-with-others'] === false) {
+          setConnectingWithOthersEnabled(false)
+        } else if (notifs.connections === true || notifs['connecting-with-others'] === true) {
+          setConnectingWithOthersEnabled(true)
+        }
+      }
+    }
+
     window.addEventListener('truehunt-network-navigate', showNetworkHome)
-    return () => window.removeEventListener('truehunt-network-navigate', showNetworkHome)
+    window.addEventListener('truehunt-settings-updated', handleSettingsUpdate)
+    return () => {
+      window.removeEventListener('truehunt-network-navigate', showNetworkHome)
+      window.removeEventListener('truehunt-settings-updated', handleSettingsUpdate)
+    }
   }, [])
 
   useEffect(() => {
@@ -391,6 +1146,7 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
       if (isAdmin) return
       const detail = event.detail || {}
       const {
+        action,
         connected: connectedValue,
         isConnected,
         pending: pendingValue,
@@ -414,11 +1170,13 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
       }
       const hasParticipants = Boolean(senderId || receiverId || senderProfile || receiverProfile)
       let targetProfile
+      let isCancelledInvitationRecipient = false
 
       if (hasParticipants) {
         const isSender = matchesCurrentUser(senderProfile) || matchesCurrentUser(senderId)
         const isReceiver = matchesCurrentUser(receiverProfile) || matchesCurrentUser(receiverId)
         if (isSender === isReceiver) return
+        isCancelledInvitationRecipient = action === 'REQUEST_CANCELLED' && isReceiver
         targetProfile = isSender
           ? receiverProfile || { id: receiverId }
           : senderProfile || { id: senderId }
@@ -446,13 +1204,15 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
       ))
       if (connected) {
         setPendingProfiles((current) => current.filter((id) => !targetIdentityKeys.has(id)))
-        setInvitations((current) => current.filter((inv) => !profilesMatch(inv, targetProfile)))
       } else if (typeof pending === 'boolean') {
         setPendingProfiles((current) => (
           pending
             ? Array.from(new Set([...current, ...targetIdentityKeys]))
             : current.filter((id) => !targetIdentityKeys.has(id))
         ))
+      }
+      if (connected || isCancelledInvitationRecipient) {
+        setInvitations((current) => current.filter((inv) => !profilesMatch(inv, targetProfile)))
       }
       setProfiles((current) => {
         const exists = current.some((item) => profilesMatch(item, targetProfile))
@@ -499,10 +1259,11 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
         following: Boolean(following),
       })
 
+      const targetIdentityKeys = new Set(getProfileIdentityKeys(profile))
       setFollowedProfiles((current) => (
         following
-          ? current.includes(profileKey) ? current : [...current, profileKey]
-          : current.filter((id) => id !== profileKey)
+          ? Array.from(new Set([...current, ...targetIdentityKeys]))
+          : current.filter((id) => !targetIdentityKeys.has(id))
       ))
       setProfiles((current) => {
         const hasProfile = current.some((item) => profilesMatch(item, profile))
@@ -605,6 +1366,8 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
     if (updatingConnectionProfileId) return
     const profile = findProfileByIdentity(profileId)
     const profileKey = getProfileKey(profile || profileId)
+    const targetProfile = profile || { id: profileId }
+    const targetIdentityKeys = new Set(getProfileIdentityKeys(targetProfile))
     setConnectionError('')
     setUpdatingConnectionProfileId(profileId)
     try {
@@ -614,19 +1377,21 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
         connected: false,
         pending: false,
       })
-      setPendingProfiles((current) => current.filter((id) => id !== profileKey))
+      setPendingProfiles((current) => current.filter((id) => !targetIdentityKeys.has(id)))
       setProfiles((current) => current.map((item) => (
-        getProfileKey(item) === profileKey
+        profilesMatch(item, targetProfile)
           ? { ...item, isConnected: false, isPending: false }
           : item
       )))
       window.dispatchEvent(new CustomEvent('truehunt-connection-changed', {
-        detail: { connected: false, pending: false, profile },
+        detail: { connected: false, pending: false, profile: targetProfile },
       }))
-      loadNetworkData()
+      setActiveSection('grow')
     } catch (err) {
       console.error('Cancel connection request error:', err)
-      setConnectionError('Could not remove connection request. Please try again.')
+      setConnectionError(err instanceof Error && err.message
+        ? err.message
+        : 'Could not remove connection request. Please try again.')
     } finally {
       setUpdatingConnectionProfileId('')
     }
@@ -668,7 +1433,7 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
       }))
     } catch (err) {
       console.error('Backend toggle connection error:', err)
-      setConnectionError('Could not update this connection. Please try again.')
+      setConnectionError(err.message || 'Could not update this connection. Please try again.')
     } finally {
       setUpdatingConnectionProfileId('')
     }
@@ -723,7 +1488,10 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
     if (updatingFollowProfileId) return
     const profile = findProfileByIdentity(profileId)
     const profileKey = getProfileKey(profile || profileId)
-    const isFollowing = followedProfiles.includes(profileKey)
+    const targetProfile = profile || { id: profileId }
+    const targetIdentityKeys = new Set(getProfileIdentityKeys(targetProfile))
+    const isFollowing = [...targetIdentityKeys].some((key) => followedProfiles.includes(key))
+      || Boolean(profile?.isFollowing)
     setFollowError('')
     setUpdatingFollowProfileId(profileId)
     try {
@@ -735,15 +1503,16 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
       })
       setFollowedProfiles((current) => (
         following
-          ? current.includes(profileKey) ? current : [...current, profileKey]
-          : current.filter((id) => id !== profileKey)
+          ? Array.from(new Set([...current, ...targetIdentityKeys]))
+          : current.filter((id) => !targetIdentityKeys.has(id))
       ))
       setProfiles((current) => current.map((item) => (
-        profile && profilesMatch(item, profile) ? { ...item, isFollowing: following } : item
+        profilesMatch(item, targetProfile) ? { ...item, isFollowing: following } : item
       )))
       window.dispatchEvent(new CustomEvent('truehunt-follow-changed', {
-        detail: { following, profile },
+        detail: { following, profile: targetProfile },
       }))
+      if (!following) setActiveSection('grow')
     } catch (err) {
       console.error('Backend toggle follow error:', err)
       setFollowError('Could not update this follow. Please try again.')
@@ -753,7 +1522,6 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
   }
 
   function renderProfileCard(profile, isRequestView = false, isConnectedView = false) {
-    const profileKey = getProfileKey(profile)
     const isConnected = isProfileConnected(profile)
     const isPending = isProfilePending(profile)
     const isFollowing = getProfileIdentityKeys(profile).some((k) => followedProfiles.includes(k)) || Boolean(profile.isFollowing)
@@ -790,7 +1558,9 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
         <div className="network-profile-content">
           <h3>{profile.name}</h3>
           <p className="network-profile-role">{profile.role}</p>
-          <p className="network-profile-location">{profile.location}</p>
+          {getProfileLocationSummary(profile) && (
+            <p className="network-profile-location">{getProfileLocationSummary(profile)}</p>
+          )}
           {profile.mutualConnections && (
             <p className="network-mutual-connections">
               <UsersRound size={14} aria-hidden="true" />
@@ -806,6 +1576,10 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
               onClick={() => {
                 if (isConnected || isPending) {
                   toggleConnection(profile.id)
+                  return
+                }
+                if (!connectingWithOthersEnabled) {
+                  setConnectionError('You have turned off connecting with others in your settings.')
                   return
                 }
                 setConnectionNote('')
@@ -900,15 +1674,19 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
                   (label === 'Connections' && activeSection === 'connections')
                   || (label === 'Following & followers' && activeSection === 'following')
                   || (label === 'Requests' && activeSection === 'requests')
+                  || (label === 'Groups' && activeSection === 'groups')
+                  || (label === 'Banner' && activeSection === 'banner')
                 )
                 const displayCount = (
                   label === 'Connections'
-                    ? Math.max(connectedProfiles.length, profiles.filter((p) => p.isConnected).length)
+                    ? connectionSectionProfiles.length
                     : label === 'Following & followers'
-                      ? Math.max(followedProfiles.length, profiles.filter((p) => p.isFollowing).length)
+                      ? followingAndFollowerProfiles.length
                       : label === 'Requests'
-                        ? Math.max(pendingProfiles.length, profiles.filter((p) => p.isPending).length)
-                        : 0
+                        ? requestSectionProfiles.length
+                        : label === 'Groups'
+                          ? connectionGroups.length
+                          : ''
                 )
                 return (
                   <button
@@ -917,6 +1695,7 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
                     type="button"
                     aria-pressed={isSelected}
                     onClick={() => {
+                      setSelectedGroupId('')
                       setActiveSection(
                         label === 'Connections'
                           ? 'connections'
@@ -924,7 +1703,11 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
                             ? 'following'
                             : label === 'Requests'
                               ? 'requests'
-                              : 'grow',
+                              : label === 'Groups'
+                                ? 'groups'
+                                : label === 'Banner'
+                                  ? 'banner'
+                                  : 'grow',
                       )
                       loadNetworkData()
                     }}
@@ -945,7 +1728,471 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
         </aside>
 
         <div className="network-main">
-          {activeSection === 'connections' || activeSection === 'following' || activeSection === 'requests' ? (
+          {activeSection === 'groups' ? (
+            selectedConnectionGroup ? (
+              <section className="network-suggestions network-group-detail" aria-labelledby="network-group-detail-title">
+                <button
+                  className="network-connections-back"
+                  type="button"
+                  onClick={() => setSelectedGroupId('')}
+                >
+                  <ArrowLeft size={16} aria-hidden="true" />
+                  Back to groups
+                </button>
+                <header className="network-group-detail-heading">
+                  {renderGroupPhoto(
+                    selectedConnectionGroup.imageUrl,
+                    true,
+                  )}
+                  <div>
+                    <span className="network-section-eyebrow">YOUR NETWORK</span>
+                    <h2 id="network-group-detail-title">{selectedConnectionGroup.name}</h2>
+                    <p>
+                      {selectedGroupProfiles.length}{' '}
+                      {selectedGroupProfiles.length === 1 ? 'profile' : 'profiles'} in this group
+                    </p>
+                  </div>
+                  {selectedConnectionGroup.isOwner && (
+                    <button
+                      className="network-group-add-members-button"
+                      type="button"
+                      disabled={isAddingGroupMembers}
+                      onClick={() => openGroupMemberPicker(selectedConnectionGroup)}
+                    >
+                      Add members
+                    </button>
+                  )}
+                  {selectedConnectionGroup.isOwner && (
+                    <button
+                      className="network-group-edit-button"
+                      type="button"
+                      disabled={Boolean(deletingGroupId) || isSavingGroup}
+                      onClick={() => {
+                        setSelectedGroupId('')
+                        startEditingGroup(selectedConnectionGroup)
+                      }}
+                    >
+                      Edit group
+                    </button>
+                  )}
+                  {selectedConnectionGroup.isOwner && (
+                    <button
+                      className="network-group-delete-button"
+                      type="button"
+                      disabled={Boolean(deletingGroupId)}
+                      onClick={() => handleDeleteGroup(selectedConnectionGroup)}
+                    >
+                      {deletingGroupId === String(selectedConnectionGroup.id) ? 'Deleting…' : 'Delete group'}
+                    </button>
+                  )}
+                  {!selectedConnectionGroup.isOwner && (
+                    <button
+                      className={`network-group-follow-button${selectedConnectionGroup.isFollowing ? ' is-following' : ''}`}
+                      type="button"
+                      disabled={Boolean(updatingGroupFollowId)}
+                      aria-pressed={Boolean(selectedConnectionGroup.isFollowing)}
+                      onClick={() => void toggleGroupFollow(selectedConnectionGroup)}
+                    >
+                      {updatingGroupFollowId === String(selectedConnectionGroup.id)
+                        ? 'Updating…'
+                        : selectedConnectionGroup.isFollowing ? 'Unfollow' : 'Follow'}
+                    </button>
+                  )}
+                  {selectedConnectionGroup.isOwner && (
+                    <button
+                      className="network-group-followers-button"
+                      type="button"
+                      onClick={() => setViewingGroupFollowersId(String(selectedConnectionGroup.id))}
+                    >
+                      View followers ({selectedConnectionGroup.followerCount || 0})
+                    </button>
+                  )}
+                </header>
+                {groupError && <p className="network-connection-error" role="alert">{groupError}</p>}
+                <section className="network-group-posts" aria-labelledby="network-group-posts-title">
+                  <h3 id="network-group-posts-title">Group updates</h3>
+                  {selectedConnectionGroup.isOwner && (
+                    <form className="network-group-post-form" onSubmit={handleCreateGroupPost}>
+                      <label htmlFor="network-group-post-text">Share an update with group followers</label>
+                      <textarea
+                        id="network-group-post-text"
+                        value={groupPostText}
+                        onChange={(event) => setGroupPostText(event.target.value)}
+                        maxLength={10000}
+                        rows={4}
+                        placeholder="Write a group update..."
+                        disabled={isCreatingGroupPost}
+                      />
+                      {groupPostPreviewUrl && groupPostFile && (
+                        <div className="network-group-post-file-preview">
+                          {groupPostFile.type.startsWith('video/')
+                            ? <video src={groupPostPreviewUrl} controls />
+                            : <img src={groupPostPreviewUrl} alt="Group post preview" />}
+                          <button
+                            type="button"
+                            disabled={isCreatingGroupPost}
+                            onClick={() => {
+                              if (groupPostPreviewObjectUrl.current) {
+                                URL.revokeObjectURL(groupPostPreviewObjectUrl.current)
+                                groupPostPreviewObjectUrl.current = ''
+                              }
+                              setGroupPostFile(null)
+                              setGroupPostPreviewUrl('')
+                            }}
+                          >
+                            Remove attachment
+                          </button>
+                        </div>
+                      )}
+                      <MediaSafetyStatus
+                        safety={groupPostMediaSafety}
+                        blockedMessage={`This ${groupPostMediaSafety.kind} has high adult content, so we can't post this ${groupPostMediaSafety.kind}.`}
+                        safeMessage="Safe content verified. Ready to post."
+                      />
+                      <div className="network-group-post-form-actions">
+                        <label htmlFor="network-group-post-file">Attach image or video</label>
+                        <input
+                          id="network-group-post-file"
+                          type="file"
+                          accept="image/*,video/*"
+                          onChange={handleGroupPostFileChange}
+                          disabled={isCreatingGroupPost}
+                        />
+                        <button type="submit" disabled={isCreatingGroupPost || groupPostMediaSafety.isBlocked}>
+                          {isCreatingGroupPost ? 'Posting…' : 'Post update'}
+                        </button>
+                        <button
+                          type="button"
+                          className="network-group-post-cancel"
+                          disabled={isCreatingGroupPost || (!groupPostText.trim() && !groupPostFile)}
+                          onClick={cancelGroupPostDraft}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </form>
+                  )}
+                  {groupError && <p className="network-connection-error" role="alert">{groupError}</p>}
+                  {groupPostsError ? (
+                    <p className="network-connection-error" role="alert">{groupPostsError}</p>
+                  ) : loadingGroupPosts ? (
+                    <p role="status">Loading group updates…</p>
+                  ) : canViewGroupPosts ? (
+                    groupPosts.length ? (
+                      <div className="network-group-post-list">
+                        {groupPosts.map((post) => {
+                          const author = selectedGroupProfiles.find((profile) => profilesMatch(
+                            profile,
+                            { id: post.authorId, userId: post.authorId, email: post.authorId },
+                          )) || (currentUserIdentifiers.some((identifier) => (
+                            getProfileIdentityKeys({ id: post.authorId, userId: post.authorId, email: post.authorId })
+                              .includes(String(identifier).trim().toLowerCase())
+                          )) ? { name: 'You' } : null)
+                          const authorName = author?.name
+                            || author?.fullName
+                            || post.authorName
+                            || 'Group creator'
+                          const avatar = author?.profileImageUrl || author?.avatar || ''
+                          const content = String(post.content || '').trim()
+                          const mediaUrl = post.mediaUrl || ''
+                          const isVideo = String(post.mediaType || '').startsWith('video/')
+
+                          return (
+                            <article className="network-group-post-card" key={post.id}>
+                              <header>
+                                <span className="network-group-post-author">
+                                  {avatar
+                                    ? <img src={avatar} alt="" />
+                                    : <span aria-hidden="true">{authorName.slice(0, 1).toUpperCase()}</span>}
+                                  <strong>{authorName}</strong>
+                                </span>
+                                <span className="network-group-post-meta">
+                                  {post.createdAt && <time>{post.createdAt}</time>}
+                                  {selectedConnectionGroup.isOwner
+                                    && String(post.authorId) === String(selectedConnectionGroup.ownerId) && (
+                                    <button
+                                      className="network-group-post-delete"
+                                      type="button"
+                                      aria-label={`Delete update by ${authorName}`}
+                                      disabled={Boolean(deletingGroupPostId)}
+                                      onClick={() => void handleDeleteGroupPost(post)}
+                                    >
+                                      <Trash2 size={14} aria-hidden="true" />
+                                      {deletingGroupPostId === String(post.id) ? 'Deleting…' : 'Delete'}
+                                    </button>
+                                  )}
+                                </span>
+                              </header>
+                              {content && <p>{content}</p>}
+                              {mediaUrl && (isVideo
+                                ? <video src={mediaUrl} controls preload="metadata" />
+                                : <img src={mediaUrl} alt="Group update" loading="lazy" />)}
+                            </article>
+                          )
+                        })}
+                      </div>
+                    ) : (
+                      <p className="network-group-posts-empty">No group updates yet.</p>
+                    )
+                  ) : (
+                    <div className="network-group-preview-gate">
+                      {groupPostsPreview?.imageUrl ? (
+                        <figure>
+                          <img src={groupPostsPreview.imageUrl} alt="Recent group photo preview" />
+                          {groupPostsPreview.createdAt && <figcaption>Recent group photo</figcaption>}
+                        </figure>
+                      ) : (
+                        <p>No recent group photo is available to preview.</p>
+                      )}
+                      <div>
+                        <strong>Follow this group to view more</strong>
+                        <p>Followers can see all group updates, including text, photos, and videos.</p>
+                        <button
+                          className="network-group-follow-button"
+                          type="button"
+                          disabled={Boolean(updatingGroupFollowId)}
+                          onClick={() => void toggleGroupFollow(selectedConnectionGroup)}
+                        >
+                          {updatingGroupFollowId === String(selectedConnectionGroup.id)
+                            ? 'Following…'
+                            : 'Follow group to view more'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </section>
+              </section>
+            ) : (
+            <section className="network-suggestions network-groups-section" aria-labelledby="network-groups-title">
+              <header className="network-section-heading">
+                <div>
+                  <span className="network-section-eyebrow">YOUR NETWORK</span>
+                  <h2 id="network-groups-title">Groups</h2>
+                  <p>Organize your connections into groups.</p>
+                </div>
+                <button
+                  className="network-group-create-button"
+                  type="button"
+                  onClick={() => {
+                    setGroupError('')
+                    setEditingGroupId('')
+                    updateGroupPhotoSelection(null)
+                    setIsGroupFormOpen((isOpen) => !isOpen)
+                  }}
+                >
+                  {isGroupFormOpen ? 'Close' : 'Create group'}
+                </button>
+              </header>
+              {groupError && <p className="network-connection-error" role="alert">{groupError}</p>}
+              {isGroupFormOpen && (
+                <form className="network-group-form" onSubmit={handleCreateGroup}>
+                  <label htmlFor="network-group-name">Group name</label>
+                  <input
+                    id="network-group-name"
+                    type="text"
+                    value={groupNameDraft}
+                    onChange={(event) => setGroupNameDraft(event.target.value)}
+                    maxLength={80}
+                    placeholder="Enter a group name"
+                    disabled={isSavingGroup}
+                    required
+                  />
+                  {renderGroupPhotoField('network-group-photo-create')}
+                  <div className="network-group-form-actions">
+                    <button
+                      type="button"
+                      className="network-group-cancel-button"
+                      disabled={isSavingGroup}
+                      onClick={() => {
+                        setIsGroupFormOpen(false)
+                        setGroupNameDraft('')
+                        updateGroupPhotoSelection(null)
+                        setGroupError('')
+                      }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="network-group-save-button"
+                      disabled={isSavingGroup || Boolean(groupPhotoError)}
+                    >
+                      {isSavingGroup ? 'Creating…' : 'Create group'}
+                    </button>
+                  </div>
+                </form>
+              )}
+              {loadingConnectionGroups ? (
+                <p role="status">Loading groups…</p>
+              ) : groupLoadError ? (
+                <p className="network-connection-error" role="alert">{groupLoadError}</p>
+              ) : connectionGroups.length ? (
+                <div className="network-group-list">
+                  {connectionGroups.map((group) => {
+                    const groupId = String(group.id)
+                    const isEditing = group.isOwner && editingGroupId === groupId
+                    const memberIds = group.memberProfileIds || []
+                    const creator = findProfileByIdentity(group.ownerId)
+                    const creatorName = group.isOwner
+                      ? 'you'
+                      : getProfileName(creator) || 'another member'
+
+                    return (
+                      <article className="network-group-card" key={group.id}>
+                        <div className="network-group-card-heading">
+                          <button
+                            className="network-group-title-button"
+                            type="button"
+                            aria-label={`Open ${group.name} group`}
+                            onClick={() => {
+                              setEditingGroupId('')
+                              setSelectedGroupId(groupId)
+                            }}
+                          >
+                            {renderGroupPhoto(group.imageUrl)}
+                            <span className="network-group-title-details">
+                              <strong>{group.name}</strong>
+                              <span className="network-group-creator">Created by {creatorName}</span>
+                              <span className="network-group-member-count">
+                                {memberIds.length}{' '}
+                                {memberIds.length === 1 ? 'member' : 'members'}
+                                {' · '}{group.followerCount || 0}{' '}
+                                {(group.followerCount || 0) === 1 ? 'follower' : 'followers'}
+                              </span>
+                            </span>
+                          </button>
+                          <div className="network-group-card-actions">
+                            {group.isOwner ? (
+                              <>
+                                <div className="network-group-menu-wrapper">
+                                  <button
+                                    className="network-group-menu-trigger"
+                                    type="button"
+                                    aria-label={`More actions for ${group.name}`}
+                                    aria-haspopup="menu"
+                                    aria-expanded={openGroupMenuId === groupId}
+                                    onClick={() => setOpenGroupMenuId((current) => (
+                                      current === groupId ? '' : groupId
+                                    ))}
+                                  >
+                                    <MoreVertical size={18} aria-hidden="true" />
+                                  </button>
+                                  {openGroupMenuId === groupId && (
+                                    <div className="network-group-menu" role="menu">
+                                      <button
+                                        type="button"
+                                        role="menuitem"
+                                        onClick={() => startEditingGroup(group)}
+                                      >
+                                        Edit
+                                      </button>
+                                      <button
+                                        type="button"
+                                        role="menuitem"
+                                        disabled={Boolean(deletingGroupId) || isSavingGroup}
+                                        onClick={() => {
+                                          setOpenGroupMenuId('')
+                                          void handleDeleteGroup(group)
+                                        }}
+                                      >
+                                        {deletingGroupId === groupId ? 'Deleting…' : 'Delete'}
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                                <button
+                                  className="network-group-message-button"
+                                  type="button"
+                                  disabled={openingGroupConversationId === groupId}
+                                  onClick={() => void handleOpenGroupConversation(group)}
+                                >
+                                  <MessageCircle size={14} aria-hidden="true" />
+                                  {openingGroupConversationId === groupId ? 'Opening…' : 'Message'}
+                                </button>
+                                {group.isOwner && (
+                                  <button
+                                    className="network-group-followers-button"
+                                    type="button"
+                                    onClick={() => setViewingGroupFollowersId(groupId)}
+                                  >
+                                    Followers ({group.followerCount || 0})
+                                  </button>
+                                )}
+                              </>
+                            ) : (
+                              <>
+                                <button
+                                  className={`network-group-follow-button${group.isFollowing ? ' is-following' : ''}`}
+                                  type="button"
+                                  disabled={Boolean(updatingGroupFollowId)}
+                                  aria-pressed={Boolean(group.isFollowing)}
+                                  onClick={() => void toggleGroupFollow(group)}
+                                >
+                                  {updatingGroupFollowId === groupId
+                                    ? 'Updating…'
+                                    : group.isFollowing ? 'Unfollow' : 'Follow'}
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                        {isEditing ? (
+                          <form
+                            className="network-group-form"
+                            onSubmit={(event) => handleUpdateGroup(event, group)}
+                          >
+                            <label htmlFor={`network-group-name-${groupId}`}>Group name</label>
+                            <input
+                              id={`network-group-name-${groupId}`}
+                              type="text"
+                              value={groupNameDraft}
+                              onChange={(event) => setGroupNameDraft(event.target.value)}
+                              maxLength={80}
+                              disabled={isSavingGroup}
+                              required
+                            />
+                            {renderGroupPhotoField(`network-group-photo-${groupId}`)}
+                            <div className="network-group-form-actions">
+                              <button
+                                type="button"
+                                className="network-group-cancel-button"
+                                disabled={isSavingGroup}
+                                onClick={() => {
+                                  setEditingGroupId('')
+                                  setGroupNameDraft('')
+                                  updateGroupPhotoSelection(null)
+                                  setGroupError('')
+                                }}
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="submit"
+                                className="network-group-save-button"
+                                disabled={isSavingGroup || Boolean(groupPhotoError)}
+                              >
+                                {isSavingGroup ? 'Saving…' : 'Save changes'}
+                              </button>
+                            </div>
+                          </form>
+                        ) : null}
+                      </article>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div className="network-connections-empty">
+                  <div className="network-catch-up-icon"><UsersRound size={24} aria-hidden="true" /></div>
+                  <h3>No groups yet</h3>
+                  <p>Create a group and choose which of your connections to include.</p>
+                </div>
+              )}
+            </section>
+            )
+          ) : activeSection === 'banner' ? (
+            <section>
+            </section>
+          ) : activeSection === 'connections' || activeSection === 'following' || activeSection === 'requests' ? (
             <section className="network-suggestions" aria-labelledby="network-connections-title">
               <button
                 className="network-connections-back"
@@ -980,7 +2227,7 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
                   {activeSection === 'connections'
                     ? `${displayedProfiles.length} connections`
                     : activeSection === 'following'
-                      ? `${displayedProfiles.length} following`
+                      ? `${displayedProfiles.length} profiles`
                       : `${displayedProfiles.length} requests`}
                 </span>
               </header>
@@ -1054,36 +2301,42 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
                     <h2 id="network-invitations-title">Invitations ({invitations.length})</h2>
                   </header>
                   <div className="network-invitations-list">
-                    {invitations.map((inv) => (
+                    {invitations.map((inv) => {
+                      const senderProfile = getInvitationProfile(inv)
+                      return (
                       <div className="network-invitation-item" key={inv.id || inv.profileId}>
                         <div className="network-invitation-sender">
                           <button
                             type="button"
                             className="network-invitation-avatar"
-                            aria-label={`View ${getProfileName(inv.profile, inv) || 'Profile'}'s profile`}
-                            onClick={() => onProfileSelect?.(getInvitationProfile(inv))}
+                            aria-label={`View ${senderProfile.name}'s profile`}
+                            onClick={() => onProfileSelect?.(senderProfile)}
                           >
-                            {inv.avatar || inv.profileImageUrl ? (
-                              <img src={inv.avatar || inv.profileImageUrl} alt="" />
+                            {senderProfile.avatar || senderProfile.profileImageUrl ? (
+                              <img src={senderProfile.avatar || senderProfile.profileImageUrl} alt="" />
                             ) : (
-                              <span>{inv.initials || 'TH'}</span>
+                              <span>{senderProfile.initials || 'TH'}</span>
                             )}
                           </button>
                           <div className="network-invitation-details">
                             <h3
                               role="button"
                               tabIndex={0}
-                              onClick={() => onProfileSelect?.(getInvitationProfile(inv))}
+                              onClick={() => onProfileSelect?.(senderProfile)}
                               onKeyDown={(e) => {
                                 if (e.key === 'Enter' || e.key === ' ') {
-                                  onProfileSelect?.(getInvitationProfile(inv))
+                                  onProfileSelect?.(senderProfile)
                                 }
                               }}
                             >
-                              {getProfileName(inv.profile, inv) || 'Profile'}
+                              {senderProfile.name}
                             </h3>
-                            <p className="network-invitation-role">{inv.role || 'Cinema Professional'}</p>
-                            {inv.location && <p className="network-invitation-location">{inv.location}</p>}
+                            <p className="network-invitation-role">{senderProfile.role}</p>
+                            {getProfileLocationSummary(senderProfile) && (
+                              <p className="network-invitation-location">
+                                {getProfileLocationSummary(senderProfile)}
+                              </p>
+                            )}
                           </div>
                         </div>
                         <div className="network-invitation-actions">
@@ -1112,7 +2365,8 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
                           </div>
                         )}
                       </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 </section>
               ) : (
@@ -1150,10 +2404,28 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
             </>
           ) : (
             <section className="network-catch-up">
-              <div className="network-catch-up-icon"><UsersRound size={24} aria-hidden="true" /></div>
-              <h2>You’re all caught up</h2>
-              <p>New updates from your network will show up here.</p>
-              <button type="button" onClick={() => setActiveTab('grow')}>Explore people</button>
+              {catchUpUpdates.length > 0 ? (
+                <div style={{ width: '100%', textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <h2>Network updates</h2>
+                  {catchUpUpdates.map((item) => (
+                    <article key={item.id} className="network-invitation-card" style={{ padding: '14px', borderRadius: '10px', border: '1px solid var(--border-color, #e2e8f0)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+                        <strong>{item.name}</strong>
+                        <small>{item.type === 'OPPORTUNITY' ? 'Opportunity' : 'Update'}</small>
+                      </div>
+                      {item.headline && <p style={{ margin: '4px 0', opacity: 0.8 }}>{item.headline}</p>}
+                      <p style={{ margin: '6px 0 0' }}>{item.title}{item.summary ? ` — ${item.summary.slice(0, 140)}` : ''}</p>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <>
+                  <div className="network-catch-up-icon"><UsersRound size={24} aria-hidden="true" /></div>
+                  <h2>You’re all caught up</h2>
+                  <p>New updates from your network will show up here.</p>
+                  <button type="button" onClick={() => setActiveTab('grow')}>Explore people</button>
+                </>
+              )}
             </section>
           )}
             </>
@@ -1226,6 +2498,175 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
               </div>
             </div>
             {connectionError && <p className="network-connection-error" role="alert">{connectionError}</p>}
+          </section>
+        </div>
+      )}
+      {viewingConnectionGroup && (
+        <div
+          className="network-group-followers-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setViewingGroupFollowersId('')
+          }}
+        >
+          <section
+            className="network-group-followers-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="network-group-followers-title"
+          >
+            <header>
+              <div>
+                <h2 id="network-group-followers-title">{viewingConnectionGroup.name} profiles</h2>
+                <p>
+                  {getGroupFollowers(viewingConnectionGroup).length} profiles ·{' '}
+                  {viewingConnectionGroup.followerCount || 0} following this group
+                </p>
+              </div>
+              <button
+                type="button"
+                aria-label="Close followers"
+                onClick={() => setViewingGroupFollowersId('')}
+              >
+                <X size={20} aria-hidden="true" />
+              </button>
+            </header>
+            {getGroupFollowers(viewingConnectionGroup).length ? (
+              <ul className="network-group-followers-list">
+                {getGroupFollowers(viewingConnectionGroup).map((follower) => {
+                  const name = getProfileName(follower)
+                  const image = follower.profileImageUrl || follower.avatar || ''
+                  return (
+                    <li key={getProfileKey(follower)}>
+                      <button
+                        type="button"
+                        disabled={follower.isGroupProfilePlaceholder}
+                        onClick={() => {
+                          setViewingGroupFollowersId('')
+                          onProfileSelect?.(follower)
+                        }}
+                      >
+                        {image
+                          ? <img src={image} alt="" />
+                          : <span aria-hidden="true">{name.slice(0, 1).toUpperCase()}</span>}
+                        <span className="network-group-follower-copy">
+                          <strong>{name}</strong>
+                          <small>{follower.groupRelationship}</small>
+                        </span>
+                      </button>
+                    </li>
+                  )
+                })}
+              </ul>
+            ) : (
+              <p className="network-group-followers-empty">No followers yet.</p>
+            )}
+          </section>
+        </div>
+      )}
+      {addingGroupMembers && (
+        <div
+          className="network-group-followers-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !isAddingGroupMembers) {
+              setAddingGroupMembersId('')
+              setSelectedGroupMemberIds([])
+            }
+          }}
+        >
+          <section
+            className="network-group-followers-dialog network-group-add-members-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="network-group-add-members-title"
+          >
+            <header>
+              <div>
+                <h2 id="network-group-add-members-title">Add members to {addingGroupMembers.name}</h2>
+                <p>Select your connections or followers to add to this group.</p>
+              </div>
+              <button
+                type="button"
+                aria-label="Close add members"
+                disabled={isAddingGroupMembers}
+                onClick={() => {
+                  setAddingGroupMembersId('')
+                  setSelectedGroupMemberIds([])
+                }}
+              >
+                <X size={20} aria-hidden="true" />
+              </button>
+            </header>
+            {groupMembersError && <p className="network-connection-error" role="alert">{groupMembersError}</p>}
+            {addGroupMemberProfiles.length ? (
+              <ul className="network-group-add-members-list">
+                {addGroupMemberProfiles.map((profile) => {
+                  const profileId = getProfileKey(profile)
+                  const name = getProfileName(profile) || 'TrueHunt Member'
+                  const image = profile.profileImageUrl || profile.avatar || ''
+                  const identityKeys = getProfileIdentityKeys(profile)
+                  const isConnection = identityKeys.some((key) => creatorConnectionKeys.has(key))
+                  const isFollower = identityKeys.some((key) => creatorFollowerKeys.has(key))
+                  return (
+                    <li key={profileId}>
+                      <label className="network-group-add-member-option">
+                        <input
+                          type="checkbox"
+                          checked={selectedGroupMemberIds.includes(profileId)}
+                          disabled={isAddingGroupMembers}
+                          onChange={(event) => {
+                            setSelectedGroupMemberIds((current) => (
+                              event.target.checked
+                                ? [...current, profileId]
+                                : current.filter((id) => id !== profileId)
+                            ))
+                          }}
+                        />
+                        {image
+                          ? <img src={image} alt="" />
+                          : <span className="network-group-add-member-avatar" aria-hidden="true">
+                            {name.slice(0, 1).toUpperCase()}
+                          </span>}
+                        <span className="network-group-add-member-copy">
+                          <strong>{name}</strong>
+                          <small>
+                            {isConnection && isFollower
+                              ? 'Connection · Your follower'
+                              : isConnection ? 'Connection' : 'Your follower'}
+                          </small>
+                        </span>
+                      </label>
+                    </li>
+                  )
+                })}
+              </ul>
+            ) : (
+              <p className="network-group-followers-empty">
+                No new connections or followers are available to add.
+              </p>
+            )}
+            <footer className="network-group-add-members-actions">
+              <button
+                type="button"
+                className="network-group-cancel-button"
+                disabled={isAddingGroupMembers}
+                onClick={() => {
+                  setAddingGroupMembersId('')
+                  setSelectedGroupMemberIds([])
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="network-group-save-button"
+                disabled={isAddingGroupMembers || selectedGroupMemberIds.length === 0}
+                onClick={() => void handleAddGroupMembers()}
+              >
+                {isAddingGroupMembers ? 'Adding…' : `Add selected (${selectedGroupMemberIds.length})`}
+              </button>
+            </footer>
           </section>
         </div>
       )}

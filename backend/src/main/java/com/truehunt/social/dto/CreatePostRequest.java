@@ -7,6 +7,7 @@ import java.util.Map;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class CreatePostRequest {
     private String type; // post, opportunity, article
+    private String audience; // public, connections, private
 
     @JsonAlias({"text", "body", "caption", "description"})
     private String content;
@@ -28,6 +29,14 @@ public class CreatePostRequest {
 
     public void setType(String type) {
         this.type = type;
+    }
+
+    public String getAudience() {
+        return audience;
+    }
+
+    public void setAudience(String audience) {
+        this.audience = audience;
     }
 
     public String getContent() {

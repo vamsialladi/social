@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import './Article.css'
 import api from '../../api'
+import MediaSafetyStatus from '../../components/common/MediaSafetyStatus.jsx'
+import { useMediaSafety } from '../../hooks/useMediaSafety.js'
 
 function Article({ hidden, onBack, onPublish }) {
   const [title, setTitle] = useState('')
@@ -9,6 +11,8 @@ function Article({ hidden, onBack, onPublish }) {
   const [isAddMenuOpen, setIsAddMenuOpen] = useState(false)
   const [publishError, setPublishError] = useState('')
   const [isPublishing, setIsPublishing] = useState(false)
+  const mediaSafety = useMediaSafety(media?.file)
+  const isMediaBlocked = Boolean(media?.file && mediaSafety.isBlocked)
   const fileInputRef = useRef(null)
   const mediaKindRef = useRef('')
   const mediaRef = useRef(null)
@@ -66,6 +70,9 @@ function Article({ hidden, onBack, onPublish }) {
 
   function returnToHome() {
     removeMedia()
+    setTitle('')
+    setContent('')
+    setPublishError('')
     setIsAddMenuOpen(false)
     onBack()
   }
@@ -75,6 +82,10 @@ function Article({ hidden, onBack, onPublish }) {
     const articleTitle = title.trim()
     const articleContent = content.trim()
     if (!articleTitle || !articleContent || isPublishing) return
+    if (isMediaBlocked) {
+      setPublishError(mediaSafety.error || 'Wait for image moderation to finish before publishing.')
+      return
+    }
 
     setIsPublishing(true)
     setPublishError('')
@@ -157,6 +168,13 @@ function Article({ hidden, onBack, onPublish }) {
             aria-label="Choose article attachment"
             onChange={handleMediaChange}
           />
+          {media?.file && (
+            <MediaSafetyStatus
+              safety={mediaSafety}
+              blockedMessage="This image has high adult content and cannot be published."
+              safeMessage="Safe content verified. Ready to publish."
+            />
+          )}
         </section>
 
         <label className="article-sr-only" htmlFor="article-title">Article title</label>
@@ -192,13 +210,23 @@ function Article({ hidden, onBack, onPublish }) {
 
         <footer className="article-editor-footer">
           <span>Your article will be shared on your Home feed.</span>
-          <button
-            className="article-publish-button"
-            type="submit"
-            disabled={isPublishing || !title.trim() || !content.trim()}
-          >
-            {isPublishing ? 'Publishing…' : 'Publish article'}
-          </button>
+          <div className="article-editor-actions">
+            <button
+              className="article-cancel-button"
+              type="button"
+              onClick={returnToHome}
+              disabled={isPublishing}
+            >
+              Cancel
+            </button>
+            <button
+              className="article-publish-button"
+              type="submit"
+              disabled={isPublishing || isMediaBlocked || !title.trim() || !content.trim()}
+            >
+              {isPublishing ? 'Publishing…' : 'Publish article'}
+            </button>
+          </div>
         </footer>
       </form>
       <section className="home-promotion-card article-promotion-card" aria-label="Sponsored movie industry promotion">

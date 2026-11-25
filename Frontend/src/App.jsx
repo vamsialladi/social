@@ -1,10 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import MainLayout from './layouts/MainLayout';
 import HomePage from './pages/HomePage';
 import EntertainmentsPage from './pages/EntertainmentsPage';
 import TalentsPage from './pages/TalentsPage';
-import TalentDetailsPage from './pages/TalentDetailsPage';
 import ProfilePage from './pages/ProfilePage';
 import JobsPage from './pages/JobsPage';
 import JobDetailsPage from './pages/JobDetailsPage';
@@ -61,7 +60,9 @@ export default function App() {
   const handleIntroComplete = () => {
     try {
       sessionStorage.setItem('truehunt_intro_seen', 'true');
-    } catch {}
+    } catch (error) {
+      console.warn('Could not persist the intro completion state:', error);
+    }
     setShowIntro(false);
   };
 

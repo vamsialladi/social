@@ -12,9 +12,11 @@ public class SupportTicketEntity {
 
     private String name;
     private String email;
+    private String phone;
     private String subject;
     private String category;
     private String priority;
+    private String clientTimestamp;
 
     @Lob
     @Column(columnDefinition = "TEXT")
@@ -34,6 +36,9 @@ public class SupportTicketEntity {
     public String getEmail() { return email; }
     public void setEmail(String email) { this.email = email; }
 
+    public String getPhone() { return phone; }
+    public void setPhone(String phone) { this.phone = phone; }
+
     public String getSubject() { return subject; }
     public void setSubject(String subject) { this.subject = subject; }
 
@@ -42,6 +47,9 @@ public class SupportTicketEntity {
 
     public String getPriority() { return priority; }
     public void setPriority(String priority) { this.priority = priority; }
+
+    public String getClientTimestamp() { return clientTimestamp; }
+    public void setClientTimestamp(String clientTimestamp) { this.clientTimestamp = clientTimestamp; }
 
     public String getMessage() { return message; }
     public void setMessage(String message) { this.message = message; }

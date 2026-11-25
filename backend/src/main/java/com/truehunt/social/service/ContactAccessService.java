@@ -26,13 +26,16 @@ public class ContactAccessService {
 
     private final ContactAccessRequestRepository requestRepository;
     private final ProfileService profileService;
+    private final NotificationService notificationService;
 
     public ContactAccessService(
             ContactAccessRequestRepository requestRepository,
-            ProfileService profileService
+            ProfileService profileService,
+            NotificationService notificationService
     ) {
         this.requestRepository = requestRepository;
         this.profileService = profileService;
+        this.notificationService = notificationService;
     }
 
     @Transactional
@@ -135,7 +138,21 @@ public class ContactAccessService {
 
         request.setStatus(decision);
         request.setUpdatedAt(LocalDateTime.now());
-        return toRequestDto(requestRepository.save(request), true);
+        ContactAccessRequestEntity updatedRequest = requestRepository.save(request);
+        boolean accepted = ACCEPTED.equals(decision);
+        String decisionTitle = accepted
+                ? "Contact Details Request Accepted"
+                : "Contact Details Request Rejected";
+        String decisionMessage = accepted
+                ? request.getOwnerName() + " accepted your request. You can now access their contact details."
+                : request.getOwnerName() + " rejected your request to access their contact details.";
+        notificationService.createNotification(
+                request.getRequesterProfileId(),
+                decisionTitle,
+                decisionMessage,
+                "contact-access"
+        );
+        return toRequestDto(updatedRequest, true);
     }
 
     private Map<String, Object> toRequestDto(ContactAccessRequestEntity request, boolean incoming) {
@@ -144,7 +161,8 @@ public class ContactAccessService {
         if (incoming) {
             message = request.getRequesterName() + " is asking permission to show your details.";
         } else if (ACCEPTED.equalsIgnoreCase(status)) {
-            message = request.getOwnerName() + " accepted your request.";
+            message = request.getOwnerName()
+                    + " accepted your request. You can now access their contact details.";
         } else if (REJECTED.equalsIgnoreCase(status)) {
             message = request.getOwnerName() + " rejected your request.";
         } else {
@@ -168,7 +186,8 @@ public class ContactAccessService {
             return "Contact details are hidden until the profile owner accepts your request.";
         }
         if (ACCEPTED.equalsIgnoreCase(request.getStatus())) {
-            return "The profile owner accepted your request. Contact details:";
+            return request.getOwnerName()
+                    + " accepted your request. You can now access their contact details.";
         }
         if (REJECTED.equalsIgnoreCase(request.getStatus())) {
             return request.getOwnerName() + " rejected your request.";

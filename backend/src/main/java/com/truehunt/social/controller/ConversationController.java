@@ -135,6 +135,14 @@ public class ConversationController {
         return ResponseEntity.ok(ApiResponse.success(conversationService.updateMailbox(id, mailbox, resolveCaller(request))));
     }
 
+    @PostMapping("/{id}/hide")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> hideConversation(
+            @PathVariable String id,
+            HttpServletRequest request
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(conversationService.hideConversation(id, resolveCaller(request))));
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<ApiResponse<Map<String, String>>> deleteConversation(
             @PathVariable String id,

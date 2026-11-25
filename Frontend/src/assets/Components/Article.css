@@ -281,6 +281,33 @@
   line-height: 1.4;
 }
 
+.article-editor-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
+.article-cancel-button {
+  padding: 9px 18px;
+  border: 1px solid #d5d5d5;
+  border-radius: 20px;
+  background: #fff;
+  color: #555;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.article-cancel-button:hover:not(:disabled) {
+  background: #f5f5f5;
+}
+
+.article-cancel-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 .article-publish-button {
   flex: 0 0 auto;
   padding: 9px 18px;
@@ -315,5 +342,9 @@
   .article-editor-footer {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .article-editor-actions {
+    width: 100%;
   }
 }

@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Search, Briefcase, Filter, MapPin, Building2, Clock, RotateCcw } from 'lucide-react';
+import { Search, Briefcase, Filter, RotateCcw } from 'lucide-react';
 import OpportunityCard from '../components/cards/OpportunityCard';
 import { LATEST_OPPORTUNITIES, FILM_CRAFTS } from '../services/mockData';
 import { api } from '../services/api';

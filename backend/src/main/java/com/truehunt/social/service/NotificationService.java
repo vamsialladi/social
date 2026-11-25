@@ -17,15 +17,25 @@ public class NotificationService {
 
     private final NotificationRepository notificationRepository;
     private final UserAccountRepository userAccountRepository;
+    private final SettingsService settingsService;
 
     public NotificationService(NotificationRepository notificationRepository) {
-        this(notificationRepository, null);
+        this(notificationRepository, null, null);
+    }
+
+    public NotificationService(NotificationRepository notificationRepository, UserAccountRepository userAccountRepository) {
+        this(notificationRepository, userAccountRepository, null);
     }
 
     @Autowired
-    public NotificationService(NotificationRepository notificationRepository, UserAccountRepository userAccountRepository) {
+    public NotificationService(
+            NotificationRepository notificationRepository,
+            UserAccountRepository userAccountRepository,
+            @Autowired(required = false) SettingsService settingsService
+    ) {
         this.notificationRepository = notificationRepository;
         this.userAccountRepository = userAccountRepository;
+        this.settingsService = settingsService;
     }
 
     public List<Map<String, Object>> getNotifications() {
@@ -34,8 +44,23 @@ public class NotificationService {
 
     public List<Map<String, Object>> getNotifications(String caller) {
         Set<String> callerIdentifiers = resolveCallerIdentifiers(caller);
+        boolean connectionNotifsEnabled = settingsService == null
+                || (settingsService.isConnectingWithOthersEnabled(caller)
+                    && (callerIdentifiers.isEmpty() || callerIdentifiers.stream().allMatch(settingsService::isConnectingWithOthersEnabled)));
+        boolean postingNotifsEnabled = settingsService == null
+                || (settingsService.isPostingAndCommentingEnabled(caller)
+                    && (callerIdentifiers.isEmpty() || callerIdentifiers.stream().allMatch(settingsService::isPostingAndCommentingEnabled)));
+        boolean profileNotifsEnabled = settingsService == null
+                || (settingsService.isProfileUpdatingEnabled(caller)
+                    && (callerIdentifiers.isEmpty() || callerIdentifiers.stream().allMatch(settingsService::isProfileUpdatingEnabled)));
         return notificationRepository.findAll().stream()
                 .filter(n -> matchesCaller(n, callerIdentifiers))
+                .filter(n -> connectionNotifsEnabled || n.getType() == null || !n.getType().toLowerCase(Locale.ROOT).startsWith("connection"))
+                .filter(n -> postingNotifsEnabled || n.getType() == null || (
+                        !n.getType().toLowerCase(Locale.ROOT).startsWith("post")
+                                && !n.getType().toLowerCase(Locale.ROOT).startsWith("opportunity_post")
+                                && !n.getType().toLowerCase(Locale.ROOT).startsWith("comment")))
+                .filter(n -> profileNotifsEnabled || n.getType() == null || !n.getType().toLowerCase(Locale.ROOT).startsWith("profile"))
                 .sorted(Comparator.comparing(NotificationEntity::getCreatedAt).reversed())
                 .map(NotificationEntity::toDto)
                 .collect(Collectors.toList());

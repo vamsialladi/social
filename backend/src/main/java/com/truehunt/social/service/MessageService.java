@@ -9,11 +9,13 @@ import com.truehunt.social.model.MessageEntity;
 import com.truehunt.social.model.ProfileEntity;
 import com.truehunt.social.model.UserAccountEntity;
 import com.truehunt.social.repository.ConversationRepository;
+import com.truehunt.social.repository.ConnectionGroupRepository;
 import com.truehunt.social.repository.MessageRepository;
 import com.truehunt.social.repository.ProfileRepository;
 import com.truehunt.social.repository.UserAccountRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,17 +36,42 @@ public class MessageService {
     private final UserAccountRepository userAccountRepository;
     private final ProfileRepository profileRepository;
     private final SimpMessagingTemplate messagingTemplate;
+    private final SettingsService settingsService;
+    private final ConnectionGroupRepository connectionGroupRepository;
 
     public MessageService(MessageRepository messageRepository,
                           ConversationRepository conversationRepository,
                           UserAccountRepository userAccountRepository,
                           ProfileRepository profileRepository,
                           SimpMessagingTemplate messagingTemplate) {
+        this(messageRepository, conversationRepository, userAccountRepository, profileRepository, messagingTemplate, null, null);
+    }
+
+    public MessageService(MessageRepository messageRepository,
+                          ConversationRepository conversationRepository,
+                          UserAccountRepository userAccountRepository,
+                          ProfileRepository profileRepository,
+                          SimpMessagingTemplate messagingTemplate,
+                          SettingsService settingsService) {
+        this(messageRepository, conversationRepository, userAccountRepository, profileRepository,
+                messagingTemplate, settingsService, null);
+    }
+
+    @Autowired
+    public MessageService(MessageRepository messageRepository,
+                          ConversationRepository conversationRepository,
+                          UserAccountRepository userAccountRepository,
+                          ProfileRepository profileRepository,
+                          SimpMessagingTemplate messagingTemplate,
+                          SettingsService settingsService,
+                          ConnectionGroupRepository connectionGroupRepository) {
         this.messageRepository = messageRepository;
         this.conversationRepository = conversationRepository;
         this.userAccountRepository = userAccountRepository;
         this.profileRepository = profileRepository;
         this.messagingTemplate = messagingTemplate;
+        this.settingsService = settingsService;
+        this.connectionGroupRepository = connectionGroupRepository;
     }
 
     @Transactional
@@ -58,6 +85,19 @@ public class MessageService {
         String senderEmail = senderOpt.map(UserAccountEntity::getEmail).orElse(senderRawId);
         String senderPublicUserId = senderOpt.map(UserAccountEntity::getPublicUserId).orElse(senderRawId);
         String senderName = resolveParticipantDisplayName(senderOpt, senderEmail, senderPublicUserId, senderRawId, req.getSenderName());
+
+        if (req.getConversationId() != null) {
+            ConversationEntity existing = conversationRepository.findById(req.getConversationId()).orElse(null);
+            if (existing != null && existing.isGroupConversation()) {
+                return processAndSendGroupMessage(
+                        req,
+                        existing,
+                        senderRawId,
+                        senderEmail,
+                        senderPublicUserId,
+                        senderName);
+            }
+        }
 
         String receiverRawId = req.getReceiverId() != null ? req.getReceiverId().trim() : null;
         Optional<UserAccountEntity> receiverOpt = resolveUserAccount(receiverRawId);
@@ -145,6 +185,20 @@ public class MessageService {
             }
         }
 
+        if (settingsService != null && senderEmail != null && receiverEmail != null) {
+            Set<String> senderIds = new HashSet<>();
+            addIdentityKeys(senderIds, senderEmail);
+            addIdentityKeys(senderIds, senderPublicUserId);
+            addIdentityKeys(senderIds, senderName);
+            Set<String> receiverIds = new HashSet<>();
+            addIdentityKeys(receiverIds, receiverEmail);
+            addIdentityKeys(receiverIds, receiverPublicUserId);
+            addIdentityKeys(receiverIds, receiverName);
+            if (settingsService.isBlockedBetween(senderEmail, senderIds, receiverEmail, receiverIds)) {
+                throw new BadRequestException("You cannot send messages because one of the users is blocked.");
+            }
+        }
+
         MessageEntity messageEntity = new MessageEntity(
                 conversationId,
                 senderEmail,
@@ -178,6 +232,8 @@ public class MessageService {
         conversation.setPreview(req.getContent().trim());
         conversation.setDate("Just now");
         conversation.setUnread(true);
+        conversation.setUser1Hidden(false);
+        conversation.setUser2Hidden(false);
         conversation.setUpdatedAt(LocalDateTime.now());
         conversationRepository.save(conversation);
 
@@ -202,14 +258,135 @@ public class MessageService {
         return outDto;
     }
 
+    private ChatMessageDto processAndSendGroupMessage(
+            ChatMessageDto req,
+            ConversationEntity conversation,
+            String senderRawId,
+            String senderEmail,
+            String senderPublicUserId,
+            String senderName) {
+        Set<String> senderIdentifiers = new HashSet<>();
+        addIdentityKeys(senderIdentifiers, senderRawId);
+        addIdentityKeys(senderIdentifiers, senderEmail);
+        addIdentityKeys(senderIdentifiers, senderPublicUserId);
+        resolveUserAccount(senderRawId).ifPresent(user -> {
+            if (user.getId() != null) addIdentityKeys(senderIdentifiers, String.valueOf(user.getId()));
+        });
+
+        List<String> participantIds = conversation.getGroupParticipantIds();
+        if (connectionGroupRepository != null) {
+            com.truehunt.social.model.ConnectionGroupEntity group = connectionGroupRepository
+                    .findById(conversation.getConnectionGroupId())
+                    .orElseThrow(() -> new UnauthorizedException(
+                            "This group conversation is no longer available."));
+            LinkedHashSet<String> currentParticipants = new LinkedHashSet<>();
+            resolveUserAccount(group.getOwnerId())
+                    .map(UserAccountEntity::getEmail)
+                    .filter(email -> email != null && !email.isBlank())
+                    .map(email -> email.trim().toLowerCase(Locale.ROOT))
+                    .ifPresent(currentParticipants::add);
+            for (String memberProfileId : group.getMemberProfileIds()) {
+                resolveUserAccount(memberProfileId)
+                        .map(UserAccountEntity::getEmail)
+                        .filter(email -> email != null && !email.isBlank())
+                        .map(email -> email.trim().toLowerCase(Locale.ROOT))
+                        .ifPresent(currentParticipants::add);
+            }
+            participantIds = new ArrayList<>(currentParticipants);
+            conversation.setGroupParticipantIds(participantIds);
+        }
+        boolean isParticipant = participantIds.stream()
+                .anyMatch(participant -> senderIdentifiers.contains(participant.trim().toLowerCase(Locale.ROOT)));
+        if (!isParticipant) {
+            throw new UnauthorizedException("You cannot send messages in this conversation.");
+        }
+
+        if (settingsService != null) {
+            Set<String> senderBlockIds = new HashSet<>();
+            addIdentityKeys(senderBlockIds, senderEmail);
+            addIdentityKeys(senderBlockIds, senderPublicUserId);
+            addIdentityKeys(senderBlockIds, senderName);
+            for (String participantId : participantIds) {
+                Optional<UserAccountEntity> participant = resolveUserAccount(participantId);
+                String participantEmail = participant.map(UserAccountEntity::getEmail).orElse(participantId);
+                if (participantEmail.equalsIgnoreCase(senderEmail)) continue;
+                Set<String> participantBlockIds = new HashSet<>();
+                addIdentityKeys(participantBlockIds, participantEmail);
+                participant.ifPresent(account -> {
+                    addIdentityKeys(participantBlockIds, account.getPublicUserId());
+                    addIdentityKeys(participantBlockIds, account.getName());
+                });
+                if (settingsService.isBlockedBetween(
+                        senderEmail,
+                        senderBlockIds,
+                        participantEmail,
+                        participantBlockIds)) {
+                    throw new BadRequestException(
+                            "You cannot send messages because one of the group members is blocked.");
+                }
+            }
+        }
+
+        String groupReceiverId = "group:" + conversation.getConnectionGroupId();
+        MessageEntity savedMessage = messageRepository.save(new MessageEntity(
+                conversation.getId(),
+                senderEmail,
+                senderName,
+                groupReceiverId,
+                conversation.getName(),
+                req.getContent().trim(),
+                req.getAttachment()));
+        String outId = req.getId() != null && !req.getId().isBlank()
+                ? req.getId()
+                : "msg-" + savedMessage.getId();
+
+        conversation.addMessage(
+                outId,
+                senderEmail,
+                senderName,
+                groupReceiverId,
+                req.getContent().trim(),
+                "outgoing",
+                req.getAttachment());
+        List<Map<String, Object>> thread = conversation.getThread();
+        if (!thread.isEmpty()) {
+            thread.get(thread.size() - 1).put("messageId", savedMessage.getId());
+            conversation.setThread(thread);
+        }
+        conversation.setPreview(req.getContent().trim());
+        conversation.setDate("Just now");
+        conversation.setUnread(true);
+        conversation.setUpdatedAt(LocalDateTime.now());
+        conversationRepository.save(conversation);
+
+        ChatMessageDto outDto = new ChatMessageDto(
+                outId,
+                conversation.getId(),
+                senderEmail,
+                senderName,
+                groupReceiverId,
+                conversation.getName(),
+                savedMessage.getContent(),
+                "outgoing",
+                savedMessage.getAttachment(),
+                "SENT");
+        outDto.setType(req.getType() != null ? req.getType() : "CHAT");
+        deliverRealtime(outDto, senderEmail, groupReceiverId, conversation.getId());
+        return outDto;
+    }
+
     private void deliverRealtime(ChatMessageDto outDto, String senderEmail, String receiverEmail, Long conversationId) {
         try {
-            Set<String> participants = new LinkedHashSet<>();
+            ConversationEntity conversation = conversationRepository.findById(conversationId).orElse(null);
+            Set<String> participants = conversation != null && conversation.isGroupConversation()
+                    ? resolveConversationParticipantEmails(conversation)
+                    : new LinkedHashSet<>();
             if (senderEmail != null && !senderEmail.isBlank()) {
                 participants.add(senderEmail.trim());
                 participants.add(senderEmail.trim().toLowerCase(Locale.ROOT));
             }
-            if (receiverEmail != null && !receiverEmail.isBlank()) {
+            if ((conversation == null || !conversation.isGroupConversation())
+                    && receiverEmail != null && !receiverEmail.isBlank()) {
                 participants.add(receiverEmail.trim());
                 participants.add(receiverEmail.trim().toLowerCase(Locale.ROOT));
             }
@@ -246,9 +423,34 @@ public class MessageService {
             addIdentityKeys(callerIdentifiers, user.getPublicUserId());
             if (user.getId() != null) addIdentityKeys(callerIdentifiers, String.valueOf(user.getId()));
         });
-        boolean isParticipant = callerIdentifiers.stream().anyMatch(identity ->
-                identity.equalsIgnoreCase(conversation.getUser1Id())
-                        || identity.equalsIgnoreCase(conversation.getUser2Id()));
+        boolean isParticipant;
+        if (conversation.isGroupConversation()) {
+            if (connectionGroupRepository == null) {
+                throw new UnauthorizedException("This group conversation is no longer available.");
+            }
+            com.truehunt.social.model.ConnectionGroupEntity group = connectionGroupRepository
+                    .findById(conversation.getConnectionGroupId())
+                    .orElseThrow(() -> new UnauthorizedException(
+                            "This group conversation is no longer available."));
+            List<String> currentParticipants = new ArrayList<>();
+            resolveUserAccount(group.getOwnerId())
+                    .map(UserAccountEntity::getEmail)
+                    .filter(email -> email != null && !email.isBlank())
+                    .map(email -> email.trim().toLowerCase(Locale.ROOT))
+                    .ifPresent(currentParticipants::add);
+            for (String memberProfileId : group.getMemberProfileIds()) {
+                resolveUserAccount(memberProfileId)
+                        .map(UserAccountEntity::getEmail)
+                        .filter(email -> email != null && !email.isBlank())
+                        .map(email -> email.trim().toLowerCase(Locale.ROOT))
+                        .ifPresent(currentParticipants::add);
+            }
+            isParticipant = currentParticipants.stream().anyMatch(callerIdentifiers::contains);
+        } else {
+            isParticipant = callerIdentifiers.stream().anyMatch(identity ->
+                    identity.equalsIgnoreCase(conversation.getUser1Id())
+                            || identity.equalsIgnoreCase(conversation.getUser2Id()));
+        }
         if (!isParticipant) {
             throw new UnauthorizedException("You cannot view messages in this conversation.");
         }
@@ -281,19 +483,7 @@ public class MessageService {
         if (messageId != null) event.put("id", messageId);
         if (content != null) event.put("content", content);
         if (messageId != null) event.put("edited", true);
-        Set<String> participantEmails = new LinkedHashSet<>();
-        for (String participantId : List.of(
-                conversation.getUser1Id() == null ? "" : conversation.getUser1Id(),
-                conversation.getUser2Id() == null ? "" : conversation.getUser2Id()
-        )) {
-            String email = resolveUserAccount(participantId)
-                    .map(UserAccountEntity::getEmail)
-                    .orElse(participantId.contains("@") ? participantId.trim() : "");
-            if (!email.isBlank()) {
-                participantEmails.add(email);
-                participantEmails.add(email.toLowerCase(Locale.ROOT));
-            }
-        }
+        Set<String> participantEmails = resolveConversationParticipantEmails(conversation);
         for (String participantEmail : participantEmails) {
             messagingTemplate.convertAndSendToUser(participantEmail, "/queue/messages", event);
         }
@@ -308,11 +498,19 @@ public class MessageService {
         event.put("messageIds", messageIds);
         event.put("readAt", readAt);
 
+        Set<String> participantEmails = resolveConversationParticipantEmails(conversation);
+        for (String participantEmail : participantEmails) {
+            messagingTemplate.convertAndSendToUser(participantEmail, "/queue/messages", event);
+        }
+    }
+
+    private Set<String> resolveConversationParticipantEmails(ConversationEntity conversation) {
         Set<String> participantEmails = new LinkedHashSet<>();
-        for (String participantId : List.of(
-                conversation.getUser1Id() == null ? "" : conversation.getUser1Id(),
-                conversation.getUser2Id() == null ? "" : conversation.getUser2Id()
-        )) {
+        List<String> participantIds = conversation.isGroupConversation()
+                ? conversation.getGroupParticipantIds()
+                : Arrays.asList(conversation.getUser1Id(), conversation.getUser2Id());
+        for (String participantId : participantIds) {
+            if (participantId == null || participantId.isBlank()) continue;
             String email = resolveUserAccount(participantId)
                     .map(UserAccountEntity::getEmail)
                     .orElse(participantId.contains("@") ? participantId.trim() : "");
@@ -321,9 +519,7 @@ public class MessageService {
                 participantEmails.add(email.toLowerCase(Locale.ROOT));
             }
         }
-        for (String participantEmail : participantEmails) {
-            messagingTemplate.convertAndSendToUser(participantEmail, "/queue/messages", event);
-        }
+        return participantEmails;
     }
 
     private ConversationEntity findOrCreateConversation(String senderEmail, String senderPublicId, String senderName,
