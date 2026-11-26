@@ -1409,7 +1409,7 @@ export default function SocialApp() {
   }, [isAdmin, navigate])
   const selectedOpportunityId = new URLSearchParams(location.search).get('opportunityId') || ''
   const selectedInvestorId = new URLSearchParams(location.search).get('investorId') || ''
-  const profileStorageKey = getProfileStorageKey(user?.userId || user?.id || user?.email)
+  const profileStorageKey = getProfileStorageKey(user?.publicUserId || user?.userId || user?.id || user?.email)
   const [activeNavigation, setActiveNavigationState] = useState(() => (
     location.state?.connectTalent?.name
       ? 'profile'
@@ -1510,7 +1510,7 @@ export default function SocialApp() {
     if (user && user.name) {
       return {
         ...emptyProfileDetails,
-        userId: user.userId || user.id || '',
+        userId: user.publicUserId || user.userId || user.id || '',
         name: user.name,
         email: user.email || '',
         phone: user.phone || user.phoneNumber || '',
@@ -1542,9 +1542,15 @@ export default function SocialApp() {
     }
     return user?.avatar || user?.profileImageUrl || ''
   })
-  const ownProfileId = String(
-    profileDetails.userId || user?.userId || profileDetails.id || user?.id || '',
-  ).trim()
+  const ownProfileId = [
+    user?.publicUserId,
+    user?.userId,
+    profileDetails.userId,
+    profileDetails.id,
+    user?.id,
+  ]
+    .map((id) => String(id || '').trim())
+    .find((id) => id && !id.includes('@')) || ''
   const ownProfilePath = ownProfileId
     ? `/social/${encodeURIComponent(ownProfileId)}/profile`
     : '/social/profile'
@@ -1853,7 +1859,10 @@ export default function SocialApp() {
         : '',
       ownProfilePath,
     ]
-    if (ownProfilePaths.includes(location.pathname) && location.pathname !== ownProfilePath) {
+    const isOwnProfilePath = ownProfilePaths.some((path) => (
+      path && path.toLowerCase() === location.pathname.toLowerCase()
+    ))
+    if (isOwnProfilePath && location.pathname !== ownProfilePath) {
       navigate(`${ownProfilePath}${location.search}`, { replace: true })
     }
   }, [
@@ -1863,6 +1872,7 @@ export default function SocialApp() {
     navigate,
     ownProfileId,
     ownProfilePath,
+    profileDetails,
     viewingCandidateProfile,
   ])
 
@@ -1906,13 +1916,14 @@ export default function SocialApp() {
 
     if (user && user.name) {
       setProfileDetails((prev) => {
-        if (prev.name && prev.name !== 'Your name' && prev.userId === (user.userId || user.id)) {
+        if (prev.name && prev.name !== 'Your name'
+          && prev.userId === (user.publicUserId || user.userId || user.id)) {
           return prev
         }
         return {
           ...emptyProfileDetails,
           ...prev,
-          userId: user.userId || user.id || '',
+          userId: user.publicUserId || user.userId || user.id || '',
           name: user.name,
           email: user.email || '',
           phone: user.phone || user.phoneNumber || '',
@@ -2161,7 +2172,7 @@ export default function SocialApp() {
             <ProfilePage
               isOwner={isProfileOwner}
               isActive={activeNavigation === 'profile'}
-              accountUserId={user?.userId || ''}
+              accountUserId={user?.publicUserId || user?.userId || ''}
               profileDetails={activeProfileDetails}
               setProfileDetails={(updater) => {
                 if (!isProfileOwner) {

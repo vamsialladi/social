@@ -2212,8 +2212,11 @@
         posts: nextDetails.posts,
       }
       const nextAuthFields = {}
-      if (persistedDetails.userId && persistedDetails.userId !== authUser?.userId) {
+      if (persistedDetails.userId
+        && (persistedDetails.userId !== authUser?.userId
+          || persistedDetails.userId !== authUser?.publicUserId)) {
         nextAuthFields.userId = persistedDetails.userId
+        nextAuthFields.publicUserId = persistedDetails.userId
         if (authUser?.id) {
           nextAuthFields.id = persistedDetails.userId
         }

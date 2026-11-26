@@ -56,22 +56,22 @@ class AuthServicePublicUserIdTest {
     }
 
     @Test
-    void createsProducerIdWithProducerPrefixAndFiveDigits() {
+    void createsUppercaseProducerIdWithFiveDigits() {
         RegisterRequest request = registration("PRODUCER");
 
         AuthResponse response = authService.register(request);
 
-        assertTrue(Pattern.matches("thPAM\\d{5}", response.getUserId()));
+        assertTrue(Pattern.matches("THPAM\\d{5}", response.getUserId()));
         assertEquals("STUDIO", response.getRole());
     }
 
     @Test
-    void createsSocialIdWithSocialPrefixAndFiveDigits() {
+    void createsUppercaseSocialIdWithFiveDigits() {
         RegisterRequest request = registration("TALENT");
 
         AuthResponse response = authService.register(request);
 
-        assertTrue(Pattern.matches("thscAM\\d{5}", response.getUserId()));
+        assertTrue(Pattern.matches("THSCAM\\d{5}", response.getUserId()));
         assertEquals("TALENT", response.getRole());
     }
 

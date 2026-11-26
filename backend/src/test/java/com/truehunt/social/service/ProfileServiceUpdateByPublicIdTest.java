@@ -98,6 +98,19 @@ class ProfileServiceUpdateByPublicIdTest {
     }
 
     @Test
+    void preservesRequestedUserIdLetterCase() {
+        String updatedPublicId = "thscal12345";
+        ProfileUpdateRequest request = new ProfileUpdateRequest();
+        request.setUserId(updatedPublicId);
+        request.setEmail("alex@example.com");
+
+        profileService.updateMyProfile(request, PUBLIC_ID);
+
+        assertEquals(updatedPublicId, account.getPublicUserId());
+        assertEquals(updatedPublicId, profile.getUserId());
+    }
+
+    @Test
     void resolvesCurrentProfileFromAccountWhenOnlyPublicIdMatches() {
         when(profileRepository.findByUserId(PUBLIC_ID)).thenReturn(Optional.empty());
 

@@ -504,8 +504,8 @@ public class AuthService {
             initials = compact.length() >= 2 ? compact.substring(0, 2) : (compact + "XX").substring(0, 2);
         }
         String prefix = "PRODUCER".equalsIgnoreCase(role) || "STUDIO".equalsIgnoreCase(role)
-                ? "thP"
-                : "thsc";
+                ? "THP"
+                : "THSC";
 
         for (int i = 0; i < 100; i++) {
             String candidate = prefix + initials

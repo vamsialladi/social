@@ -425,6 +425,7 @@ export default function AdminPage() {
           <span className="admin-user-label">
             <strong>{getDisplayName(adminUser)}</strong>
             <small>Administrator</small>
+            {adminUser.email && <small>{adminUser.email}</small>}
           </span>
         </div>
       </aside>
