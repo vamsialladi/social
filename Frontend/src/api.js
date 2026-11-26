@@ -74,7 +74,7 @@ export const api = {
   getProfile: () => fetchJson("/profiles/me"),
   getProfileById: (id) => fetchJson(`/profiles/${encodeURIComponent(id)}`),
   getProfileEndorsements: (profileId) =>
-    fetchJson(`/profiles/${encodeURIComponent(profileId)}/endorsements`),
+    fetchJson(`/profiles/${encodeURIComponent(profileId)}/endorsements`, { cache: "no-store" }),
   createProfileEndorsement: (profileId, endorsement) =>
     fetchJson(`/profiles/${encodeURIComponent(profileId)}/endorsements`, {
       method: "POST",
@@ -234,6 +234,13 @@ export const api = {
     }),
   cancelOpportunityApplication: (id) =>
     fetchJson(`/posts/${id}/apply`, { method: "DELETE" }),
+  getOpportunityApplications: (postId) =>
+    fetchJson(`/posts/${postId}/applications`),
+  updateOpportunityApplicationShortlist: (postId, applicationId, shortlisted) =>
+    fetchJson(`/posts/${postId}/applications/${applicationId}/shortlist`, {
+      method: "PATCH",
+      body: { shortlisted },
+    }),
   deletePost: async (id) => {
     const result = await fetchJson(`/posts/${id}`, { method: "DELETE" });
     if (result.investorProfileDeleted && typeof window !== "undefined") {

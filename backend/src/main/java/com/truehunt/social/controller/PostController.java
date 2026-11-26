@@ -3,6 +3,7 @@ package com.truehunt.social.controller;
 import com.truehunt.social.dto.ApiResponse;
 import com.truehunt.social.dto.CommentRequest;
 import com.truehunt.social.dto.CreatePostRequest;
+import com.truehunt.social.exception.BadRequestException;
 import com.truehunt.social.exception.UnauthorizedException;
 import com.truehunt.social.service.InvestorAccessService;
 import com.truehunt.social.service.PostService;
@@ -358,6 +359,39 @@ public class PostController {
     ) {
         return ResponseEntity.ok(ApiResponse.success(
                 postService.applyToOpportunity(id, resolveIdentity(userEmail, userId), body)
+        ));
+    }
+
+    @GetMapping("/posts/{id}/applications")
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getOpportunityApplications(
+            @PathVariable String id,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(
+                postService.getOpportunityApplications(id, resolveIdentity(userEmail, userId))
+        ));
+    }
+
+    @PatchMapping("/posts/{id}/applications/{applicationId}/shortlist")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> updateOpportunityApplicationShortlist(
+            @PathVariable String id,
+            @PathVariable String applicationId,
+            @RequestBody Map<String, Object> body,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId
+    ) {
+        Object shortlistedValue = body != null ? body.get("shortlisted") : null;
+        if (!(shortlistedValue instanceof Boolean shortlisted)) {
+            throw new BadRequestException("A shortlisted boolean is required.");
+        }
+        return ResponseEntity.ok(ApiResponse.success(
+                postService.updateOpportunityApplicationShortlist(
+                        id,
+                        applicationId,
+                        shortlisted,
+                        resolveIdentity(userEmail, userId)
+                )
         ));
     }
 

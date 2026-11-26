@@ -52,6 +52,19 @@ function postMatchesBlockedUser(post, blockedUsers) {
   })
 }
 
+function isModellingRequirementPost(post) {
+  const details = post?.opportunityDetails
+  return Boolean(
+    details
+    && typeof details === 'object'
+    && (
+      Object.prototype.hasOwnProperty.call(details, 'modellingCategory')
+      || Object.prototype.hasOwnProperty.call(details, 'numberOfModels')
+      || Object.prototype.hasOwnProperty.call(details, 'minimumHeight')
+    )
+  )
+}
+
 function ProfileAvatarPlaceholder() {
   return (
     <svg className="home-avatar-placeholder" viewBox="0 0 100 100" aria-hidden="true">
@@ -214,9 +227,12 @@ function formatOpportunityFieldLabel(field) {
     .replace(/^./, (letter) => letter.toUpperCase())
 }
 
-function formatOpportunityFieldValue(value) {
+function formatOpportunityFieldValue(value, field = '') {
   if (typeof value === 'boolean') return value ? 'Yes' : 'No'
   if (Array.isArray(value)) return value.length ? value.join(', ') : 'None selected'
+  if (field === 'openingsByGender' && value && typeof value === 'object') {
+    return Object.entries(value).map(([gender, count]) => `${gender}: ${count}`).join(' · ')
+  }
   if (value && typeof value === 'object') return JSON.stringify(value)
   return value === null || value === undefined || value === '' ? 'Not provided' : String(value)
 }
@@ -224,12 +240,13 @@ function formatOpportunityFieldValue(value) {
 const opportunityDetailGroups = [
   {
     title: 'Project details',
-    fields: ['projectName', 'projectType', 'craft', 'openings'],
+    fields: ['projectName', 'projectType', 'craft', 'openings', 'openingsByGender'],
   },
   {
     title: 'Role and requirements',
     fields: [
       'actingRole',
+      'genderPreferences',
       'genderPreference',
       'minimumAge',
       'maximumAge',
@@ -278,6 +295,7 @@ function Home({
   profileDetails,
   profilePreview,
   currentUserId,
+  currentUserIdentifiers = [],
   accountEmail,
   onOwnPostCreated,
   activeNavigation,
@@ -289,6 +307,7 @@ function Home({
   onViewProfile,
   onViewConnection,
   onOpenConnections,
+  onOpenModellingRequirement,
 }) {
   const navigate = useNavigate()
   const { isAuthenticated, loading: authLoading } = useAuth()
@@ -333,8 +352,13 @@ function Home({
   const [profileViewersError, setProfileViewersError] = useState('')
   const [isProfileViewersOpen, setIsProfileViewersOpen] = useState(false)
   const [applyingOpportunity, setApplyingOpportunity] = useState(null)
-  const [applicationName, setApplicationName] = useState('')
-  const [applicationExperience, setApplicationExperience] = useState('')
+  const [applicationsPost, setApplicationsPost] = useState(null)
+  const [opportunityApplications, setOpportunityApplications] = useState([])
+  const [isLoadingOpportunityApplications, setIsLoadingOpportunityApplications] = useState(false)
+  const [opportunityApplicationsError, setOpportunityApplicationsError] = useState('')
+  const [updatingApplicationIds, setUpdatingApplicationIds] = useState([])
+  const [applicationStep, setApplicationStep] = useState(1)
+  const [applicationData, setApplicationData] = useState({})
   const [isSubmittingApplication, setIsSubmittingApplication] = useState(false)
   const [pendingApplicationPostIds, setPendingApplicationPostIds] = useState([])
   const [applicationError, setApplicationError] = useState('')
@@ -1318,9 +1342,93 @@ function Home({
     }
 
     setApplicationError('')
-    setApplicationName(profileDetails.name.trim())
-    setApplicationExperience(profileDetails.experience || '')
+    setApplicationStep(1)
+    setApplicationData({
+      fullName: profileDetails.name || '',
+      age: '',
+      gender: profileDetails.gender || '',
+      mobileNumber: profileDetails.phone || profileDetails.professionalPhone || '',
+      emailAddress: profileDetails.email || accountEmail || '',
+      currentLocation: profileDetails.address || '',
+      languagesKnown: [
+        ...(profileDetails.languages || []),
+        ...(profileDetails.otherLanguage ? [profileDetails.otherLanguage] : []),
+      ].filter((language, index, values) => values.indexOf(language) === index).join(', '),
+      height: profileDetails.height || '',
+      weight: profileDetails.weight || '',
+      bodyType: profileDetails.bodyBuild || '',
+      experienceLevel: profileDetails.experience || '',
+      previousWork: '',
+      actingSkills: '',
+      profilePhotoUrl: profileDetails.profileImageUrl || profileDetails.avatar || '',
+      fullLengthPhotoUrl: '',
+      portfolioUrl: '',
+      introductionVideoUrl: '',
+      auditionVideoUrl: '',
+      accurateInformation: false,
+      termsAccepted: false,
+    })
     setApplyingOpportunity(post)
+  }
+
+  async function openOpportunityApplications(post) {
+    setApplicationsPost(post)
+    setOpportunityApplications([])
+    setOpportunityApplicationsError('')
+    setIsLoadingOpportunityApplications(true)
+    try {
+      const applications = await api.getOpportunityApplications(post.id)
+      if (!Array.isArray(applications)) {
+        throw new Error('The applications service returned an invalid response.')
+      }
+      setOpportunityApplications(applications)
+    } catch (error) {
+      console.error('Could not load casting applications:', error)
+      setOpportunityApplicationsError(error instanceof Error
+        ? error.message
+        : 'Could not load applications. Please try again.')
+    } finally {
+      setIsLoadingOpportunityApplications(false)
+    }
+  }
+
+  async function updateApplicationShortlist(application, shortlisted) {
+    const applicationId = String(application.id)
+    setOpportunityApplicationsError('')
+    setUpdatingApplicationIds((current) => [...current, applicationId])
+    try {
+      const updated = await api.updateOpportunityApplicationShortlist(
+        applicationsPost.id,
+        applicationId,
+        shortlisted,
+      )
+      setOpportunityApplications((current) => current.map((entry) => (
+        String(entry.id) === applicationId
+          ? { ...entry, shortlisted: Boolean(updated.shortlisted) }
+          : entry
+      )))
+    } catch (error) {
+      console.error('Could not update application shortlist status:', error)
+      setOpportunityApplicationsError(error instanceof Error
+        ? error.message
+        : 'Could not update shortlist status. Please try again.')
+    } finally {
+      setUpdatingApplicationIds((current) => current.filter((id) => id !== applicationId))
+    }
+  }
+
+  function updateApplicationData(field, value) {
+    setApplicationData((current) => ({ ...current, [field]: value }))
+  }
+
+  function goToNextApplicationStep() {
+    if (applicationStep === 3 && (!applicationData.accurateInformation || !applicationData.termsAccepted)) {
+      setApplicationError('Please confirm both declarations before continuing.')
+      return
+    }
+
+    setApplicationError('')
+    setApplicationStep((step) => step + 1)
   }
 
   function getInvestorInterestKey(post) {
@@ -1410,14 +1518,19 @@ function Home({
 
   async function submitOpportunityApplication(event) {
     event.preventDefault()
-    if (!applyingOpportunity || isSubmittingApplication) return
+    if (!applyingOpportunity || isSubmittingApplication || applicationStep !== 4) return
+    if (!applicationData.accurateInformation || !applicationData.termsAccepted) {
+      setApplicationError('Please confirm both declarations before submitting.')
+      return
+    }
 
     setApplicationError('')
     setIsSubmittingApplication(true)
     try {
       await handleApply(applyingOpportunity.id, {
-        applicantName: applicationName.trim(),
-        experience: applicationExperience.trim(),
+        applicantName: applicationData.fullName.trim(),
+        experience: applicationData.experienceLevel.trim(),
+        note: JSON.stringify(applicationData),
       })
       setApplyingOpportunity(null)
     } catch (error) {
@@ -1536,7 +1649,7 @@ function Home({
     setOpenPostMenuId('')
   }
 
-  async function handleSharePost(post) {
+  async function recordPostShare(post) {
     if (!post?.localOnly && /^\d+$/.test(String(post.id))) {
       try {
         const res = await api.sharePost(post.id)
@@ -1556,6 +1669,9 @@ function Home({
         console.warn('Could not record post share:', err)
       }
     }
+  }
+
+  async function handleSharePost(post) {
     const link = `${window.location.origin}/social/home?postId=${encodeURIComponent(String(post.id))}`
     if (navigator.share) {
       try {
@@ -1564,6 +1680,7 @@ function Home({
           text: post.content || '',
           url: link,
         })
+        await recordPostShare(post)
         return
       } catch (error) {
         if (error?.name === 'AbortError') return
@@ -1571,6 +1688,7 @@ function Home({
     }
     try {
       await navigator.clipboard.writeText(link)
+      await recordPostShare(post)
       window.alert('Post link copied to clipboard.')
     } catch {
       window.prompt('Share this post link:', link)
@@ -1767,9 +1885,17 @@ function Home({
     if (post.isAuthor === false) return false
 
     const authorId = String(post.authorId || '').trim().toLowerCase()
-    const ownIds = [currentUserId, profileDetails.userId, profileDetails.id, profileDetails.email, accountEmail]
+    const ownIds = [
+      currentUserId,
+      ...currentUserIdentifiers,
+      profileDetails.userId,
+      profileDetails.id,
+      profileDetails.email,
+      accountEmail,
+    ]
       .filter(Boolean)
       .map((id) => String(id).trim().toLowerCase())
+      .filter((id) => id !== 'me')
     if (authorId && authorId !== 'me' && ownIds.includes(authorId)) return true
 
     const authorName = String(post.authorName || '').trim().toLowerCase()
@@ -1777,6 +1903,46 @@ function Home({
     const genericNames = ['cinema professional', 'truehunt member', 'truehunt user', 'your name', 'member', 'talent scout', 'talent']
     if (authorName && ownName && authorName === ownName && !genericNames.includes(authorName)) return true
     return false
+  }
+
+  function isPostByCurrentUser(post) {
+    if (!post) return false
+    const authorIds = [post.authorId, post.authorEmail]
+      .filter(Boolean)
+      .map((id) => String(id).trim().toLowerCase())
+    const ownIds = [
+      currentUserId,
+      ...currentUserIdentifiers,
+      profileDetails.userId,
+      profileDetails.id,
+      profileDetails.email,
+      accountEmail,
+    ]
+      .filter(Boolean)
+      .map((id) => String(id).trim().toLowerCase())
+      .filter((id) => id !== 'me')
+    if (authorIds.some((authorId) => ownIds.includes(authorId))) return true
+
+    const legacyAccountIds = ['1000001', 'pro@truehunt.in']
+    return authorIds.some((authorId) => authorId === 'me' || legacyAccountIds.includes(authorId))
+      && ownIds.some((ownId) => legacyAccountIds.includes(ownId))
+  }
+
+  function canManagePost(post) {
+    if (!post || post.isAuthor === false) return false
+
+    const authorIds = [post.authorId, post.authorEmail]
+      .filter(Boolean)
+      .map((id) => String(id).trim().toLowerCase())
+    const ownIds = [currentUserId, profileDetails.userId, profileDetails.id, profileDetails.email, accountEmail]
+      .filter(Boolean)
+      .map((id) => String(id).trim().toLowerCase())
+
+    if (authorIds.some((authorId) => ownIds.includes(authorId))) return true
+
+    const legacyAccountIds = ['me', '1000001', 'pro@truehunt.in']
+    return authorIds.some((authorId) => legacyAccountIds.includes(authorId))
+      && ownIds.some((ownId) => legacyAccountIds.includes(ownId))
   }
 
   function shouldShowPostLikeCount(post) {
@@ -1828,6 +1994,68 @@ function Home({
     window.addEventListener('truehunt-open-saved-post', handleOpenSavedPost)
     return () => window.removeEventListener('truehunt-open-saved-post', handleOpenSavedPost)
   }, [showPost])
+
+  const opportunityActionsRef = useRef(null)
+  useEffect(() => {
+    opportunityActionsRef.current = {
+      apply: openOpportunityApplication,
+      share: handleSharePost,
+      setActiveNavigation,
+    }
+  })
+
+  useEffect(() => {
+    function addOpportunityPost(post) {
+      if (!post?.id) return
+      const postId = String(post.id)
+      setPosts((current) => {
+        const existing = current.some((item) => String(item.id) === postId)
+        return existing
+          ? current.map((item) => String(item.id) === postId ? { ...item, ...post } : item)
+          : [post, ...current]
+      })
+    }
+
+    function handleOpportunityPublished(event) {
+      addOpportunityPost(event.detail?.post)
+    }
+
+    function handleOpportunityDeleted(event) {
+      const postId = String(event.detail?.postId || '')
+      if (!postId) return
+      setPosts((current) => current.filter((post) => String(post.id) !== postId))
+      setSelectedOpportunity((current) => (
+        String(current?.id) === postId ? null : current
+      ))
+    }
+
+    function handleApplyToOpportunity(event) {
+      const post = event.detail?.post
+      if (!post?.id) return
+      addOpportunityPost(post)
+      opportunityActionsRef.current?.setActiveNavigation('home')
+      setSelectedOpportunity(null)
+      opportunityActionsRef.current?.apply(post)
+    }
+
+    function handleShareOpportunity(event) {
+      const post = event.detail?.post
+      if (!post?.id) return
+      addOpportunityPost(post)
+      void opportunityActionsRef.current?.share(post)
+    }
+
+    window.addEventListener('truehunt-opportunity-published', handleOpportunityPublished)
+    window.addEventListener('truehunt-opportunity-deleted', handleOpportunityDeleted)
+    window.addEventListener('truehunt-apply-opportunity', handleApplyToOpportunity)
+    window.addEventListener('truehunt-share-opportunity', handleShareOpportunity)
+    return () => {
+      window.removeEventListener('truehunt-opportunity-published', handleOpportunityPublished)
+      window.removeEventListener('truehunt-opportunity-deleted', handleOpportunityDeleted)
+      window.removeEventListener('truehunt-apply-opportunity', handleApplyToOpportunity)
+      window.removeEventListener('truehunt-share-opportunity', handleShareOpportunity)
+    }
+  }, [])
 
   useEffect(() => {
     if (!focusedPostId || activeNavigation !== 'home') return undefined
@@ -2174,7 +2402,7 @@ function Home({
       || String(post.id) === focusedPostId
       || String(post.id) === String(selectedOpportunityId))
     && (activeNavigation === 'opportunities'
-      ? post.type === 'opportunity'
+      ? post.type === 'opportunity' && !isModellingRequirementPost(post)
       : true)
   ))
   const visibleInvestorListings = investorListings.filter(
@@ -2187,7 +2415,7 @@ function Home({
     ? visiblePosts.find((post) => String(post.id) === String(selectedOpportunity?.id))
     : null
   const isOwnSelectedOpportunity = selectedOpportunityPost
-    ? isOwnPost(selectedOpportunityPost)
+    ? canManagePost(selectedOpportunityPost)
     : false
   const selectedOpportunityDetails = selectedOpportunityPost?.opportunityDetails
     && typeof selectedOpportunityPost.opportunityDetails === 'object'
@@ -2201,10 +2429,28 @@ function Home({
   const selectedOpportunityMedia = selectedOpportunityPost
     ? getPostPreviewMedia(selectedOpportunityPost)
     : null
+
+  function openOpportunityPost(post, toggleIfExpanded = false) {
+    if (isModellingRequirementPost(post)) {
+      onOpenModellingRequirement?.(post)
+      return
+    }
+
+    const isExpanded = String(selectedOpportunity?.id) === String(post.id)
+    if (toggleIfExpanded && activeNavigation === 'opportunities' && isExpanded) {
+      setSelectedOpportunity(null)
+      return
+    }
+
+    setSelectedOpportunity(post)
+    if (activeNavigation !== 'opportunities') {
+      setActiveNavigation?.('opportunities')
+    }
+  }
   const allMyPosts = [
-    ...posts.filter(isOwnPost),
+    ...posts,
     ...(Array.isArray(profileDetails.posts) ? profileDetails.posts : []),
-  ].filter((post, index, allPosts) => (
+  ].filter(isPostByCurrentUser).filter((post, index, allPosts) => (
     allPosts.findIndex((candidate) => String(candidate.id) === String(post.id)) === index
   ))
   const myPosts = allMyPosts.slice(0, 3)
@@ -2232,7 +2478,7 @@ function Home({
       <section
         className={`home-page${activeNavigation === 'opportunities' ? ' is-opportunities' : ''}`}
         hidden={hidden || isWritingArticle}
-        aria-label={activeNavigation === 'opportunities' ? 'Opportunities' : 'Home feed'}
+        aria-label={activeNavigation === 'opportunities' ? 'Casting' : 'Home feed'}
       >
       <div className={`home-layout${activeNavigation === 'opportunities' ? ' is-opportunities' : ''}`}>
         <aside className="home-sidebar" aria-label="Your profile summary">
@@ -2523,7 +2769,7 @@ function Home({
                   value={draft}
                   onChange={(event) => setDraft(event.target.value)}
                   placeholder={draftType === 'opportunity'
-                    ? 'Describe the job or opportunity you are sharing'
+                    ? 'Describe the casting call you are sharing'
                     : 'What would you like to share?'}
                   rows={4}
                   autoFocus
@@ -2557,7 +2803,7 @@ function Home({
                   <p className="home-post-error" role="alert">{mediaSelectionError}</p>
                 )}
                 <div className="home-publish-row">
-                  <span>{draftType === 'opportunity' ? 'Opportunity' : 'Post'}</span>
+                  <span>{draftType === 'opportunity' ? 'Casting call' : 'Post'}</span>
                   <div className="home-publish-controls">
                     <button
                       className="home-cancel-edit-button"
@@ -2669,10 +2915,10 @@ function Home({
           )}
 
           <div className="home-feed-heading">
-            <span>{activeNavigation === 'opportunities' ? 'Opportunities' : 'Posts'}</span>
+            <span>{activeNavigation === 'opportunities' ? 'Casting' : 'Posts'}</span>
             {activeNavigation === 'opportunities' ? (
               <button className="home-opportunity-button" type="button" onClick={startOpportunityPost}>
-                Share an opportunity
+                Share a casting call
               </button>
             ) : (
               <span className="home-feed-sort">Recent</span>
@@ -2682,10 +2928,10 @@ function Home({
           {visiblePosts.length === 0 ? (
             <section className="home-card home-empty-feed">
               <h2>{activeNavigation === 'opportunities'
-                ? 'No opportunities shared yet'
+                ? 'No casting calls shared yet'
                 : 'Your feed starts here'}</h2>
               <p>{activeNavigation === 'opportunities'
-                ? 'When someone shares a job or opportunity, it will appear here.'
+                ? 'When someone shares a casting call, it will appear here.'
                 : 'Share an update, photo, or video to create your first post.'}</p>
             </section>
           ) : (
@@ -2697,8 +2943,17 @@ function Home({
                 const postId = String(post.id)
                 const postMedia = getPostPreviewMedia(post)
                 const commentProfiles = [...profileDirectory, ...connectedProfiles]
-                const isOwnOpportunity = post.type === 'opportunity' && isOwnPost(post)
+                const isOwnOpportunity = post.type === 'opportunity' && canManagePost(post)
                 const isOpportunityExpanded = String(selectedOpportunity?.id) === postId
+                const opportunityDetails = post.opportunityDetails && typeof post.opportunityDetails === 'object'
+                  ? post.opportunityDetails
+                  : {}
+                const selectedGenders = Array.isArray(opportunityDetails.genderPreferences)
+                  ? opportunityDetails.genderPreferences
+                  : String(opportunityDetails.genderPreference || '').split(',').map((gender) => gender.trim()).filter(Boolean)
+                const genderPreferenceBadge = selectedGenders.length === 1 && selectedGenders[0] !== 'Any'
+                  ? `${selectedGenders[0]} preference`
+                  : ''
                 const postComments = Array.isArray(post.comments) ? post.comments : []
                 const areCommentsExpanded = expandedCommentPostIds.includes(postId)
                 const commentsToShow = areCommentsExpanded ? postComments : postComments.slice(-1)
@@ -2735,7 +2990,7 @@ function Home({
                       )}
                       <time>{post.createdAt}</time>
                     </div>
-                    {!isOpportunityExpanded && isOwnPost(post) && !isOwnOpportunity && (
+                    {!isOpportunityExpanded && canManagePost(post) && !isOwnOpportunity && (
                       <button
                         className="home-post-edit-trigger"
                         type="button"
@@ -2746,7 +3001,7 @@ function Home({
                         <Pencil size={17} aria-hidden="true" />
                       </button>
                     )}
-                    {!isOpportunityExpanded && !isOwnPost(post) && (
+                    {!isOpportunityExpanded && !canManagePost(post) && (
                       <div className="home-post-menu">
                         <button
                           className="home-post-menu-trigger"
@@ -2787,25 +3042,25 @@ function Home({
                     </span>
                   )}
                   {post.type === 'opportunity' ? (
-                    <div className="home-post-opportunity-summary">
+                    <div className={`home-post-opportunity-summary${genderPreferenceBadge ? ' has-gender-preference' : ''}`}>
+                      {genderPreferenceBadge && (
+                        <span className="home-post-gender-preference">{genderPreferenceBadge}</span>
+                      )}
                       <button
                         type="button"
                         className="home-post-opportunity-trigger"
-                        onClick={() => {
-                          setSelectedOpportunity(post)
-                          if (activeNavigation === 'home') {
-                            setActiveNavigation?.('opportunities')
-                          } else {
-                            setSelectedOpportunity(isOpportunityExpanded ? null : post)
-                          }
-                        }}
-                        aria-label={`View opportunity: ${post.title || getPostPreviewText(post) || 'Details'}`}
+                        onClick={() => openOpportunityPost(post, true)}
+                        aria-label={`View ${isModellingRequirementPost(post) ? 'modelling requirement' : 'casting call'}: ${post.title || getPostPreviewText(post) || 'Details'}`}
                         aria-expanded={isOpportunityExpanded}
                       >
                         {post.title && <span className="home-post-title">{post.title}</span>}
                         {post.content && <span className="home-post-content">{post.content}</span>}
                         {postMedia && !postMedia.isVideo && (
-                          <img className="home-post-media" src={postMedia.url} alt="Opportunity attachment" />
+                          <img
+                            className="home-post-media"
+                            src={postMedia.url}
+                            alt={isModellingRequirementPost(post) ? 'Modelling requirement attachment' : 'Casting call attachment'}
+                          />
                         )}
                       </button>
                       {postMedia?.isVideo && (
@@ -2824,7 +3079,16 @@ function Home({
                     </>
                   )}
                   {post.type === 'article' && <span className="home-post-type">Article</span>}
-                  {post.type === 'opportunity' && <span className="home-post-type">Opportunity</span>}
+                  {post.type === 'opportunity' && (
+                    <button
+                      type="button"
+                      className="home-post-type home-post-type-button"
+                      aria-label={`Open ${isModellingRequirementPost(post) ? 'modelling requirement' : 'casting call'}: ${post.title || getPostPreviewText(post) || 'Details'}`}
+                      onClick={() => openOpportunityPost(post)}
+                    >
+                      {isModellingRequirementPost(post) ? 'Modelling requirement' : 'Casting call'}
+                    </button>
+                  )}
 
                   {/* Post interactive action buttons wired to backend APIs */}
                   <div className="home-post-action-bar" style={{ display: 'flex', gap: '8px', marginTop: '12px', borderTop: '1px solid var(--color-border, #eee)', paddingTop: '8px', flexWrap: 'wrap' }}>
@@ -2975,19 +3239,19 @@ function Home({
                       <button
                         type="button"
                         onClick={() => startEditingOpportunity(post)}
-                        title="Edit opportunity"
+                        title="Edit casting call"
                       >
-                        Edit opportunity
+                        Edit casting call
                       </button>
                       <button
                         type="button"
                         onClick={() => handleDelete(post.id)}
-                        title="Delete opportunity"
+                        title="Delete casting call"
                       >
                         Delete
                       </button>
                       </div>
-                    ) : isOwnPost(post) ? (
+                    ) : canManagePost(post) ? (
                       <button
                         type="button"
                         onClick={() => handleDelete(post.id)}
@@ -3223,7 +3487,7 @@ function Home({
               })}
             </div>
             {selectedOpportunityPost && (
-              <section className="home-opportunity-detail home-card" aria-label="Opportunity details">
+              <section className="home-opportunity-detail home-card" aria-label="Casting call details">
                 <header className="home-opportunity-detail-header">
                   <span className="home-opportunity-detail-icon">
                     <BriefcaseBusiness size={20} aria-hidden="true" />
@@ -3231,62 +3495,58 @@ function Home({
                   <div>
                     <strong>{selectedOpportunityPost.authorName || name}</strong>
                     <span>
-                      Opportunity
+                      Casting call
                       {selectedOpportunityPost.createdAt ? ` · ${selectedOpportunityPost.createdAt}` : ''}
                     </span>
                   </div>
                   <button
                     className="home-opportunity-detail-close"
                     type="button"
-                    aria-label="Close opportunity details"
+                    aria-label="Close casting call details"
                     onClick={() => setSelectedOpportunity(null)}
                   >
                     <X size={18} aria-hidden="true" />
                   </button>
                 </header>
-                <h1>{selectedOpportunityPost.title || selectedOpportunityDetails.projectName || 'Opportunity'}</h1>
+                <h1>{selectedOpportunityPost.title || selectedOpportunityDetails.projectName || 'Casting call'}</h1>
                 <p className="home-opportunity-detail-meta">
                   {[
                     selectedOpportunityDetails.projectType,
                     selectedOpportunityDetails.actingRole,
                     selectedOpportunityDetails.locationPreference,
-                  ].filter(Boolean).join(' · ') || 'Opportunity details'}
+                  ].filter(Boolean).join(' · ') || 'Casting call details'}
                 </p>
-                <div className="home-opportunity-detail-actions">
-                  {isOwnSelectedOpportunity ? (
-                    <span className="home-opportunity-owner-note">You posted this opportunity</span>
-                  ) : (
-                    <>
-                      <button
-                        className="home-opportunity-apply"
-                        type="button"
-                        onClick={() => openOpportunityApplication(selectedOpportunityPost)}
-                        disabled={pendingApplicationPostIds.includes(String(selectedOpportunityPost.id))}
-                      >
-                        {selectedOpportunityPost.applied ? '✓ Applied' : '⚡ Apply Now'}
-                      </button>
-                    </>
-                  )}
-                </div>
                 {selectedOpportunityPost.content && (
                   <section className="home-opportunity-detail-section">
-                    <h2>About this opportunity</h2>
+                    <h2>About this casting call</h2>
                     <p className="home-opportunity-description">{selectedOpportunityPost.content}</p>
                   </section>
                 )}
                 {selectedOpportunityMedia?.isVideo
                   ? <video className="home-opportunity-modal-media" src={selectedOpportunityMedia.url} controls />
                   : selectedOpportunityMedia && (
-                    <img className="home-opportunity-modal-media" src={selectedOpportunityMedia.url} alt="Opportunity attachment" />
+                    <img className="home-opportunity-modal-media" src={selectedOpportunityMedia.url} alt="Casting call attachment" />
                   )}
                 {opportunityDetailGroups.map((group) => (
                   <section className="home-opportunity-detail-section" key={group.title}>
                     <h2>{group.title}</h2>
                     <dl className="home-opportunity-facts">
-                      {group.fields.map((field) => (
+                      {group.fields
+                        .filter((field) => {
+                          const hasGenderPreferences = Array.isArray(selectedOpportunityDetails.genderPreferences)
+                            && selectedOpportunityDetails.genderPreferences.length > 0
+                          if (field === 'genderPreferences') return hasGenderPreferences
+                          if (field === 'genderPreference') return !hasGenderPreferences
+                          if (field === 'openingsByGender') {
+                            return selectedOpportunityDetails.openingsByGender
+                              && Object.keys(selectedOpportunityDetails.openingsByGender).length > 0
+                          }
+                          return true
+                        })
+                        .map((field) => (
                         <div key={field}>
                           <dt>{formatOpportunityFieldLabel(field)}</dt>
-                          <dd>{formatOpportunityFieldValue(selectedOpportunityDetails[field])}</dd>
+                          <dd>{formatOpportunityFieldValue(selectedOpportunityDetails[field], field)}</dd>
                         </div>
                       ))}
                     </dl>
@@ -3305,6 +3565,29 @@ function Home({
                     </dl>
                   </section>
                 )}
+                <div className="home-opportunity-detail-actions">
+                  {isOwnSelectedOpportunity ? (
+                    <>
+                      <span className="home-opportunity-owner-note">You posted this casting call</span>
+                      <button
+                        className="home-opportunity-apply"
+                        type="button"
+                        onClick={() => void openOpportunityApplications(selectedOpportunityPost)}
+                      >
+                        View Applications ({selectedOpportunityPost.applicationsCount || 0})
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      className="home-opportunity-apply"
+                      type="button"
+                      onClick={() => openOpportunityApplication(selectedOpportunityPost)}
+                      disabled={pendingApplicationPostIds.includes(String(selectedOpportunityPost.id))}
+                    >
+                      {selectedOpportunityPost.applied ? '✓ Applied' : '⚡ Apply Now'}
+                    </button>
+                  )}
+                </div>
               </section>
             )}
             </div>
@@ -3446,6 +3729,133 @@ function Home({
         </aside>
       </div>
     </section>
+    {applicationsPost && (
+      <div
+        className="home-connections-backdrop"
+        onMouseDown={(event) => {
+          if (event.target === event.currentTarget) setApplicationsPost(null)
+        }}
+      >
+        <section
+          className="home-connections-dialog home-casting-applications-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="home-casting-applications-title"
+          onMouseDown={(event) => event.stopPropagation()}
+        >
+          <header className="home-connections-dialog-header">
+            <div>
+              <h2 id="home-casting-applications-title">Applications</h2>
+              <p>{applicationsPost.title || 'Casting call'}</p>
+            </div>
+            <button
+              className="home-connections-close"
+              type="button"
+              aria-label="Close applications"
+              onClick={() => setApplicationsPost(null)}
+            >
+              <X size={20} aria-hidden="true" />
+            </button>
+          </header>
+          <div className="home-casting-applications-content">
+            {isLoadingOpportunityApplications ? (
+              <p className="home-casting-applications-message">Loading applications…</p>
+            ) : opportunityApplicationsError ? (
+              <p className="home-casting-applications-message is-error" role="alert">
+                {opportunityApplicationsError}
+              </p>
+            ) : opportunityApplications.length === 0 ? (
+              <p className="home-casting-applications-message">No applications received yet.</p>
+            ) : (
+              opportunityApplications.map((application) => {
+                const applicantName = application.applicantName || 'Applicant'
+                const details = application.applicationDetails
+                  && typeof application.applicationDetails === 'object'
+                  ? application.applicationDetails
+                  : {}
+                const detailFields = [
+                  ['Age', 'age'],
+                  ['Gender', 'gender'],
+                  ['Mobile', 'mobileNumber'],
+                  ['Email', 'emailAddress'],
+                  ['Location', 'currentLocation'],
+                  ['Languages', 'languagesKnown'],
+                  ['Height', 'height'],
+                  ['Weight', 'weight'],
+                  ['Experience', 'experienceLevel'],
+                  ['Previous work', 'previousWork'],
+                  ['Skills', 'actingSkills'],
+                  ['Portfolio', 'portfolioUrl'],
+                ].filter(([, field]) => details[field])
+
+                return (
+                  <article className="home-casting-application-card" key={application.id}>
+                    <div className="home-casting-application-heading">
+                      <button
+                        className="home-casting-applicant-profile"
+                        type="button"
+                        onClick={() => {
+                          setApplicationsPost(null)
+                          viewPostAuthor({
+                            authorId: application.applicantId,
+                            authorName: applicantName,
+                            authorAvatar: application.profileImageUrl,
+                          })
+                        }}
+                      >
+                        {application.profileImageUrl
+                          ? <img src={application.profileImageUrl} alt="" />
+                          : <span aria-hidden="true">{applicantName.charAt(0).toUpperCase()}</span>}
+                        <span className="home-casting-applicant-name">
+                          <strong>{applicantName}</strong>
+                          {application.headline && <small>{application.headline}</small>}
+                        </span>
+                      </button>
+                      <label className="home-casting-shortlist-field">
+                        <span className="home-sr-only">Shortlist status for {applicantName}</span>
+                        <select
+                          value={application.shortlisted ? 'shortlisted' : 'not-shortlisted'}
+                          onChange={(event) => {
+                            void updateApplicationShortlist(
+                              application,
+                              event.target.value === 'shortlisted',
+                            )
+                          }}
+                          disabled={updatingApplicationIds.includes(String(application.id))}
+                        >
+                          <option value="not-shortlisted">Not shortlisted</option>
+                          <option value="shortlisted">Shortlisted</option>
+                        </select>
+                      </label>
+                    </div>
+                    {application.experience && (
+                      <p className="home-casting-application-experience">
+                        <strong>Experience:</strong> {application.experience}
+                      </p>
+                    )}
+                    {detailFields.length > 0 && (
+                      <dl className="home-casting-application-details">
+                        {detailFields.map(([label, field]) => (
+                          <div key={field}>
+                            <dt>{label}</dt>
+                            <dd>{String(details[field])}</dd>
+                          </div>
+                        ))}
+                      </dl>
+                    )}
+                    {application.appliedAt && (
+                      <small className="home-casting-application-date">
+                        Applied {new Date(application.appliedAt).toLocaleString()}
+                      </small>
+                    )}
+                  </article>
+                )
+              })
+            )}
+          </div>
+        </section>
+      </div>
+    )}
     {applyingOpportunity && (
       <div
         className="home-connections-backdrop"
@@ -3463,7 +3873,7 @@ function Home({
         >
           <header className="home-connections-dialog-header">
             <div>
-              <h2 id="home-application-title">Apply for opportunity</h2>
+              <h2 id="home-application-title">Apply for casting</h2>
               <p>{applyingOpportunity.title || 'Review your profile information'}</p>
             </div>
             <button
@@ -3480,47 +3890,195 @@ function Home({
             className="home-application-form"
             id="home-application-form"
             onSubmit={submitOpportunityApplication}
+            onKeyDown={(event) => {
+              if (
+                event.key === 'Enter'
+                && event.target instanceof HTMLElement
+                && event.target.tagName !== 'TEXTAREA'
+                && event.target.tagName !== 'BUTTON'
+              ) {
+                event.preventDefault()
+              }
+            }}
           >
-            <p className="home-application-note">Review and edit your details before submitting.</p>
-            <label className="home-application-field">
-              <span>Name</span>
-              <input
-                type="text"
-                value={applicationName}
-                onChange={(event) => setApplicationName(event.target.value)}
-                placeholder="Add your name to your profile"
-                disabled={isSubmittingApplication}
-              />
-            </label>
-            <label className="home-application-field">
-              <span>Experience</span>
-              <input
-                type="text"
-                value={applicationExperience}
-                onChange={(event) => setApplicationExperience(event.target.value)}
-                placeholder="Add your experience to your profile"
-                disabled={isSubmittingApplication}
-              />
-            </label>
+            <div className="home-application-progress" aria-label={`Application step ${applicationStep} of 4`}>
+              {Array.from({ length: 4 }, (_, index) => (
+                <span
+                  key={index}
+                  className={index + 1 <= applicationStep ? 'is-active' : ''}
+                >
+                  {index + 1}
+                </span>
+              ))}
+            </div>
+
+            {applicationStep === 1 && (
+              <>
+                <h3 className="home-application-step-title">01. Applicant Information</h3>
+                <div className="home-application-grid">
+                  <label className="home-application-field home-application-full">
+                    <span>Full Name</span>
+                    <input value={applicationData.fullName || ''} onChange={(event) => updateApplicationData('fullName', event.target.value)} placeholder="Full Name" disabled={isSubmittingApplication} />
+                  </label>
+                  <label className="home-application-field">
+                    <span>Age</span>
+                    <input type="number" value={applicationData.age || ''} onChange={(event) => updateApplicationData('age', event.target.value)} placeholder="Age" disabled={isSubmittingApplication} />
+                  </label>
+                  <label className="home-application-field">
+                    <span>Gender</span>
+                    <select value={applicationData.gender || ''} onChange={(event) => updateApplicationData('gender', event.target.value)} disabled={isSubmittingApplication}>
+                      <option value="">Gender</option>
+                      <option>Male</option>
+                      <option>Female</option>
+                      <option>Non-binary</option>
+                      <option>Prefer not to say</option>
+                    </select>
+                  </label>
+                  <label className="home-application-field home-application-full">
+                    <span>Mobile Number</span>
+                    <input value={applicationData.mobileNumber || ''} onChange={(event) => updateApplicationData('mobileNumber', event.target.value)} placeholder="Mobile Number" disabled={isSubmittingApplication} />
+                  </label>
+                  <label className="home-application-field home-application-full">
+                    <span>Email Address</span>
+                    <input type="email" value={applicationData.emailAddress || ''} onChange={(event) => updateApplicationData('emailAddress', event.target.value)} placeholder="Email Address" disabled={isSubmittingApplication} />
+                  </label>
+                  <label className="home-application-field home-application-full">
+                    <span>Current Location</span>
+                    <input value={applicationData.currentLocation || ''} onChange={(event) => updateApplicationData('currentLocation', event.target.value)} placeholder="Current Location" disabled={isSubmittingApplication} />
+                  </label>
+                  <label className="home-application-field home-application-full">
+                    <span>Languages Known</span>
+                    <input value={applicationData.languagesKnown || ''} onChange={(event) => updateApplicationData('languagesKnown', event.target.value)} placeholder="Languages Known" disabled={isSubmittingApplication} />
+                  </label>
+                </div>
+                <h3 className="home-application-step-title">02. Physical Details</h3>
+                <div className="home-application-grid">
+                  <label className="home-application-field">
+                    <span>Height (cm)</span>
+                    <input value={applicationData.height || ''} onChange={(event) => updateApplicationData('height', event.target.value)} placeholder="Height (cm)" disabled={isSubmittingApplication} />
+                  </label>
+                  <label className="home-application-field">
+                    <span>Weight (kg)</span>
+                    <input value={applicationData.weight || ''} onChange={(event) => updateApplicationData('weight', event.target.value)} placeholder="Weight (kg)" disabled={isSubmittingApplication} />
+                  </label>
+                  <label className="home-application-field home-application-full">
+                    <span>Body Type (Optional)</span>
+                    <input value={applicationData.bodyType || ''} onChange={(event) => updateApplicationData('bodyType', event.target.value)} placeholder="Body Type (Optional)" disabled={isSubmittingApplication} />
+                  </label>
+                </div>
+                <h3 className="home-application-step-title">03. Acting Experience</h3>
+                <div className="home-application-grid">
+                  <label className="home-application-field home-application-full">
+                    <span>Experience Level</span>
+                    <select value={applicationData.experienceLevel || ''} onChange={(event) => updateApplicationData('experienceLevel', event.target.value)} disabled={isSubmittingApplication}>
+                      <option value="">Experience Level</option>
+                      <option>Newcomer</option>
+                      <option>Beginner</option>
+                      <option>Intermediate</option>
+                      <option>Experienced</option>
+                      <option>Professional</option>
+                    </select>
+                  </label>
+                  <label className="home-application-field home-application-full">
+                    <span>Previous Movies / Projects</span>
+                    <textarea value={applicationData.previousWork || ''} onChange={(event) => updateApplicationData('previousWork', event.target.value)} placeholder="Previous Movies / Projects" disabled={isSubmittingApplication} />
+                  </label>
+                  <label className="home-application-field home-application-full">
+                    <span>Acting Skills and Special Talents</span>
+                    <input value={applicationData.actingSkills || ''} onChange={(event) => updateApplicationData('actingSkills', event.target.value)} placeholder="Acting Skills and Special Talents" disabled={isSubmittingApplication} />
+                  </label>
+                </div>
+              </>
+            )}
+
+            {applicationStep === 2 && (
+              <>
+                <h3 className="home-application-step-title">04. Portfolio &amp; Audition</h3>
+                <div className="home-application-grid">
+                  {[
+                    ['profilePhotoUrl', 'Profile Photo URL'],
+                    ['fullLengthPhotoUrl', 'Full-Length Photo URL'],
+                    ['portfolioUrl', 'Portfolio URL'],
+                    ['introductionVideoUrl', 'Introduction Video URL'],
+                    ['auditionVideoUrl', 'Audition Video URL'],
+                  ].map(([field, label]) => (
+                    <label className="home-application-field home-application-full" key={field}>
+                      <span>{label}</span>
+                      <input value={applicationData[field] || ''} onChange={(event) => updateApplicationData(field, event.target.value)} placeholder={label} disabled={isSubmittingApplication} />
+                    </label>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {applicationStep === 3 && (
+              <>
+                <h3 className="home-application-step-title">05. Applicant Declaration</h3>
+                <label className="home-application-check">
+                  <input type="checkbox" checked={Boolean(applicationData.accurateInformation)} onChange={(event) => updateApplicationData('accurateInformation', event.target.checked)} disabled={isSubmittingApplication} />
+                  <span>I confirm that my information and portfolio are accurate.</span>
+                </label>
+                <label className="home-application-check">
+                  <input type="checkbox" checked={Boolean(applicationData.termsAccepted)} onChange={(event) => updateApplicationData('termsAccepted', event.target.checked)} disabled={isSubmittingApplication} />
+                  <span>I agree to the casting terms and privacy policy.</span>
+                </label>
+              </>
+            )}
+
+            {applicationStep === 4 && (
+              <>
+                <h3 className="home-application-step-title">Review Application</h3>
+                <div className="home-application-review">
+                  {Object.entries(applicationData)
+                    .filter(([field, value]) => !['accurateInformation', 'termsAccepted'].includes(field) && value)
+                    .map(([field, value]) => (
+                      <div key={field}><span>{field.replace(/([A-Z])/g, ' $1').replace(/^./, (letter) => letter.toUpperCase())}</span><strong>{String(value)}</strong></div>
+                    ))}
+                </div>
+              </>
+            )}
+
             {applicationError && <p className="home-application-error" role="alert">{applicationError}</p>}
           </form>
           <div className="home-application-actions">
-            <button
-              className="home-application-cancel"
-              type="button"
-              onClick={() => setApplyingOpportunity(null)}
-              disabled={isSubmittingApplication}
-            >
-              Cancel
-            </button>
-            <button
-              className="home-application-submit"
-              type="submit"
-              form="home-application-form"
-              disabled={isSubmittingApplication}
-            >
-              {isSubmittingApplication ? 'Submitting…' : 'Submit application'}
-            </button>
+            {applicationStep === 1 ? (
+              <button
+                className="home-application-cancel"
+                type="button"
+                onClick={() => setApplyingOpportunity(null)}
+                disabled={isSubmittingApplication}
+              >
+                Cancel
+              </button>
+            ) : (
+              <button
+                className="home-application-previous"
+                type="button"
+                onClick={() => setApplicationStep((step) => Math.max(1, step - 1))}
+                disabled={isSubmittingApplication}
+              >
+                Previous
+              </button>
+            )}
+            {applicationStep < 4 ? (
+              <button
+                className="home-application-submit"
+                type="button"
+                onClick={goToNextApplicationStep}
+                disabled={isSubmittingApplication}
+              >
+                Next
+              </button>
+            ) : (
+              <button
+                className="home-application-submit"
+                type="submit"
+                form="home-application-form"
+                disabled={isSubmittingApplication}
+              >
+                {isSubmittingApplication ? 'Submitting…' : 'Submit Application'}
+              </button>
+            )}
           </div>
         </section>
       </div>

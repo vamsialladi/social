@@ -101,7 +101,10 @@ public class ConnectionGroupService {
         group.setOwnerId(ownerId);
         group.setName(groupName);
         group.setImageUrl(normalizeImageUrl(imageUrl));
-        group.setMemberProfileIds(new ArrayList<>(selectedMemberIds));
+        group.setMemberProfileIds(new ArrayList<>());
+        group.setFollowerUserIds(selectedMemberIds.stream()
+                .filter(memberId -> !normalize(memberId).equals(normalize(ownerId)))
+                .toList());
         return toDto(groupRepository.save(group), ownerId);
     }
 
@@ -122,7 +125,8 @@ public class ConnectionGroupService {
         ConnectionGroupEntity group = groupRepository.findByIdAndOwnerId(groupId, ownerId)
                 .orElseThrow(() -> new BadRequestException("Could not find this group."));
         Set<String> selectedMemberIds = new LinkedHashSet<>(group.getMemberProfileIds());
-        selectedMemberIds.addAll(group.getFollowerUserIds());
+        selectedMemberIds.removeIf(memberId -> group.getFollowerUserIds().stream()
+                .anyMatch(followerId -> normalize(followerId).equals(normalize(memberId))));
         group.setName(groupName);
         if (imageUrl != null) {
             group.setImageUrl(normalizeImageUrl(imageUrl));
@@ -166,6 +170,7 @@ public class ConnectionGroupService {
         }
 
         Set<String> memberIds = new LinkedHashSet<>(group.getMemberProfileIds());
+        Set<String> followerIds = new LinkedHashSet<>(group.getFollowerUserIds());
         for (String requestedId : requestedMemberIds) {
             if (requestedId == null || requestedId.isBlank()) {
                 throw new BadRequestException("Every selected profile must have a valid ID.");
@@ -174,12 +179,15 @@ public class ConnectionGroupService {
             if (canonicalId == null) {
                 throw new BadRequestException("You can add only your connections or your followers to this group.");
             }
-            if (memberIds.stream().noneMatch(memberId -> normalize(memberId).equals(normalize(canonicalId)))) {
-                memberIds.add(canonicalId);
+            memberIds.removeIf(memberId -> normalize(memberId).equals(normalize(canonicalId)));
+            if (!normalize(canonicalId).equals(normalize(ownerId))
+                    && followerIds.stream().noneMatch(followerId -> normalize(followerId).equals(normalize(canonicalId)))) {
+                followerIds.add(canonicalId);
             }
         }
 
         group.setMemberProfileIds(new ArrayList<>(memberIds));
+        group.setFollowerUserIds(new ArrayList<>(followerIds));
         return toDto(groupRepository.save(group), ownerId);
     }
 
@@ -189,12 +197,11 @@ public class ConnectionGroupService {
         ConnectionGroupEntity group = groupRepository.findById(groupId)
                 .orElseThrow(() -> new BadRequestException("Could not find this group."));
         if (!group.getOwnerId().equals(userId)) {
-            if (!group.getFollowerUserIds().contains(userId)) {
+            if (group.getFollowerUserIds().stream()
+                    .noneMatch(followerId -> normalize(followerId).equals(normalize(userId)))) {
                 group.getFollowerUserIds().add(userId);
             }
-            if (!group.getMemberProfileIds().contains(userId)) {
-                group.getMemberProfileIds().add(userId);
-            }
+            group.getMemberProfileIds().removeIf(memberId -> normalize(memberId).equals(normalize(userId)));
             groupRepository.save(group);
         }
         return toDto(group, userId);
@@ -205,8 +212,7 @@ public class ConnectionGroupService {
         String userId = resolveOwnerId(userIdentifier);
         ConnectionGroupEntity group = groupRepository.findById(groupId)
                 .orElseThrow(() -> new BadRequestException("Could not find this group."));
-        group.getFollowerUserIds().removeIf(userId::equals);
-        group.getMemberProfileIds().removeIf(userId::equals);
+        group.getFollowerUserIds().removeIf(followerId -> normalize(followerId).equals(normalize(userId)));
         groupRepository.save(group);
         return toDto(group, userId);
     }

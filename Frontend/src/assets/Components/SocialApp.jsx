@@ -1239,7 +1239,7 @@ function Navigation({
             onClick={() => selectNavigation('opportunities')}
             aria-current={activeNavigation === 'opportunities' ? 'page' : undefined}
           >
-            <NavigationIcon name="opportunities" /><small>Opportunities</small>
+            <NavigationIcon name="opportunities" /><small>Casting</small>
           </button>
           <button
             className={`linkedin-nav-item${activeNavigation === 'casting' ? ' is-active' : ''}`}
@@ -1247,7 +1247,7 @@ function Navigation({
             onClick={() => selectNavigation('casting')}
             aria-current={activeNavigation === 'casting' ? 'page' : undefined}
           >
-            <NavigationIcon name="casting" /><small>Casting</small>
+            <NavigationIcon name="casting" /><small>Modelling</small>
           </button>
           <div className={`linkedin-profile-menu${isProfileMenuOpen ? ' is-open' : ''}`} ref={profileMenuRef}>
             <button
@@ -1415,6 +1415,7 @@ export default function SocialApp() {
       ? 'profile'
       : getNavigationFromLocation(location.pathname)
   ))
+  const [selectedModellingRequirement, setSelectedModellingRequirement] = useState(null)
   const [connectionsReturnNavigation, setConnectionsReturnNavigation] = useState('profile')
   const [unreadMessageCount, setUnreadMessageCount] = useState(0)
   const [messageInboxRequest, setMessageInboxRequest] = useState(0)
@@ -1594,12 +1595,18 @@ export default function SocialApp() {
     const hash = navigationHashes[navigation]
     if (!hash) return
 
+    if (navigation !== 'casting') setSelectedModellingRequirement(null)
     window.dispatchEvent(new CustomEvent('truehunt-social-navigation-changed'))
     const nextUrl = navigation === 'profile' ? ownProfilePath : `/social/${hash}`
     if (window.location.hash !== `/${hash}`) {
       window.history.pushState({ navigation }, '', nextUrl)
     }
     setActiveNavigationState(navigation)
+  }
+
+  function openModellingRequirement(post) {
+    setSelectedModellingRequirement(post)
+    setActiveNavigation('casting')
   }
 
   useEffect(() => {
@@ -2021,8 +2028,18 @@ export default function SocialApp() {
             onBack={() => setActiveNavigation('home')}
             onProfileSelect={showCandidateProfile}
             currentUserId={profileDetails.userId || user?.userId || profileDetails.id || user?.id || user?.email}
+            currentUserIdentifiers={[
+              profileDetails.userId,
+              profileDetails.id,
+              profileDetails.email,
+              user?.userId,
+              user?.publicUserId,
+              user?.id,
+              user?.email,
+            ]}
             currentUserAvatar={profileDetails.profileImageUrl || profileDetails.avatar || profilePreview}
             isAuthenticated={isAuthenticated}
+            selectedModellingRequirement={selectedModellingRequirement}
           />
         )}
       </div>
@@ -2031,6 +2048,15 @@ export default function SocialApp() {
         profileDetails={profileDetails}
         profilePreview={profilePreview}
         currentUserId={profileDetails.userId || profileDetails.id || user?.userId || user?.id || user?.email || 'me'}
+        currentUserIdentifiers={[
+          profileDetails.userId,
+          profileDetails.id,
+          profileDetails.email,
+          user?.userId,
+          user?.publicUserId,
+          user?.id,
+          user?.email,
+        ]}
         accountEmail={user?.email || ''}
         onOwnPostCreated={persistOwnPost}
         activeNavigation={activeNavigation}
@@ -2045,6 +2071,7 @@ export default function SocialApp() {
           setConnectionsReturnNavigation('home')
           setActiveNavigation('connections')
         }}
+        onOpenModellingRequirement={openModellingRequirement}
       />
 
       <div hidden={activeNavigation !== 'network'}>

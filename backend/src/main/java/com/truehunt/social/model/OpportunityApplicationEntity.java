@@ -29,8 +29,12 @@ public class OpportunityApplicationEntity {
     @Column(name = "experience", length = 255)
     private String experience;
 
-    @Column(name = "note", length = 1000)
+    @Lob
+    @Column(name = "note", columnDefinition = "TEXT")
     private String note;
+
+    @Column(name = "shortlisted", nullable = false)
+    private boolean shortlisted;
 
     private LocalDateTime appliedAt = LocalDateTime.now();
 
@@ -58,6 +62,9 @@ public class OpportunityApplicationEntity {
 
     public String getNote() { return note; }
     public void setNote(String note) { this.note = note; }
+
+    public boolean isShortlisted() { return shortlisted; }
+    public void setShortlisted(boolean shortlisted) { this.shortlisted = shortlisted; }
 
     public LocalDateTime getAppliedAt() { return appliedAt; }
     public void setAppliedAt(LocalDateTime appliedAt) { this.appliedAt = appliedAt; }

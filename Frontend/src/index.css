@@ -630,15 +630,39 @@ img {
 }
 
 .join-phone-otp-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content max-content;
+  align-items: stretch;
   min-width: 0;
-  flex-wrap: wrap;
   gap: 8px;
 }
 
-.join-phone-otp-row input {
-  flex: 1 1 180px;
+.join-phone-number-group {
+  display: flex;
   min-width: 0;
+  gap: 8px;
+}
+
+.join-country-code-select {
+  flex: 0 0 65px;
+  width: 65px;
+  min-width: 65px;
+  height: 52px;
+  padding: 0 8px;
+}
+
+.join-phone-otp-row input {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 52px;
+}
+
+.join-phone-otp-row > button {
+  width: 100%;
+  min-height: 52px;
+  padding-right: 14px;
+  padding-left: 14px;
+  white-space: nowrap;
 }
 
 @media (max-width: 768px) {
@@ -691,8 +715,26 @@ img {
 }
 
 @media (max-width: 560px) {
+  .join-phone-otp-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .join-phone-number-group {
+    grid-column: 1 / -1;
+  }
+
+  .join-country-code-select {
+    flex-basis: 65px;
+  }
+
+  .join-phone-number-group input {
+    flex-basis: 0;
+  }
+
   .join-phone-otp-row > button {
-    flex: 1 1 120px;
+    min-width: 0;
+    padding-right: 8px;
+    padding-left: 8px;
   }
 
   .footer-legal-links {

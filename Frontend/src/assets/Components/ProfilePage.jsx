@@ -531,7 +531,7 @@
     {
       title: 'Endorsement basics',
       fields: [
-        { name: 'receiverName', label: 'Receiver Name', required: true, readOnly: true },
+        { name: 'receiverName', label: 'Receiver Name', readOnly: true },
         { name: 'receiverProfileId', label: 'Receiver Profile ID', readOnly: true },
         { name: 'receiverProfileImage', label: 'Receiver Profile Image', type: 'image' },
       ],
@@ -539,20 +539,19 @@
     {
       title: 'Craft and skills',
       fields: [
-        { name: 'primaryCraft', label: 'Primary Craft', required: true },
+        { name: 'primaryCraft', label: 'Primary Craft' },
         { name: 'subCraft', label: 'Sub Craft' },
-        { name: 'specificSkill', label: 'Specific Skill', required: true },
+        { name: 'specificSkill', label: 'Specific Skill' },
         { name: 'skillDescription', label: 'Skill Description', type: 'textarea' },
       ],
     },
     {
       title: 'Project details',
       fields: [
-        { name: 'projectName', label: 'Project Name', required: true },
+        { name: 'projectName', label: 'Project Name' },
         {
           name: 'projectType',
           label: 'Project Type',
-          required: true,
           options: ['Movie', 'Short Film', 'Web Series', 'Advertisement'],
         },
         { name: 'projectRole', label: 'Project Role' },
@@ -571,7 +570,7 @@
     {
       title: 'Endorsement details',
       fields: [
-        { name: 'endorsementMessage', label: 'Endorsement Message', type: 'textarea', required: true },
+        { name: 'endorsementMessage', label: 'Endorsement Message', type: 'textarea' },
         {
           name: 'professionalRelationship',
           label: 'Professional Relationship',
@@ -932,11 +931,15 @@
     }, [localEndorsementsByProfile, targetProfileId])
 
     useEffect(() => {
-      if (!targetProfileId) return undefined
+      if (!targetProfileId || !isActive) return undefined
 
       let isCurrent = true
-      api.getProfileEndorsements(targetProfileId)
-        .then((items) => {
+      let isLoading = false
+      const loadEndorsements = async () => {
+        if (isLoading) return
+        isLoading = true
+        try {
+          const items = await api.getProfileEndorsements(targetProfileId)
           if (!isCurrent) return
           if (!Array.isArray(items)) {
             throw new Error('The server returned an invalid endorsements list.')
@@ -950,8 +953,7 @@
             delete next[targetProfileId]
             return next
           })
-        })
-        .catch((error) => {
+        } catch (error) {
           console.error('Could not load profile endorsements:', error)
           if (isCurrent) {
             setEndorsementLoadErrorsByProfile((current) => ({
@@ -959,12 +961,25 @@
               [targetProfileId]: error instanceof Error ? error.message : 'Could not load endorsements.',
             }))
           }
-        })
+        } finally {
+          isLoading = false
+        }
+      }
+
+      const refreshWhenVisible = () => {
+        if (document.visibilityState === 'visible') loadEndorsements()
+      }
+
+      loadEndorsements()
+      window.addEventListener('focus', refreshWhenVisible)
+      document.addEventListener('visibilitychange', refreshWhenVisible)
 
       return () => {
         isCurrent = false
+        window.removeEventListener('focus', refreshWhenVisible)
+        document.removeEventListener('visibilitychange', refreshWhenVisible)
       }
-    }, [targetProfileId])
+    }, [targetProfileId, isActive])
 
     useEffect(() => {
       const storageKey = getProfileEndorsementsStorageKey(targetProfileId)
@@ -2702,43 +2717,19 @@
     function openEndorsementResponseForm() {
       if (hasResponded) return
 
-      const now = new Date().toLocaleString()
-      const endorser = currentUser || authUser || {}
       setEndorsementError('')
       setEditingEndorsementId('')
       setEndorsementDraft({
-        endorsementId: `draft-${Date.now()}`,
-        endorserName: endorser.name || endorser.fullName || '',
-        endorserProfileId: String(endorser.userId || endorser.id || currentUserId || ''),
-        endorserProfileImage: endorser.profileImageUrl || endorser.avatar || '',
-        endorserProfession: endorser.primaryCraft || endorser.profession || endorser.role || '',
         receiverName: profileDetails.name || '',
         receiverProfileId: targetProfileId,
         receiverProfileImage: profileDetails.profileImageUrl || profileDetails.avatar || '',
         primaryCraft: '',
         subCraft: '',
-        specificSkill: '',
-        skillDescription: '',
         projectName: '',
         projectType: '',
-        projectRole: '',
-        projectYear: '',
-        collaborationType: '',
         endorsementMessage: '',
         professionalRelationship: '',
-        overallRating: '',
-        professionalStrengths: '',
-        workQuality: '',
-        communicationSkills: '',
-        projectCollaborationVerification: false,
-        verificationStatus: 'Pending',
-        supportingEvidence: '',
-        endorsementStatus: 'Pending',
-        createdDate: now,
-        updatedDate: now,
-        acceptedDate: '',
         visibility: 'Public',
-        reportStatus: 'Not Reported',
       })
       setIsEndorsementFormOpen(true)
       setOpenProfileActionsFor(null)
@@ -2892,7 +2883,18 @@
 
     async function submitEndorsement(event) {
       event.preventDefault()
-      if ((hasResponded && !editingEndorsementId) || isSubmittingEndorsement) return
+      if (isSubmittingEndorsement) return
+      if (hasResponded && !editingEndorsementId) {
+        setEndorsementError('You have already responded to this profile.')
+        return
+      }
+
+      const endorsementMessage = String(endorsementDraft.endorsementMessage || '').trim()
+      if (!endorsementMessage) {
+        setEndorsementError('An endorsement message is required.')
+        return
+      }
+      const submittedDraft = { ...endorsementDraft, endorsementMessage }
 
       const today = new Date()
       const minimumAcceptedDate = new Date(
@@ -2913,7 +2915,7 @@
       try {
         if (editingEndorsementId) {
           const updatedEndorsement = {
-            ...endorsementDraft,
+            ...submittedDraft,
             endorsementId: editingEndorsementId,
             updatedDate: now,
           }
@@ -2958,7 +2960,7 @@
         } else {
           const createdEndorsement = await api.createProfileEndorsement(
             targetProfileId,
-            endorsementDraft,
+            submittedDraft,
           )
           setRemoteEndorsementsByProfile((current) => ({
             ...current,
@@ -2972,6 +2974,27 @@
             delete next[targetProfileId]
             return next
           })
+          try {
+            const refreshedEndorsements = await api.getProfileEndorsements(targetProfileId)
+            if (!Array.isArray(refreshedEndorsements)) {
+              throw new Error('The server returned an invalid endorsements list.')
+            }
+            setRemoteEndorsementsByProfile((current) => ({
+              ...current,
+              [targetProfileId]: mergeProfileEndorsements(
+                [createdEndorsement],
+                refreshedEndorsements,
+              ),
+            }))
+          } catch (refreshError) {
+            console.error('Endorsement was saved, but the profile could not be refreshed:', refreshError)
+            setEndorsementLoadErrorsByProfile((current) => ({
+              ...current,
+              [targetProfileId]: refreshError instanceof Error
+                ? refreshError.message
+                : 'Endorsement was saved, but the profile could not be refreshed.',
+            }))
+          }
         }
 
         closeEndorsementForm()

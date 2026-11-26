@@ -295,6 +295,23 @@
   accent-color: var(--opp-accent);
 }
 
+.opportunity-opening-count {
+  display: grid;
+  gap: 7px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--opp-line);
+  border-radius: 9px;
+  background: #fcfbfa;
+  color: #45423f;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.opportunity-opening-count .opportunity-input {
+  max-width: 240px;
+}
+
 .opportunity-other-input {
   margin-top: 10px;
 }
@@ -343,9 +360,30 @@
   background: #fcfbfa;
 }
 
+.opportunity-review-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 5px;
+}
+
 .opportunity-review-card h3 {
-  margin: 0 0 5px;
+  min-width: 0;
+  margin: 0;
   font-size: 18px;
+}
+
+.opportunity-gender-preference-badge {
+  flex: 0 0 auto;
+  padding: 5px 9px;
+  border: 1px solid #e8c9c2;
+  border-radius: 999px;
+  background: #f8eeeb;
+  color: var(--opp-accent);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: capitalize;
 }
 
 .opportunity-review-card > p {
@@ -523,6 +561,7 @@
   .opportunity-progress,
   .opportunity-form-panel,
   .opportunity-dynamic-card,
+  .opportunity-opening-count,
   .opportunity-review-card
 ) {
   border-color: #393d45;
@@ -545,6 +584,12 @@
   .opportunity-review-description
 ) {
   color: #e5e7eb;
+}
+
+.cinemans-page.is-dark .opportunity-wizard .opportunity-gender-preference-badge {
+  border-color: #70443d;
+  background: #3a2826;
+  color: #f2b9ae;
 }
 
 .cinemans-page.is-dark .opportunity-wizard :is(

@@ -17,6 +17,8 @@ const roles = [
   'Dancer',
 ]
 
+const genderOptions = ['Any', 'Male', 'Female', 'Non-binary']
+
 const projectTypes = [
   'Feature Film',
   'Short Film',
@@ -52,13 +54,21 @@ function formatLocalDate(date = new Date()) {
   return `${year}-${month}-${day}`
 }
 
+function getTotalOpenings(genders, openingsByGender) {
+  return String(genders.reduce((total, gender) => (
+    total + (Number.parseInt(openingsByGender[gender], 10) || 0)
+  ), 0))
+}
+
 const initialForm = {
   projectName: '',
   projectType: 'Feature Film',
   craft: 'Acting',
   openings: '1',
+  openingsByGender: { Any: '1' },
   actingRole: roles[0],
   genderPreference: 'Any',
+  genderPreferences: ['Any'],
   minimumAge: '',
   maximumAge: '',
   height: '',
@@ -133,8 +143,28 @@ function CheckOptions({ label, options, selected, onChange, otherValue, onOtherC
 export default function OpportunitiesPage({ onClose, onPublish, initialData, isEditing = false }) {
   const [form, setForm] = useState(() => {
     const data = { ...initialForm, ...initialData }
+    const savedGenders = Array.isArray(initialData?.genderPreferences)
+      ? initialData.genderPreferences
+      : String(initialData?.genderPreference || 'Any').split(',').map((gender) => gender.trim())
+    const selectedGenders = genderOptions.filter((gender) => savedGenders.includes(gender))
+    const genderPreferences = selectedGenders.includes('Any') && selectedGenders.length > 1
+      ? selectedGenders.filter((gender) => gender !== 'Any')
+      : selectedGenders.length
+        ? selectedGenders
+        : ['Any']
+    const savedOpenings = initialData?.openingsByGender && typeof initialData.openingsByGender === 'object'
+      ? initialData.openingsByGender
+      : {}
+    const openingsByGender = Object.fromEntries(genderPreferences.map((gender) => [
+      gender,
+      String(savedOpenings[gender] ?? initialData?.openings ?? '1'),
+    ]))
     return {
       ...data,
+      genderPreferences,
+      genderPreference: genderPreferences.join(', '),
+      openingsByGender,
+      openings: getTotalOpenings(genderPreferences, openingsByGender),
       minimumAge: sanitizeAge(data.minimumAge),
       maximumAge: sanitizeAge(data.maximumAge),
     }
@@ -172,7 +202,54 @@ export default function OpportunitiesPage({ onClose, onPublish, initialData, isE
     setError('')
   }
 
+  function toggleGender(gender) {
+    setForm((current) => {
+      let genderPreferences
+      if (gender === 'Any') {
+        genderPreferences = current.genderPreferences.includes('Any') ? [] : ['Any']
+      } else {
+        const selected = current.genderPreferences.filter((item) => item !== 'Any')
+        genderPreferences = selected.includes(gender)
+          ? selected.filter((item) => item !== gender)
+          : [...selected, gender]
+      }
+
+      const openingsByGender = Object.fromEntries(genderPreferences.map((item) => [
+        item,
+        current.openingsByGender[item] || '1',
+      ]))
+      return {
+        ...current,
+        genderPreferences,
+        genderPreference: genderPreferences.join(', '),
+        openingsByGender,
+        openings: getTotalOpenings(genderPreferences, openingsByGender),
+      }
+    })
+    setError('')
+  }
+
+  function updateGenderOpenings(gender, value) {
+    setForm((current) => {
+      const openingsByGender = { ...current.openingsByGender, [gender]: value }
+      return {
+        ...current,
+        openingsByGender,
+        openings: getTotalOpenings(current.genderPreferences, openingsByGender),
+      }
+    })
+    setError('')
+  }
+
   function validateStep() {
+    if (step === 1 && (!form.genderPreferences.length || form.genderPreferences.some((gender) => (
+      !/^\d+$/.test(String(form.openingsByGender[gender] || ''))
+      || Number(form.openingsByGender[gender]) < 1
+    )))) {
+      setError('Select at least one gender and enter the number of openings for each.')
+      return false
+    }
+
     if (step === 2 && form.minimumAge && form.maximumAge
       && Number(form.minimumAge) > Number(form.maximumAge)) {
       setError('Maximum age must be greater than or equal to minimum age.')
@@ -211,11 +288,15 @@ export default function OpportunitiesPage({ onClose, onPublish, initialData, isE
     setError('')
     setIsPublishing(true)
     try {
-      await onPublish(form)
+      await onPublish({
+        ...form,
+        genderPreference: form.genderPreferences.join(', '),
+        openings: getTotalOpenings(form.genderPreferences, form.openingsByGender),
+      })
     } catch (publishError) {
       setError(publishError instanceof Error
         ? publishError.message
-        : 'Could not publish this opportunity. Please try again.')
+        : 'Could not publish this casting call. Please try again.')
     } finally {
       setIsPublishing(false)
     }
@@ -223,6 +304,9 @@ export default function OpportunitiesPage({ onClose, onPublish, initialData, isE
 
   const hasLeadRequirements = ['Hero / Lead', 'Heroine / Lead Actress'].includes(form.actingRole)
   const isBackgroundArtist = form.actingRole === 'Extra / Background Artist'
+  const previewGenderPreference = form.genderPreferences.length === 1 && form.genderPreferences[0] !== 'Any'
+    ? `${form.genderPreferences[0]} preference`
+    : ''
 
   return (
     <div
@@ -244,18 +328,18 @@ export default function OpportunitiesPage({ onClose, onPublish, initialData, isE
           type="button"
           onClick={onClose}
           disabled={isPublishing}
-          aria-label="Close opportunity form"
+          aria-label="Close casting form"
         >
           <X size={19} aria-hidden="true" />
         </button>
         <button className="opportunity-back-link" type="button" onClick={onClose}>
-          <ArrowLeft size={17} aria-hidden="true" /> Back to opportunities
+          <ArrowLeft size={17} aria-hidden="true" /> Back to casting
         </button>
         <div className="opportunity-header-title">
           <span className="opportunity-title-icon"><Film size={20} aria-hidden="true" /></span>
           <div>
             <span className="opportunity-eyebrow">CASTING CALL</span>
-            <h1 id="opportunity-wizard-title">{isEditing ? 'Edit opportunity' : 'Share an opportunity'}</h1>
+            <h1 id="opportunity-wizard-title">{isEditing ? 'Edit casting call' : 'Share a casting call'}</h1>
           </div>
         </div>
         <div className="opportunity-progress" aria-label={`Step ${step} of 5`}>
@@ -307,14 +391,32 @@ export default function OpportunitiesPage({ onClose, onPublish, initialData, isE
                     </select>
                   </Field>
                 </div>
-                <Field label="Number of Openings">
-                  <input
-                    className="opportunity-input"
-                    type="number"
-                    min="1"
-                    value={form.openings}
-                    onChange={(event) => updateField('openings', event.target.value)}
-                  />
+                <Field label="Gender preference" optional={false}>
+                  <div className="opportunity-checkbox-grid">
+                    {genderOptions.map((gender) => (
+                      <label className="opportunity-choice" key={gender}>
+                        <input
+                          type="checkbox"
+                          checked={form.genderPreferences.includes(gender)}
+                          onChange={() => toggleGender(gender)}
+                        />
+                        <span>{gender}</span>
+                      </label>
+                    ))}
+                  </div>
+                  {form.genderPreferences.map((gender) => (
+                    <label className="opportunity-opening-count" key={gender}>
+                      <span>Number of openings for {gender}</span>
+                      <input
+                        className="opportunity-input"
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={form.openingsByGender[gender] || ''}
+                        onChange={(event) => updateGenderOpenings(gender, event.target.value)}
+                      />
+                    </label>
+                  ))}
                 </Field>
               </section>
             )}
@@ -329,22 +431,6 @@ export default function OpportunitiesPage({ onClose, onPublish, initialData, isE
                   <select className="opportunity-input" value={form.actingRole} onChange={(event) => updateField('actingRole', event.target.value)}>
                     {roles.map((role) => <option key={role}>{role}</option>)}
                   </select>
-                </Field>
-                <Field label="Gender preference">
-                  <div className="opportunity-radio-row">
-                    {['Any', 'Male', 'Female', 'Non-binary'].map((gender) => (
-                      <label className="opportunity-choice" key={gender}>
-                        <input
-                          type="radio"
-                          name="genderPreference"
-                          value={gender}
-                          checked={form.genderPreference === gender}
-                          onChange={(event) => updateField('genderPreference', event.target.value)}
-                        />
-                        <span>{gender}</span>
-                      </label>
-                    ))}
-                  </div>
                 </Field>
                 <div className="opportunity-form-grid">
                   <Field label="Minimum age" optional>
@@ -519,14 +605,25 @@ export default function OpportunitiesPage({ onClose, onPublish, initialData, isE
             {step === 5 && (
               <section className="opportunity-step-content">
                 <span className="opportunity-eyebrow">READY TO SHARE</span>
-                <h2>Review your opportunity</h2>
+                <h2>Review your casting call</h2>
                 <p className="opportunity-step-description">Check the details before publishing your casting call.</p>
                 <div className="opportunity-review-card">
-                  <h3>{form.projectName}</h3>
+                  <div className="opportunity-review-card-header">
+                    <h3>{form.projectName}</h3>
+                    {previewGenderPreference && (
+                      <span className="opportunity-gender-preference-badge">{previewGenderPreference}</span>
+                    )}
+                  </div>
                   <p>{form.projectType} <span>·</span> {form.craft}</p>
                   <div className="opportunity-review-row"><strong>Role</strong><span>{form.actingRole}</span></div>
-                  <div className="opportunity-review-row"><strong>Openings</strong><span>{form.openings}</span></div>
-                  <div className="opportunity-review-row"><strong>Gender</strong><span>{form.genderPreference}</span></div>
+                  <div className="opportunity-review-row"><strong>Total openings</strong><span>{form.openings}</span></div>
+                  <div className="opportunity-review-row"><strong>Gender</strong><span>{form.genderPreferences.join(', ') || 'Not selected'}</span></div>
+                  {form.genderPreferences.map((gender) => (
+                    <div className="opportunity-review-row" key={gender}>
+                      <strong>{gender} openings</strong>
+                      <span>{form.openingsByGender[gender]}</span>
+                    </div>
+                  ))}
                   {(form.minimumAge || form.maximumAge) && (
                     <div className="opportunity-review-row"><strong>Age range</strong><span>{form.minimumAge || 'Any'} – {form.maximumAge || 'Any'}</span></div>
                   )}
@@ -536,7 +633,7 @@ export default function OpportunitiesPage({ onClose, onPublish, initialData, isE
                   {form.applicationDeadline && <div className="opportunity-review-row"><strong>Deadline</strong><span>{form.applicationDeadline}</span></div>}
                   {form.characterDescription && <p className="opportunity-review-description">{form.characterDescription}</p>}
                 </div>
-                <p className="opportunity-publish-note">Your casting call will be visible to the TrueHunt community in Opportunities.</p>
+                <p className="opportunity-publish-note">Your casting call will be visible to the TrueHunt community in Casting.</p>
               </section>
             )}
 
@@ -565,7 +662,7 @@ export default function OpportunitiesPage({ onClose, onPublish, initialData, isE
                   disabled={isPublishing}
                 >
                   <BriefcaseBusiness size={17} aria-hidden="true" />
-                  {isPublishing ? 'Saving…' : isEditing ? 'Save changes' : 'Publish opportunity'}
+                  {isPublishing ? 'Saving…' : isEditing ? 'Save changes' : 'Publish casting call'}
                 </button>
               )}
             </footer>

@@ -1146,14 +1146,135 @@ public class PostService {
         post.setApplicationsCount(post.getApplicationsCount() + 1);
         postRepository.save(post);
 
-        notificationRepository.save(new NotificationEntity(
-                identity,
-                "Opportunity Application Sent",
-                "Your application for \"" + (post.getTitle() != null ? post.getTitle() : "Casting Call")
-                        + "\" has been received.",
-                "opportunity"));
+        Map<String, Object> opportunityDetails = post.getOpportunityDetails();
+        String title = firstNonBlank(
+                Map.of(
+                        "title", post.getTitle() != null ? post.getTitle() : "",
+                        "projectName", opportunityDetails.get("projectName") != null
+                                ? String.valueOf(opportunityDetails.get("projectName"))
+                                : "",
+                        "projectCampaignName", opportunityDetails.get("projectCampaignName") != null
+                                ? String.valueOf(opportunityDetails.get("projectCampaignName"))
+                                : ""
+                ),
+                "title",
+                "projectName",
+                "projectCampaignName"
+        );
+        if (title.isBlank()) title = "casting call";
+
+        ProfileEntity applicantProfile = findCurrentProfileSafely(identity);
+        String applicantName = firstNonBlank(
+                Map.of(
+                        "applicationName", application.getApplicantName() != null ? application.getApplicantName() : "",
+                        "profileName", applicantProfile != null && applicantProfile.getName() != null
+                                ? applicantProfile.getName()
+                                : ""
+                ),
+                "applicationName",
+                "profileName"
+        );
+        if (applicantName.isBlank()) applicantName = "A talent";
+
+        ProfileEntity posterProfile = findCurrentProfileSafely(post.getAuthorId());
+        String posterName = post.getAuthorName() != null && !post.getAuthorName().isBlank()
+                ? post.getAuthorName().trim()
+                : posterProfile != null && posterProfile.getName() != null && !posterProfile.getName().isBlank()
+                        ? posterProfile.getName().trim()
+                        : "the casting team";
+        String posterNotificationRecipient = posterProfile != null
+                && posterProfile.getEmail() != null
+                && !posterProfile.getEmail().isBlank()
+                        ? posterProfile.getEmail().trim()
+                        : post.getAuthorId();
+
+        if (notificationRepository != null) {
+            notificationRepository.save(new NotificationEntity(
+                    identity,
+                    "Application Sent",
+                    "Your application for \"" + title + "\" was sent to " + posterName + ".",
+                    "opportunity_application",
+                    post.getAuthorId()));
+
+            if (posterNotificationRecipient != null
+                    && !posterNotificationRecipient.isBlank()
+                    && !isAuthorOfPost(post, identity)
+                    && isPostingAndCommentingAllowed(posterNotificationRecipient, posterProfile)) {
+                notificationRepository.save(new NotificationEntity(
+                        posterNotificationRecipient,
+                        "New Application Received",
+                        applicantName + " applied to your casting call \"" + title + "\".",
+                        "opportunity_application",
+                        identity));
+            }
+        }
 
         return applicationResponse(id, post, true, "Application submitted successfully.");
+    }
+
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> getOpportunityApplications(String postId, String userIdentity) {
+        PostEntity post = findOwnedOpportunity(postId, userIdentity);
+        List<Map<String, Object>> applications = new ArrayList<>();
+        for (OpportunityApplicationEntity application :
+                opportunityApplicationRepository.findAllByPostIdOrderByAppliedAtDesc(post.getId())) {
+            String applicantIdentity = application.getApplicantIdentity();
+            ProfileEntity profile = profileService != null
+                    ? profileService.findCurrentProfile(applicantIdentity)
+                    : null;
+            Map<String, Object> applicationDto = new LinkedHashMap<>();
+            applicationDto.put("id", String.valueOf(application.getId()));
+            applicationDto.put("applicantId", profile != null && profile.getUserId() != null
+                    ? profile.getUserId()
+                    : applicantIdentity);
+            applicationDto.put("applicantName", firstNonBlank(
+                    Map.of(
+                            "application", application.getApplicantName() != null ? application.getApplicantName() : "",
+                            "profile", profile != null && profile.getName() != null ? profile.getName() : ""
+                    ),
+                    "application",
+                    "profile"
+            ));
+            applicationDto.put("profileImageUrl", profile != null ? profile.getProfileImageUrl() : "");
+            applicationDto.put("headline", profile != null
+                    ? firstNonBlank(Map.of(
+                            "headline", profile.getHeadline() != null ? profile.getHeadline() : "",
+                            "role", profile.getRole() != null ? profile.getRole() : ""
+                    ), "headline", "role")
+                    : "");
+            applicationDto.put("experience", application.getExperience() != null ? application.getExperience() : "");
+            applicationDto.put("applicationDetails", parseJsonMap(application.getNote()));
+            applicationDto.put("note", application.getNote() != null ? application.getNote() : "");
+            applicationDto.put("appliedAt", application.getAppliedAt() != null
+                    ? application.getAppliedAt().toString()
+                    : "");
+            applicationDto.put("shortlisted", application.isShortlisted());
+            applications.add(applicationDto);
+        }
+        return applications;
+    }
+
+    @Transactional
+    public Map<String, Object> updateOpportunityApplicationShortlist(
+            String postId,
+            String applicationId,
+            boolean shortlisted,
+            String userIdentity) {
+        PostEntity post = findOwnedOpportunity(postId, userIdentity);
+        Long numericApplicationId = parseLongId(applicationId);
+        if (numericApplicationId == null) {
+            throw new ResourceNotFoundException("Opportunity application", "id", applicationId);
+        }
+        OpportunityApplicationEntity application = opportunityApplicationRepository
+                .findByIdAndPostId(numericApplicationId, post.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Opportunity application", "id", applicationId));
+        application.setShortlisted(shortlisted);
+        opportunityApplicationRepository.save(application);
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("id", String.valueOf(application.getId()));
+        response.put("shortlisted", application.isShortlisted());
+        return response;
     }
 
     @Transactional
@@ -1176,6 +1297,23 @@ public class PostService {
         }
 
         return applicationResponse(id, post, false, "Application cancelled successfully.");
+    }
+
+    private PostEntity findOwnedOpportunity(String postId, String userIdentity) {
+        normalizeApplicantIdentity(userIdentity);
+        Long numericPostId = parseLongId(postId);
+        if (numericPostId == null) {
+            throw new ResourceNotFoundException("Opportunity", "id", postId);
+        }
+        PostEntity post = postRepository.findById(numericPostId)
+                .orElseThrow(() -> new ResourceNotFoundException("Opportunity", "id", postId));
+        if (!"opportunity".equalsIgnoreCase(post.getType())) {
+            throw new ResourceNotFoundException("Opportunity", "id", postId);
+        }
+        if (!isAuthorOfPost(post, userIdentity)) {
+            throw new UnauthorizedException("You can only view or manage applications for casting calls you posted.");
+        }
+        return post;
     }
 
     // ==================== HELPERS ====================

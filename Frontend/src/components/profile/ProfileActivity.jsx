@@ -41,16 +41,24 @@ export default function ProfileActivity({ profile, isOwner, onOpenPostModal }) {
 
   const handleSharePost = async (post) => {
     const postId = typeof post === 'object' ? post?.id : post;
+    const link = `${window.location.origin}/profile/${profile.id}#post-${postId}`;
+    if (!navigator.clipboard?.writeText) {
+      window.prompt('Copy this post link:', link);
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(link);
+    } catch {
+      window.prompt('Copy this post link:', link);
+      return;
+    }
+    showNotification('Post link copied to clipboard!', 'info');
     if (/^\d+$/.test(String(postId))) {
       try {
         await socialApi.sharePost(postId);
       } catch {
         // ignore network errors
       }
-    }
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(`${window.location.origin}/profile/${profile.id}#post-${postId}`);
-      showNotification('Post link copied to clipboard!', 'info');
     }
   };
 

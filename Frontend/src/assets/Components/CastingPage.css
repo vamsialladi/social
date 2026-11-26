@@ -1,3 +1,201 @@
+.modelling-requirement-wizard {
+  width: min(100%, 900px);
+  margin: 0 auto;
+}
+
+.modelling-requirement-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #586270;
+  font: inherit;
+  cursor: pointer;
+}
+
+.modelling-requirement-back:disabled {
+  cursor: wait;
+}
+
+.modelling-requirement-header {
+  margin: 24px 0;
+}
+
+.modelling-requirement-eyebrow {
+  margin: 0;
+  color: #8b2332;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.modelling-requirement-header h1 {
+  margin: 5px 0;
+  color: #202124;
+  font-size: clamp(22px, 4vw, 30px);
+}
+
+.modelling-requirement-header > p:not(.modelling-requirement-eyebrow) {
+  margin: 0;
+  color: #586270;
+}
+
+.modelling-requirement-progress {
+  display: grid;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.modelling-requirement-progress > div {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e4e8ed;
+}
+
+.modelling-requirement-progress > div > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #8b2332;
+  transition: width 180ms ease;
+}
+
+.modelling-requirement-progress small {
+  color: #586270;
+  font-size: 13px;
+}
+
+.modelling-requirement-step {
+  display: grid;
+  gap: 18px;
+}
+
+.modelling-requirement-step h2 {
+  margin: 0;
+  color: #202124;
+  font-size: 19px;
+}
+
+.modelling-requirement-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.modelling-requirement-field {
+  display: grid;
+  min-width: 0;
+  gap: 7px;
+  color: #38414c;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.modelling-requirement-field.is-full {
+  grid-column: 1 / -1;
+}
+
+.modelling-requirement-field input,
+.modelling-requirement-field select,
+.modelling-requirement-field textarea {
+  width: 100%;
+  min-height: 46px;
+  box-sizing: border-box;
+  padding: 10px 14px;
+  border: 1px solid #d5d9de;
+  border-radius: 999px;
+  background: #fff;
+  color: #202124;
+  font: inherit;
+  font-weight: 400;
+}
+
+.modelling-requirement-field textarea {
+  min-height: 130px;
+  border-radius: 12px;
+  resize: vertical;
+}
+
+.modelling-requirement-field input:focus,
+.modelling-requirement-field select:focus,
+.modelling-requirement-field textarea:focus {
+  border-color: #8b2332;
+  outline: 3px solid rgba(139, 35, 50, 0.12);
+}
+
+.modelling-requirement-confirmation {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  color: #202124;
+  line-height: 1.5;
+}
+
+.modelling-requirement-confirmation input {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  margin: 1px 0 0;
+}
+
+.modelling-requirement-error {
+  margin: 18px 0 0;
+  color: #b42318;
+  font-size: 14px;
+}
+
+.modelling-requirement-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.modelling-requirement-actions button {
+  min-height: 46px;
+  padding: 9px 16px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.modelling-requirement-cancel {
+  border-color: #c62828 !important;
+  background: #c62828;
+  color: #fff;
+}
+
+.modelling-requirement-previous {
+  background: #eceff2;
+  color: #68717b;
+}
+
+.modelling-requirement-next {
+  background: #8b2332;
+  color: #fff;
+}
+
+.modelling-requirement-actions button:disabled {
+  background: #eceff2;
+  color: #9299a1;
+  cursor: not-allowed;
+}
+
+@media (max-width: 600px) {
+  .modelling-requirement-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .modelling-requirement-field.is-full {
+    grid-column: auto;
+  }
+}
+
 .casting-add-button {
   display: inline-flex;
   min-width: 190px;
@@ -141,6 +339,165 @@
 .casting-interest-row .home-investor-interest:focus-visible {
   outline: 3px solid rgba(139, 35, 50, 0.3);
   outline-offset: 3px;
+}
+
+.modelling-requirements-section {
+  display: grid;
+  gap: 14px;
+  margin: 26px 0 32px;
+  padding-top: 24px;
+  border-top: 1px solid #e3e7ec;
+}
+
+.modelling-requirements-header h2 {
+  margin: 0;
+  color: #202124;
+  font-size: 20px;
+}
+
+.modelling-requirements-header p,
+.modelling-requirements-empty {
+  margin: 6px 0 0;
+  color: #586270;
+  font-size: 14px;
+}
+
+.modelling-requirements-error {
+  margin: 0;
+  color: #b42318;
+  font-size: 14px;
+}
+
+.modelling-requirements-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: 14px;
+}
+
+.modelling-requirement-card {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid #e3e7ec;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.modelling-requirement-card.is-selected {
+  border-color: #8b2332;
+  box-shadow: 0 0 0 3px rgba(139, 35, 50, 0.12);
+}
+
+.modelling-requirement-card-byline {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  color: #586270;
+  font-size: 13px;
+}
+
+.modelling-requirement-card-byline span {
+  color: #8b2332;
+  font-weight: 600;
+}
+
+.modelling-requirement-card h3 {
+  margin: 0;
+  color: #202124;
+  font-size: 17px;
+  overflow-wrap: anywhere;
+}
+
+.modelling-requirement-card-meta,
+.modelling-requirement-card-copy {
+  margin: 0;
+  color: #586270;
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.modelling-requirement-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.modelling-requirement-owner-actions {
+  display: flex;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid #e3e7ec;
+}
+
+.modelling-requirement-edit-button,
+.modelling-requirement-delete-button {
+  min-height: 34px;
+  padding: 6px 12px;
+  border: 1px solid #c9d4e0;
+  border-radius: 7px;
+  background: #fff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.modelling-requirement-edit-button {
+  color: #34404d;
+}
+
+.modelling-requirement-delete-button {
+  border-color: #e5b7b7;
+  color: #b42318;
+}
+
+.modelling-requirement-edit-button:hover:not(:disabled) {
+  border-color: #8b2332;
+  background: #f8ecee;
+  color: #8b2332;
+}
+
+.modelling-requirement-delete-button:hover:not(:disabled) {
+  border-color: #b42318;
+  background: #fff3f2;
+}
+
+.modelling-requirement-edit-button:disabled,
+.modelling-requirement-delete-button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.modelling-requirement-share-button,
+.modelling-requirement-apply-button {
+  min-height: 38px;
+  padding: 8px 14px;
+  border: 1px solid #8b2332;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.modelling-requirement-share-button {
+  background: #fff;
+  color: #8b2332;
+}
+
+.modelling-requirement-apply-button {
+  background: #8b2332;
+  color: #fff;
+}
+
+.modelling-requirement-share-button:focus-visible,
+.modelling-requirement-apply-button:focus-visible {
+  outline: 3px solid rgba(139, 35, 50, 0.25);
+  outline-offset: 2px;
 }
 
 .casting-owner-actions {

@@ -14,13 +14,13 @@ import { getProfileStorageKey } from '../services/profileStorage';
 const SORTED_REGISTRATION_CRAFTS = [...REGISTRATION_CRAFTS].sort((first, second) => first.localeCompare(second));
 
 const SUPPORTED_COUNTRIES = [
-  { code: 'IN', name: 'India', dialCode: '+91', digits: 10, pattern: '^[6-9]\\d{9}$', placeholder: 'Enter 10-digit mobile number' },
-  { code: 'US', name: 'United States', dialCode: '+1', digits: 10, pattern: '^[2-9]\\d{9}$', placeholder: 'Enter 10-digit mobile number' },
-  { code: 'GB', name: 'United Kingdom', dialCode: '+44', digits: 10, pattern: '^7\\d{9}$', placeholder: 'Enter 10-digit mobile number' },
-  { code: 'CA', name: 'Canada', dialCode: '+1', digits: 10, pattern: '^[2-9]\\d{9}$', placeholder: 'Enter 10-digit mobile number' },
-  { code: 'AU', name: 'Australia', dialCode: '+61', digits: 9, pattern: '^4\\d{8}$', placeholder: 'Enter 9-digit mobile number' },
-  { code: 'AE', name: 'United Arab Emirates', dialCode: '+971', digits: 9, pattern: '^5\\d{8}$', placeholder: 'Enter 9-digit mobile number' },
-  { code: 'DE', name: 'Germany', dialCode: '+49', digits: 10, pattern: '^1[5-7]\\d{8,9}$', placeholder: 'Enter mobile number' },
+  { code: 'IN',  dialCode: '+91', digits: 10, pattern: '^[6-9]\\d{9}$', placeholder: 'Enter 10-digit mobile number' },
+  { code: 'US',  dialCode: '+1', digits: 10, pattern: '^[2-9]\\d{9}$', placeholder: 'Enter 10-digit mobile number' },
+  { code: 'GB',  dialCode: '+44', digits: 10, pattern: '^7\\d{9}$', placeholder: 'Enter 10-digit mobile number' },
+  { code: 'CA',  dialCode: '+1', digits: 10, pattern: '^[2-9]\\d{9}$', placeholder: 'Enter 10-digit mobile number' },
+  { code: 'AU',  dialCode: '+61', digits: 9, pattern: '^4\\d{8}$', placeholder: 'Enter 9-digit mobile number' },
+  { code: 'AE',  dialCode: '+971', digits: 9, pattern: '^5\\d{8}$', placeholder: 'Enter 9-digit mobile number' },
+  { code: 'DE',  dialCode: '+49', digits: 10, pattern: '^1[5-7]\\d{8,9}$', placeholder: 'Enter mobile number' },
   { code: 'SG', name: 'Singapore', dialCode: '+65', digits: 8, pattern: '^[89]\\d{7}$', placeholder: 'Enter 8-digit mobile number' },
 ];
 
@@ -644,58 +644,40 @@ export default function JoinNowPage() {
           </div>
 
           <div className="form-group">
-            <label className="form-label" htmlFor="country-select">Country / Region *</label>
-            <select
-              id="country-select"
-              className="form-control"
-              value={selectedCountryCode}
-              onChange={(e) => {
-                const nextCode = e.target.value;
-                setSelectedCountryCode(nextCode);
-                const nextCountry = SUPPORTED_COUNTRIES.find((c) => c.code === nextCode) || SUPPORTED_COUNTRIES[0];
-                setPhoneOtp('');
-                setOtpRequested(false);
-                setResendCooldown(0);
-                if (phoneNumber) {
-                  setPhoneError(validatePhoneInput(phoneNumber, nextCountry));
-                }
-              }}
-              style={{ marginBottom: '14px' }}
-            >
-              {SUPPORTED_COUNTRIES.map((c) => (
-                <option key={c.code} value={c.code}>
-                  {c.name} ({c.dialCode})
-                </option>
-              ))}
-            </select>
-
             <label className="form-label" htmlFor="phone-number">Mobile Number *</label>
             <div className="join-phone-otp-row">
-              <div style={{ display: 'flex', flex: 1, minWidth: 0, gap: '8px' }}>
-                <span
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    padding: '0 12px',
-                    backgroundColor: 'var(--color-bg-page, #f3f4f6)',
-                    border: '1px solid var(--color-border, #d1d5db)',
-                    borderRadius: 'var(--radius-sm, 6px)',
-                    fontWeight: 600,
-                    fontSize: '14px',
-                    color: 'var(--color-text, #374151)',
-                    userSelect: 'none'
+              <div className="join-phone-number-group">
+                <select
+                  id="country-select"
+                  className="form-control join-country-code-select"
+                  value={selectedCountryCode}
+                  aria-label="Country calling code"
+                  onChange={(e) => {
+                    const nextCode = e.target.value;
+                    setSelectedCountryCode(nextCode);
+                    const nextCountry = SUPPORTED_COUNTRIES.find((c) => c.code === nextCode) || SUPPORTED_COUNTRIES[0];
+                    const nextPhone = phoneNumber.replace(/\D/g, '').slice(0, nextCountry.digits);
+                    setPhoneNumber(nextPhone);
+                    setPhoneOtp('');
+                    setOtpRequested(false);
+                    setResendCooldown(0);
+                    setPhoneError(phoneNumber ? validatePhoneInput(nextPhone, nextCountry) : '');
                   }}
-                  title={`Dialing code: ${selectedCountry.dialCode}`}
+                  title={`Country calling code: ${selectedCountry.dialCode}`}
                 >
-                  {selectedCountry.dialCode}
-                </span>
+                  {SUPPORTED_COUNTRIES.map((c) => (
+                    <option key={c.code} value={c.code}>
+                      {c.dialCode}
+                    </option>
+                  ))}
+                </select>
                 <input
                   id="phone-number"
                   type="tel"
                   className={`form-control${phoneError ? ' is-invalid' : ''}`}
                   value={phoneNumber}
                   onChange={(e) => {
-                    const nextPhone = e.target.value;
+                    const nextPhone = e.target.value.replace(/\D/g, '').slice(0, selectedCountry.digits);
                     setPhoneNumber(nextPhone);
                     setPhoneOtp('');
                     setOtpRequested(false);
@@ -709,7 +691,8 @@ export default function JoinNowPage() {
                   placeholder={selectedCountry.placeholder || 'Enter mobile number'}
                   autoComplete="tel"
                   inputMode="numeric"
-                  maxLength={15}
+                  maxLength={selectedCountry.digits}
+                  pattern={selectedCountry.pattern}
                   disabled={sendingOtp}
                   aria-invalid={Boolean(phoneError)}
                   aria-describedby={phoneError ? 'phone-number-error' : undefined}

@@ -346,18 +346,21 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
   const selectedConnectionGroup = connectionGroups.find(
     (group) => String(group.id) === selectedGroupId,
   )
+  const selectedGroupProfileIds = selectedConnectionGroup
+    ? Array.from(new Set(selectedConnectionGroup.followerUserIds || []))
+    : []
   const selectedGroupProfiles = selectedConnectionGroup
-    ? (selectedConnectionGroup.memberProfileIds || []).map((memberId) => {
-      const profile = findProfileByIdentity(memberId)
+    ? selectedGroupProfileIds.map((profileId) => {
+      const profile = findProfileByIdentity(profileId)
       if (profile) return profile
       const isCurrentUser = currentUserIdentifiers.some((identifier) => (
-        String(identifier).trim().toLowerCase() === String(memberId).trim().toLowerCase()
+        String(identifier).trim().toLowerCase() === String(profileId).trim().toLowerCase()
       ))
-      return isCurrentUser ? { id: memberId, userId: memberId, name: 'You' } : null
+      return isCurrentUser ? { id: profileId, userId: profileId, name: 'You' } : null
     }).filter(Boolean)
     : []
-  const selectedGroupMemberKeys = new Set(
-    (selectedConnectionGroup?.memberProfileIds || []).map((memberId) => String(memberId).trim().toLowerCase()),
+  const selectedGroupProfileKeys = new Set(
+    selectedGroupProfileIds.map((profileId) => String(profileId).trim().toLowerCase()),
   )
   const currentUserIdentityKeys = new Set(currentUserIdentifiers
     .filter(Boolean)
@@ -368,11 +371,11 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
     ? getUniqueProfiles([...connectionSectionProfiles, ...followerProfiles]).filter((profile) => {
       const identityKeys = getProfileIdentityKeys(profile)
       return !identityKeys.some((key) => (
-        selectedGroupMemberKeys.has(key) || currentUserIdentityKeys.has(key)
+        selectedGroupProfileKeys.has(key) || currentUserIdentityKeys.has(key)
       ))
     })
     : []
-  const selectedGroupMembersKey = (selectedConnectionGroup?.memberProfileIds || []).join('|')
+  const selectedGroupProfilesKey = selectedGroupProfileIds.join('|')
   const addingGroupMembers = connectionGroups.find(
     (group) => String(group.id) === addingGroupMembersId,
   )
@@ -418,7 +421,7 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
       window.removeEventListener('focus', refreshWhenVisible)
       document.removeEventListener('visibilitychange', refreshWhenVisible)
     }
-  }, [activeSection, currentUserIdentityKey, isActive, selectedGroupId, selectedGroupMembersKey])
+  }, [activeSection, currentUserIdentityKey, isActive, selectedGroupId, selectedGroupProfilesKey])
 
   function handleGroupPostFileChange(event) {
     const file = event.target.files?.[0]
@@ -703,8 +706,8 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
       setAddingGroupMembersId('')
       setSelectedGroupMemberIds([])
     } catch (error) {
-      console.error('Could not add group members:', error)
-      setGroupMembersError(error.message || 'Could not add these members. Please try again.')
+      console.error('Could not add group followers:', error)
+      setGroupMembersError(error.message || 'Could not add these followers. Please try again.')
     } finally {
       setIsAddingGroupMembers(false)
     }
@@ -756,13 +759,9 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
   }
 
   function getGroupFollowers(group) {
-    const followerIds = new Set((group.followerUserIds || []).filter(Boolean).map(
-      (id) => String(id).trim().toLowerCase(),
+    const profileIds = Array.from(new Set(
+      (group.followerUserIds || []).filter(Boolean).map((id) => String(id).trim()),
     ))
-    const profileIds = Array.from(new Set([
-      ...(group.memberProfileIds || []),
-      ...(group.followerUserIds || []),
-    ].filter(Boolean).map((id) => String(id).trim())))
     const profilesByKey = new Map()
 
     profileIds.forEach((profileId) => {
@@ -773,13 +772,13 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
       const resolvedProfile = profile || {
         id: profileId,
         userId: profileId,
-        name: isCurrentUser ? 'You' : 'Group member',
+        name: isCurrentUser ? 'You' : 'Group follower',
         isGroupProfilePlaceholder: true,
       }
       const key = getProfileKey(resolvedProfile) || profileId.toLowerCase()
       profilesByKey.set(key, {
         ...resolvedProfile,
-        groupRelationship: followerIds.has(profileId.toLowerCase()) ? 'Follower' : 'Member',
+        groupRelationship: 'Follower',
       })
     })
 
@@ -1775,8 +1774,8 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
                     <span className="network-section-eyebrow">YOUR NETWORK</span>
                     <h2 id="network-group-detail-title">{selectedConnectionGroup.name}</h2>
                     <p>
-                      {selectedGroupProfiles.length}{' '}
-                      {selectedGroupProfiles.length === 1 ? 'profile' : 'profiles'} in this group
+                      {selectedConnectionGroup.followerCount || 0}{' '}
+                      {(selectedConnectionGroup.followerCount || 0) === 1 ? 'follower' : 'followers'}
                     </p>
                   </div>
                   {selectedConnectionGroup.isOwner && (
@@ -1786,7 +1785,7 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
                       disabled={isAddingGroupMembers}
                       onClick={() => openGroupMemberPicker(selectedConnectionGroup)}
                     >
-                      Add members
+                      Add followers
                     </button>
                   )}
                   {selectedConnectionGroup.isOwner && (
@@ -1995,7 +1994,7 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
                 <div>
                   <span className="network-section-eyebrow">YOUR NETWORK</span>
                   <h2 id="network-groups-title">Groups</h2>
-                  <p>Organize your connections into groups.</p>
+                  <p>Create a group and invite connections or followers to follow it.</p>
                 </div>
                 <button
                   className="network-group-create-button"
@@ -2058,7 +2057,6 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
                   {connectionGroups.map((group) => {
                     const groupId = String(group.id)
                     const isEditing = group.isOwner && editingGroupId === groupId
-                    const memberIds = group.memberProfileIds || []
                     const creator = findProfileByIdentity(group.ownerId)
                     const creatorName = group.isOwner
                       ? 'you'
@@ -2081,9 +2079,7 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
                               <strong>{group.name}</strong>
                               <span className="network-group-creator">Created by {creatorName}</span>
                               <span className="network-group-member-count">
-                                {memberIds.length}{' '}
-                                {memberIds.length === 1 ? 'member' : 'members'}
-                                {' · '}{group.followerCount || 0}{' '}
+                                {group.followerCount || 0}{' '}
                                 {(group.followerCount || 0) === 1 ? 'follower' : 'followers'}
                               </span>
                             </span>
@@ -2211,7 +2207,7 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
                 <div className="network-connections-empty">
                   <div className="network-catch-up-icon"><UsersRound size={24} aria-hidden="true" /></div>
                   <h3>No groups yet</h3>
-                  <p>Create a group and choose which of your connections to include.</p>
+                  <p>Create a group to share updates with your followers.</p>
                 </div>
               )}
             </section>
@@ -2610,12 +2606,12 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
           >
             <header>
               <div>
-                <h2 id="network-group-add-members-title">Add members to {addingGroupMembers.name}</h2>
-                <p>Select your connections or followers to add to this group.</p>
+                <h2 id="network-group-add-members-title">Add followers to {addingGroupMembers.name}</h2>
+                <p>Select your connections or followers to follow this group.</p>
               </div>
               <button
                 type="button"
-                aria-label="Close add members"
+                aria-label="Close add followers"
                 disabled={isAddingGroupMembers}
                 onClick={() => {
                   setAddingGroupMembersId('')

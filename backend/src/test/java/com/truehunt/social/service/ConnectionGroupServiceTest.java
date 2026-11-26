@@ -48,7 +48,9 @@ class ConnectionGroupServiceTest {
 
         assertEquals("Film crew", created.get("name"));
         assertEquals("/uploads/group-photo.jpg", created.get("imageUrl"));
-        assertEquals(List.of("connection-id"), created.get("memberProfileIds"));
+        assertEquals(List.of(), created.get("memberProfileIds"));
+        assertEquals(List.of("connection-id"), created.get("followerUserIds"));
+        assertEquals(1, created.get("followerCount"));
     }
 
     @Test
@@ -98,6 +100,7 @@ class ConnectionGroupServiceTest {
                 .createGroup("owner@example.com", "Open group", List.of(), null);
 
         assertEquals(List.of(), created.get("memberProfileIds"));
+        assertEquals(List.of(), created.get("followerUserIds"));
     }
 
     @Test
@@ -230,7 +233,7 @@ class ConnectionGroupServiceTest {
         group.setId(7L);
         group.setOwnerId("owner-id");
         group.setName("Film crew");
-        group.setMemberProfileIds(List.of("existing-member"));
+        group.setMemberProfileIds(List.of("existing-member", "connected-id"));
         when(accounts.findByEmail("owner@example.com")).thenReturn(Optional.of(owner));
         when(groups.findByIdAndOwnerId(7L, "owner-id")).thenReturn(Optional.of(group));
         when(connections.getConnectedProfiles("owner@example.com")).thenReturn(List.of(
@@ -242,7 +245,9 @@ class ConnectionGroupServiceTest {
         Map<String, Object> updated = service(groups, accounts, connections)
                 .addMembers("owner@example.com", 7L, List.of("connected@example.com", "follower-id"));
 
-        assertEquals(List.of("existing-member", "connected-id", "follower-id"), updated.get("memberProfileIds"));
+        assertEquals(List.of("existing-member"), updated.get("memberProfileIds"));
+        assertEquals(List.of("connected-id", "follower-id"), updated.get("followerUserIds"));
+        assertEquals(2, updated.get("followerCount"));
         verify(groups).save(group);
     }
 
@@ -306,7 +311,7 @@ class ConnectionGroupServiceTest {
     }
 
     @Test
-    void followingIsSeparateFromGroupMembersAndCanBeRemoved() {
+    void followingIsFollowerOnlyAndCanBeRemoved() {
         ConnectionGroupRepository groups = mock(ConnectionGroupRepository.class);
         UserAccountRepository accounts = mock(UserAccountRepository.class);
         ConnectionService connections = mock(ConnectionService.class);
@@ -314,7 +319,7 @@ class ConnectionGroupServiceTest {
         ConnectionGroupEntity group = new ConnectionGroupEntity();
         group.setOwnerId("owner-id");
         group.setName("Film crew");
-        group.setMemberProfileIds(List.of("member-id"));
+        group.setMemberProfileIds(List.of("member-id", "viewer-id"));
         when(accounts.findByEmail("viewer@example.com")).thenReturn(Optional.of(viewer));
         when(groups.findById(7L)).thenReturn(Optional.of(group));
         when(groups.save(any(ConnectionGroupEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -325,14 +330,14 @@ class ConnectionGroupServiceTest {
 
         assertEquals(true, followed.get("isFollowing"));
         assertEquals(1, followed.get("followerCount"));
-        assertEquals(List.of("member-id", "viewer-id"), followed.get("memberProfileIds"));
+        assertEquals(List.of("member-id"), followed.get("memberProfileIds"));
         assertEquals(false, unfollowed.get("isFollowing"));
         assertEquals(0, unfollowed.get("followerCount"));
         assertEquals(List.of("member-id"), unfollowed.get("memberProfileIds"));
     }
 
     @Test
-    void groupEditsPreserveMembersWhoFollowedTheGroup() {
+    void groupEditsDoNotTurnFollowersIntoMembers() {
         ConnectionGroupRepository groups = mock(ConnectionGroupRepository.class);
         UserAccountRepository accounts = mock(UserAccountRepository.class);
         ConnectionService connections = mock(ConnectionService.class);
@@ -351,7 +356,7 @@ class ConnectionGroupServiceTest {
         Map<String, Object> updated = service(groups, accounts, connections)
                 .updateGroup("owner@example.com", 7L, "Updated group", List.of(), null);
 
-        assertEquals(List.of("old-member", "follower-id"), updated.get("memberProfileIds"));
+        assertEquals(List.of("old-member"), updated.get("memberProfileIds"));
     }
 
     @Test

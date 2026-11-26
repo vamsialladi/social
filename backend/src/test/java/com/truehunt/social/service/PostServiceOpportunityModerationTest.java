@@ -2,7 +2,9 @@ package com.truehunt.social.service;
 
 import com.truehunt.social.dto.CreatePostRequest;
 import com.truehunt.social.exception.BadRequestException;
+import com.truehunt.social.exception.UnauthorizedException;
 import com.truehunt.social.model.OpportunityApplicationEntity;
+import com.truehunt.social.model.NotificationEntity;
 import com.truehunt.social.model.PostEntity;
 import com.truehunt.social.model.ProfileEntity;
 import com.truehunt.social.repository.NotificationRepository;
@@ -18,8 +20,10 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentCaptor.forClass;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.never;
@@ -28,6 +32,7 @@ class PostServiceOpportunityModerationTest {
 
     private PostRepository postRepository;
     private OpportunityApplicationRepository opportunityApplicationRepository;
+    private NotificationRepository notificationRepository;
     private ProfileService profileService;
     private PostService postService;
     private ProfileEntity ownerProfile;
@@ -36,11 +41,12 @@ class PostServiceOpportunityModerationTest {
     void setUp() {
         postRepository = mock(PostRepository.class);
         opportunityApplicationRepository = mock(OpportunityApplicationRepository.class);
+        notificationRepository = mock(NotificationRepository.class);
         profileService = mock(ProfileService.class);
         postService = new PostService(
                 postRepository,
                 opportunityApplicationRepository,
-                mock(NotificationRepository.class),
+                notificationRepository,
                 profileService
         );
 
@@ -152,6 +158,46 @@ class PostServiceOpportunityModerationTest {
     }
 
     @Test
+    void notifiesApplicantAndCastingPostOwnerWhenApplicationIsSubmitted() {
+        PostEntity opportunity = new PostEntity();
+        opportunity.setId(42L);
+        opportunity.setType("opportunity");
+        opportunity.setTitle("Fashion Model Required");
+        opportunity.setAuthorId("owner-profile-1");
+        opportunity.setAuthorName("Studio Producer");
+        opportunity.setOpportunityDetails(Map.of("projectCampaignName", "Summer Campaign"));
+        when(profileService.findCurrentProfile("owner-profile-1")).thenReturn(ownerProfile);
+        when(postRepository.findById(42L)).thenReturn(Optional.of(opportunity));
+        when(opportunityApplicationRepository.existsByPostIdAndApplicantIdentity(42L, "applicant@example.com"))
+                .thenReturn(false);
+        when(opportunityApplicationRepository.save(any(OpportunityApplicationEntity.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(postRepository.save(any(PostEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        postService.applyToOpportunity(
+                "42",
+                "applicant@example.com",
+                Map.of("applicantName", "Nia Rao")
+        );
+
+        var notificationCaptor = forClass(NotificationEntity.class);
+        verify(notificationRepository, times(2)).save(notificationCaptor.capture());
+        List<NotificationEntity> notifications = notificationCaptor.getAllValues();
+        NotificationEntity applicantNotification = notifications.stream()
+                .filter(notification -> "applicant@example.com".equals(notification.getRecipientId()))
+                .findFirst()
+                .orElseThrow();
+        NotificationEntity ownerNotification = notifications.stream()
+                .filter(notification -> "owner@example.com".equals(notification.getRecipientId()))
+                .findFirst()
+                .orElseThrow();
+        assertEquals("Application Sent", applicantNotification.getTitle());
+        assertEquals(true, applicantNotification.getMessage().contains("Fashion Model Required"));
+        assertEquals("New Application Received", ownerNotification.getTitle());
+        assertEquals(true, ownerNotification.getMessage().contains("Nia Rao"));
+    }
+
+    @Test
     void cancelsOnlyTheMatchingApplicantsApplication() {
         PostEntity opportunity = new PostEntity();
         opportunity.setId(42L);
@@ -168,6 +214,74 @@ class PostServiceOpportunityModerationTest {
         assertEquals(false, response.get("applied"));
         assertEquals(2, response.get("applicationsCount"));
         verify(opportunityApplicationRepository).delete(application);
+    }
+
+    @Test
+    void ownerCanViewApplicantNameAndApplicationDetails() {
+        PostEntity opportunity = new PostEntity();
+        opportunity.setId(42L);
+        opportunity.setAuthorId("owner@example.com");
+        opportunity.setType("opportunity");
+        OpportunityApplicationEntity application =
+                new OpportunityApplicationEntity(42L, "applicant@example.com");
+        application.setId(9L);
+        application.setApplicantName("Applicant Name");
+        application.setNote("{\"currentLocation\":\"Hyderabad\"}");
+        when(postRepository.findById(42L)).thenReturn(Optional.of(opportunity));
+        when(opportunityApplicationRepository.findAllByPostIdOrderByAppliedAtDesc(42L))
+                .thenReturn(List.of(application));
+
+        List<Map<String, Object>> applications =
+                postService.getOpportunityApplications("42", "owner@example.com");
+
+        assertEquals(1, applications.size());
+        assertEquals("Applicant Name", applications.get(0).get("applicantName"));
+        assertEquals("applicant@example.com", applications.get(0).get("applicantId"));
+        assertEquals(
+                "Hyderabad",
+                ((Map<?, ?>) applications.get(0).get("applicationDetails")).get("currentLocation")
+        );
+        assertEquals(false, applications.get(0).get("shortlisted"));
+    }
+
+    @Test
+    void nonOwnerCannotViewCastingApplications() {
+        PostEntity opportunity = new PostEntity();
+        opportunity.setId(42L);
+        opportunity.setAuthorId("owner@example.com");
+        opportunity.setType("opportunity");
+        when(postRepository.findById(42L)).thenReturn(Optional.of(opportunity));
+
+        assertThrows(
+                UnauthorizedException.class,
+                () -> postService.getOpportunityApplications("42", "other@example.com")
+        );
+    }
+
+    @Test
+    void ownerCanChangeShortlistStatusForApplicationOnTheirPost() {
+        PostEntity opportunity = new PostEntity();
+        opportunity.setId(42L);
+        opportunity.setAuthorId("owner@example.com");
+        opportunity.setType("opportunity");
+        OpportunityApplicationEntity application =
+                new OpportunityApplicationEntity(42L, "applicant@example.com");
+        application.setId(9L);
+        when(postRepository.findById(42L)).thenReturn(Optional.of(opportunity));
+        when(opportunityApplicationRepository.findByIdAndPostId(9L, 42L))
+                .thenReturn(Optional.of(application));
+        when(opportunityApplicationRepository.save(any(OpportunityApplicationEntity.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        Map<String, Object> response = postService.updateOpportunityApplicationShortlist(
+                "42",
+                "9",
+                true,
+                "owner@example.com"
+        );
+
+        assertEquals(true, response.get("shortlisted"));
+        verify(opportunityApplicationRepository).save(application);
     }
 
     @Test
