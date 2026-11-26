@@ -1146,7 +1146,8 @@ public class PostService {
         post.setApplicationsCount(post.getApplicationsCount() + 1);
         postRepository.save(post);
 
-        Map<String, Object> opportunityDetails = post.getOpportunityDetails();
+        Map<String, Object> opportunityDetails = Optional.ofNullable(post.getOpportunityDetails())
+                .orElseGet(Collections::emptyMap);
         String title = firstNonBlank(
                 Map.of(
                         "title", post.getTitle() != null ? post.getTitle() : "",

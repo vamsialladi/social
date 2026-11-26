@@ -90,7 +90,7 @@ public class ConversationController {
                 id,
                 messageId,
                 req.getContent(),
-                authenticatedUserResolver.requireEmail(request)
+                resolveCaller(request)
         );
         messageService.broadcastConversationChange(
                 Long.parseLong(String.valueOf(conversation.get("id"))),
@@ -108,7 +108,7 @@ public class ConversationController {
     ) {
         Map<String, Object> conversation = conversationService.clearMessages(
                 id,
-                authenticatedUserResolver.requireEmail(request)
+                resolveCaller(request)
         );
         messageService.broadcastConversationChange(
                 Long.parseLong(String.valueOf(conversation.get("id"))),

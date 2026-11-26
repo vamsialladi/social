@@ -1,5 +1,6 @@
 package com.truehunt.social.service;
 
+import com.truehunt.social.dto.ContentSafetyResult;
 import com.truehunt.social.exception.BadRequestException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -12,6 +13,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -40,16 +42,25 @@ public class MediaService {
     @Value("${app.upload.dir:./uploads}")
     private String uploadDir;
 
+    private final ContentSafetyService contentSafetyService;
+
+    public MediaService(ContentSafetyService contentSafetyService) {
+        this.contentSafetyService = contentSafetyService;
+    }
+
     public Map<String, Object> uploadFile(MultipartFile file, String category) {
         if (file == null || file.isEmpty()) {
             throw new BadRequestException("File is empty or missing");
         }
 
         if ("profile-image".equalsIgnoreCase(category)) {
+            validateImageFile(file);
             return encodeProfileImage(file, category);
         }
         if ("connection-group-photo".equalsIgnoreCase(category)) {
             validateImageFile(file, MAX_GROUP_PHOTO_SIZE_BYTES, "10 MB", GROUP_PHOTO_CONTENT_TYPES);
+        } else if (isImageFile(file)) {
+            moderateImage(file);
         }
 
         try {
@@ -76,6 +87,30 @@ public class MediaService {
         } catch (IOException e) {
             throw new RuntimeException("Failed to store media file: " + e.getMessage(), e);
         }
+    }
+
+    private void moderateImage(MultipartFile file) {
+        try {
+            ContentSafetyResult result = contentSafetyService.checkImage(file.getBytes());
+            if (!result.isSafe()) {
+                throw new BadRequestException("MEDIA_CONTENT_REJECTED", result.getReason());
+            }
+        } catch (IOException exception) {
+            throw new BadRequestException(
+                    "MEDIA_SCAN_FAILED",
+                    "The image could not be checked for adult content. Please try again."
+            );
+        }
+    }
+
+    private boolean isImageFile(MultipartFile file) {
+        String contentType = file.getContentType();
+        if (contentType != null && contentType.toLowerCase(Locale.ROOT).startsWith("image/")) {
+            return true;
+        }
+        String fileName = file.getOriginalFilename();
+        return fileName != null
+                && fileName.toLowerCase(Locale.ROOT).matches(".*\\.(avif|bmp|gif|jpe?g|png|svg|webp)$");
     }
 
     private Map<String, Object> encodeProfileImage(MultipartFile file, String category) {

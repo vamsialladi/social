@@ -1,6 +1,5 @@
 package com.truehunt.social.controller;
 
-import com.truehunt.social.exception.UnauthorizedException;
 import com.truehunt.social.service.InvestorAccessService;
 import com.truehunt.social.service.PostService;
 import org.junit.jupiter.api.AfterEach;
@@ -11,8 +10,9 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class PostControllerCastingAccessTest {
@@ -23,13 +23,18 @@ class PostControllerCastingAccessTest {
     }
 
     @Test
-    void castingProfilesRequireAnAuthenticatedUser() {
+    void anonymousCastingProfileListIsEmptyWithoutAnUnauthorizedResponse() {
+        PostService postService = mock(PostService.class);
         PostController controller = new PostController(
-                mock(PostService.class),
+                postService,
                 mock(InvestorAccessService.class)
         );
 
-        assertThrows(UnauthorizedException.class, () -> controller.getPosts("casting", null, null));
+        assertEquals(
+                List.of(),
+                controller.getPosts("casting", null, null).getBody().getData()
+        );
+        verify(postService, never()).getPosts("casting", null);
     }
 
     @Test

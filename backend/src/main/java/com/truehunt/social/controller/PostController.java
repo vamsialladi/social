@@ -45,10 +45,14 @@ public class PostController {
         return null;
     }
 
-    private void requireAuthenticatedUser() {
+    private boolean isAuthenticatedUser() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication == null || !authentication.isAuthenticated()
-                || authentication instanceof AnonymousAuthenticationToken) {
+        return authentication != null && authentication.isAuthenticated()
+                && !(authentication instanceof AnonymousAuthenticationToken);
+    }
+
+    private void requireAuthenticatedUser() {
+        if (!isAuthenticatedUser()) {
             throw new UnauthorizedException("Sign in to view or create casting profiles.");
         }
     }
@@ -60,7 +64,9 @@ public class PostController {
             @RequestHeader(value = "X-User-Id", required = false) String userId
     ) {
         if ("casting".equalsIgnoreCase(type)) {
-            requireAuthenticatedUser();
+            if (!isAuthenticatedUser()) {
+                return ResponseEntity.ok(ApiResponse.success(List.of()));
+            }
         }
         return ResponseEntity.ok(ApiResponse.success(postService.getPosts(type, resolveIdentity(userEmail, userId))));
     }
