@@ -2029,6 +2029,7 @@
         }
         const savedDetails = await persistProfileDetails({
           ...profileDetails,
+          userId: null,
           profileImageUrl: uploaded.url,
           avatar: uploaded.url,
         })

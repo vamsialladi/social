@@ -286,9 +286,15 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
       setGroupLoadError('')
       const loadVersion = ++connectionGroupsLoadVersion.current
       try {
-        const groups = await api.getConnectionGroups()
+        const [groups, banners] = await Promise.all([
+          api.getConnectionGroups(),
+          api.getConnectionBanners(),
+        ])
         if (isCurrent && loadVersion === connectionGroupsLoadVersion.current) {
-          setConnectionGroups(Array.isArray(groups) ? groups : [])
+          setConnectionGroups([
+            ...(Array.isArray(groups) ? groups : []),
+            ...(Array.isArray(banners) ? banners : []),
+          ])
         }
       } catch (error) {
         console.warn('Could not load connection groups:', error)
@@ -346,6 +352,8 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
   const selectedConnectionGroup = connectionGroups.find(
     (group) => String(group.id) === selectedGroupId,
   )
+  const regularConnectionGroups = connectionGroups.filter((group) => !group.isBanner)
+  const bannerGroups = connectionGroups.filter((group) => group.isBanner)
   const selectedGroupProfileIds = selectedConnectionGroup
     ? Array.from(new Set(selectedConnectionGroup.followerUserIds || []))
     : []
@@ -384,7 +392,7 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
   )
 
   useEffect(() => {
-    if (!isActive || activeSection !== 'groups' || !selectedGroupId) return undefined
+    if (!isActive || !['groups', 'banner'].includes(activeSection) || !selectedGroupId) return undefined
 
     let isCurrent = true
     let lastLoadStartedAt = 0
@@ -421,20 +429,42 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
       window.removeEventListener('focus', refreshWhenVisible)
       document.removeEventListener('visibilitychange', refreshWhenVisible)
     }
-  }, [activeSection, currentUserIdentityKey, isActive, selectedGroupId, selectedGroupProfilesKey])
+  }, [
+    activeSection,
+    currentUserIdentityKey,
+    isActive,
+    selectedConnectionGroup?.isFollowing,
+    selectedGroupId,
+    selectedGroupProfilesKey,
+  ])
 
   function handleGroupPostFileChange(event) {
     const file = event.target.files?.[0]
     event.target.value = ''
     if (!file) return
 
-    const supportedType = file.type.startsWith('image/') || file.type.startsWith('video/')
+    const fileType = String(file.type || '').toLowerCase()
+    const isImage = fileType.startsWith('image/')
+    const isVideo = fileType.startsWith('video/')
+    const supportedBannerImage = Object.values(groupPhotoMimeTypesByExtension).includes(fileType)
+    if (selectedConnectionGroup?.isBanner && isImage && !supportedBannerImage) {
+      setGroupError('Banner images must be AVIF, BMP, GIF, JPEG, PNG, or WebP.')
+      return
+    }
+
+    const supportedType = isImage || isVideo
     if (!supportedType) {
       setGroupError('Choose an image or video file.')
       return
     }
     if (file.size > 50 * 1024 * 1024) {
       setGroupError('Group post attachments must be no larger than 50 MB.')
+      return
+    }
+    if (selectedConnectionGroup?.isBanner
+      && isImage
+      && file.size > 10 * 1024 * 1024) {
+      setGroupError('Banner images must be no larger than 10 MB.')
       return
     }
 
@@ -462,7 +492,11 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
     event.preventDefault()
     if (!selectedConnectionGroup?.isOwner || isCreatingGroupPost || groupPostMediaSafety.isBlocked) return
 
-    const content = groupPostText.trim()
+    const content = selectedConnectionGroup.isBanner ? '' : groupPostText.trim()
+    if (selectedConnectionGroup.isBanner && !groupPostFile) {
+      setGroupError('Choose an image or video for your banner.')
+      return
+    }
     if (!content && !groupPostFile) {
       setGroupError('Write a message or attach an image or video.')
       return
@@ -474,7 +508,14 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
       let mediaUrl = ''
       let mediaType = ''
       if (groupPostFile) {
-        const upload = await api.uploadMedia(groupPostFile, 'connection-group-post')
+        const upload = await api.uploadMedia(
+          groupPostFile,
+          selectedConnectionGroup.isBanner
+            ? groupPostFile.type.startsWith('image/')
+              ? 'connection-group-photo'
+              : 'banner-media'
+            : 'connection-group-post',
+        )
         if (!upload?.url) {
           throw new Error('The group attachment upload did not return a media URL.')
         }
@@ -639,6 +680,23 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
     }
   }
 
+  async function handleCreateBanner() {
+    if (isSavingGroup || loadingConnectionGroups) return
+
+    setIsSavingGroup(true)
+    setGroupError('')
+    try {
+      const createdBanner = await api.createConnectionBanner()
+      setConnectionGroups((current) => [createdBanner, ...current])
+      setSelectedGroupId(String(createdBanner.id))
+    } catch (error) {
+      console.error('Could not create banner group:', error)
+      setGroupError(error.message || 'Could not create your banner. Please try again.')
+    } finally {
+      setIsSavingGroup(false)
+    }
+  }
+
   async function handleUpdateGroup(event, group) {
     event.preventDefault()
     if (isSavingGroup) return
@@ -715,7 +773,8 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
 
   async function handleDeleteGroup(group) {
     if (deletingGroupId || isSavingGroup) return
-    if (!window.confirm(`Delete "${group.name}" and all its members? This cannot be undone.`)) return
+    if (!group.isBanner
+      && !window.confirm(`Delete "${group.name}" and all its members? This cannot be undone.`)) return
 
     const groupId = String(group.id)
     setDeletingGroupId(groupId)
@@ -1711,8 +1770,10 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
                       : label === 'Requests'
                         ? requestSectionProfiles.length
                         : label === 'Groups'
-                          ? connectionGroups.length
-                          : ''
+                          ? regularConnectionGroups.length
+                          : label === 'Banner'
+                            ? bannerGroups.length
+                            : ''
                 )
                 return (
                   <button
@@ -2052,9 +2113,9 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
                 <p role="status">Loading groups…</p>
               ) : groupLoadError ? (
                 <p className="network-connection-error" role="alert">{groupLoadError}</p>
-              ) : connectionGroups.length ? (
+              ) : regularConnectionGroups.length ? (
                 <div className="network-group-list">
-                  {connectionGroups.map((group) => {
+                  {regularConnectionGroups.map((group) => {
                     const groupId = String(group.id)
                     const isEditing = group.isOwner && editingGroupId === groupId
                     const creator = findProfileByIdentity(group.ownerId)
@@ -2213,8 +2274,246 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
             </section>
             )
           ) : activeSection === 'banner' ? (
-            <section>
-            </section>
+            selectedConnectionGroup?.isBanner ? (
+              <section className="network-suggestions network-group-detail" aria-labelledby="network-banner-detail-title">
+                <button
+                  className="network-connections-back"
+                  type="button"
+                  onClick={() => {
+                    cancelGroupPostDraft()
+                    setSelectedGroupId('')
+                  }}
+                >
+                  <ArrowLeft size={16} aria-hidden="true" />
+                  Back to banners
+                </button>
+                <header className="network-group-detail-heading">
+                  <div>
+                    <span className="network-section-eyebrow">NETWORK BANNER</span>
+                    <h2 id="network-banner-detail-title">
+                      {selectedConnectionGroup.isOwner ? 'Your banner' : `${getProfileName(findProfileByIdentity(selectedConnectionGroup.ownerId)) || 'Member'}’s banner`}
+                    </h2>
+                    <p>
+                      {selectedConnectionGroup.followerCount || 0}{' '}
+                      {(selectedConnectionGroup.followerCount || 0) === 1 ? 'follower' : 'followers'}
+                    </p>
+                  </div>
+                  {selectedConnectionGroup.isOwner ? (
+                    <>
+                      <button
+                        className="network-group-followers-button"
+                        type="button"
+                        onClick={() => setViewingGroupFollowersId(String(selectedConnectionGroup.id))}
+                      >
+                        View followers ({selectedConnectionGroup.followerCount || 0})
+                      </button>
+                      <button
+                        className="network-group-delete-button"
+                        type="button"
+                        disabled={Boolean(deletingGroupId)}
+                        onClick={() => void handleDeleteGroup(selectedConnectionGroup)}
+                      >
+                        {deletingGroupId === String(selectedConnectionGroup.id) ? 'Deleting…' : 'Delete banner'}
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      className={`network-group-follow-button${selectedConnectionGroup.isFollowing ? ' is-following' : ''}`}
+                      type="button"
+                      disabled={Boolean(updatingGroupFollowId)}
+                      aria-pressed={Boolean(selectedConnectionGroup.isFollowing)}
+                      onClick={() => void toggleGroupFollow(selectedConnectionGroup)}
+                    >
+                      {updatingGroupFollowId === String(selectedConnectionGroup.id)
+                        ? 'Updating…'
+                        : selectedConnectionGroup.isFollowing ? 'Following' : 'Follow'}
+                    </button>
+                  )}
+                </header>
+                {groupError && <p className="network-connection-error" role="alert">{groupError}</p>}
+                {!selectedConnectionGroup.isOwner && !selectedConnectionGroup.isFollowing ? (
+                  <div className="network-group-preview-gate">
+                    <div>
+                      <strong>Follow this banner to view its photos and videos</strong>
+                      <p>Only followers and the creator can see banner media.</p>
+                    </div>
+                    <button
+                      className="network-group-follow-button"
+                      type="button"
+                      disabled={Boolean(updatingGroupFollowId)}
+                      onClick={() => void toggleGroupFollow(selectedConnectionGroup)}
+                    >
+                      {updatingGroupFollowId === String(selectedConnectionGroup.id) ? 'Following…' : 'Follow banner'}
+                    </button>
+                  </div>
+                ) : (
+                  <section className="network-group-posts" aria-labelledby="network-banner-media-title">
+                    <h3 id="network-banner-media-title">Photos and videos</h3>
+                    {selectedConnectionGroup.isOwner && (
+                      <form className="network-group-post-form" onSubmit={handleCreateGroupPost}>
+                        <label htmlFor="network-banner-media-file">Add a photo or video to your banner</label>
+                        {groupPostPreviewUrl && groupPostFile && (
+                          <div className="network-group-post-file-preview">
+                            {groupPostFile.type.startsWith('video/')
+                              ? <video src={groupPostPreviewUrl} controls />
+                              : <img src={groupPostPreviewUrl} alt="Banner media preview" />}
+                            <button type="button" disabled={isCreatingGroupPost} onClick={cancelGroupPostDraft}>
+                              Remove media
+                            </button>
+                          </div>
+                        )}
+                        <MediaSafetyStatus
+                          safety={groupPostMediaSafety}
+                          blockedMessage={`This ${groupPostMediaSafety.kind} has high adult content, so we can't add this ${groupPostMediaSafety.kind}.`}
+                          safeMessage="Safe content verified. Ready to add."
+                        />
+                        <div className="network-group-post-form-actions">
+                          <input
+                            id="network-banner-media-file"
+                            type="file"
+                            accept="image/*,video/*"
+                            onChange={handleGroupPostFileChange}
+                            disabled={isCreatingGroupPost}
+                          />
+                          <button
+                            type="submit"
+                            disabled={isCreatingGroupPost || !groupPostFile || groupPostMediaSafety.isBlocked}
+                          >
+                            {isCreatingGroupPost ? 'Adding…' : 'Add to banner'}
+                          </button>
+                        </div>
+                      </form>
+                    )}
+                    {groupPostsError ? (
+                      <p className="network-connection-error" role="alert">{groupPostsError}</p>
+                    ) : loadingGroupPosts ? (
+                      <p role="status">Loading banner media…</p>
+                    ) : canViewGroupPosts ? (
+                      groupPosts.length ? (
+                        <div className="network-group-post-list">
+                          {groupPosts.map((post) => (
+                            <article className="network-group-post-card" key={post.id}>
+                              <header>
+                                <strong>{post.authorName || 'Banner creator'}</strong>
+                                {post.createdAt && <time>{post.createdAt}</time>}
+                                {selectedConnectionGroup.isOwner && (
+                                  <button
+                                    className="network-group-post-delete"
+                                    type="button"
+                                    aria-label="Delete banner media"
+                                    disabled={Boolean(deletingGroupPostId)}
+                                    onClick={() => void handleDeleteGroupPost(post)}
+                                  >
+                                    <Trash2 size={14} aria-hidden="true" />
+                                    {deletingGroupPostId === String(post.id) ? 'Deleting…' : 'Delete'}
+                                  </button>
+                                )}
+                              </header>
+                              {String(post.mediaType || '').startsWith('video/')
+                                ? <video src={post.mediaUrl} controls preload="metadata" />
+                                : <img src={post.mediaUrl} alt="Banner media" loading="lazy" />}
+                            </article>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="network-group-posts-empty">No photos or videos yet.</p>
+                      )
+                    ) : (
+                      <p role="status">Follow this banner to view its media.</p>
+                    )}
+                  </section>
+                )}
+              </section>
+            ) : (
+              <section className="network-suggestions network-groups-section" aria-labelledby="network-banners-title">
+                <header className="network-section-heading">
+                  <div>
+                    <span className="network-section-eyebrow">YOUR NETWORK</span>
+                    <h2 id="network-banners-title">Banners</h2>
+                    <p>Share photos and videos with your followers. Only you can add media to your banner.</p>
+                  </div>
+                  <button
+                    className="network-group-create-button"
+                    type="button"
+                    disabled={isSavingGroup || loadingConnectionGroups}
+                    onClick={() => {
+                      const ownBanner = bannerGroups.find((group) => group.isOwner)
+                      if (ownBanner) {
+                        setSelectedGroupId(String(ownBanner.id))
+                      } else {
+                        void handleCreateBanner()
+                      }
+                    }}
+                  >
+                    {loadingConnectionGroups
+                      ? 'Loading…'
+                      : isSavingGroup
+                      ? 'Creating…'
+                      : bannerGroups.some((group) => group.isOwner) ? 'Open your banner' : 'Add your banner'}
+                  </button>
+                </header>
+                {groupError && <p className="network-connection-error" role="alert">{groupError}</p>}
+                {loadingConnectionGroups ? (
+                  <p role="status">Loading banners…</p>
+                ) : groupLoadError ? (
+                  <p className="network-connection-error" role="alert">{groupLoadError}</p>
+                ) : bannerGroups.length ? (
+                  <div className="network-group-list">
+                    {bannerGroups.map((group) => {
+                      const creator = findProfileByIdentity(group.ownerId)
+                      const creatorName = group.isOwner ? 'Your banner' : `${getProfileName(creator) || 'Member'}’s banner`
+                      return (
+                        <article className="network-group-card" key={group.id}>
+                          <div className="network-group-card-heading">
+                            <button
+                              className="network-group-title-button"
+                              type="button"
+                              aria-label={`Open ${creatorName}`}
+                              onClick={() => setSelectedGroupId(String(group.id))}
+                            >
+                              {renderGroupPhoto()}
+                              <span className="network-group-title-details">
+                                <strong>{creatorName}</strong>
+                                <span className="network-group-member-count">
+                                  {group.followerCount || 0} {(group.followerCount || 0) === 1 ? 'follower' : 'followers'}
+                                </span>
+                              </span>
+                            </button>
+                            {group.isOwner ? (
+                              <button
+                                className="network-group-followers-button"
+                                type="button"
+                                onClick={() => setViewingGroupFollowersId(String(group.id))}
+                              >
+                                Followers ({group.followerCount || 0})
+                              </button>
+                            ) : (
+                              <button
+                                className={`network-group-follow-button${group.isFollowing ? ' is-following' : ''}`}
+                                type="button"
+                                disabled={Boolean(updatingGroupFollowId)}
+                                aria-pressed={Boolean(group.isFollowing)}
+                                onClick={() => void toggleGroupFollow(group)}
+                              >
+                                {updatingGroupFollowId === String(group.id)
+                                  ? 'Updating…'
+                                  : group.isFollowing ? 'Following' : 'Follow'}
+                              </button>
+                            )}
+                          </div>
+                        </article>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <div className="network-connections-empty">
+                    <div className="network-catch-up-icon"><Image size={24} aria-hidden="true" /></div>
+                    <h3>No banners yet</h3>
+                    <p>Create your banner to share photos and videos with people who follow you.</p>
+                  </div>
+                )}
+              </section>
+            )
           ) : activeSection === 'connections' || activeSection === 'following' || activeSection === 'requests' ? (
             <section className="network-suggestions" aria-labelledby="network-connections-title">
               <button

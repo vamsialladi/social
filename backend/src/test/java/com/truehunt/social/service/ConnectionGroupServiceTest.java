@@ -104,6 +104,49 @@ class ConnectionGroupServiceTest {
     }
 
     @Test
+    void createBannerGroupIsUniquePerOwner() {
+        ConnectionGroupRepository groups = mock(ConnectionGroupRepository.class);
+        UserAccountRepository accounts = mock(UserAccountRepository.class);
+        ConnectionService connections = mock(ConnectionService.class);
+        UserAccountEntity owner = account(1L, "owner@example.com", "owner-id");
+        when(accounts.findByEmail("owner@example.com")).thenReturn(Optional.of(owner));
+        ConnectionGroupEntity existingBanner = new ConnectionGroupEntity();
+        existingBanner.setGroupType("BANNER");
+        when(groups.findAllByOwnerIdOrderByCreatedAtDesc("owner-id"))
+                .thenReturn(List.of(), List.of(existingBanner));
+        when(groups.save(any(ConnectionGroupEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ConnectionGroupService service = service(groups, accounts, connections);
+        Map<String, Object> created = service.createBannerGroup("owner@example.com");
+
+        assertEquals("Banner", created.get("name"));
+        assertEquals("BANNER", created.get("groupType"));
+        assertEquals(true, created.get("isBanner"));
+        assertEquals(true, created.get("isOwner"));
+        assertThrows(BadRequestException.class, () -> service.createBannerGroup("owner@example.com"));
+    }
+
+    @Test
+    void bannerGroupsAreNotListedAsRegularGroups() {
+        ConnectionGroupRepository groups = mock(ConnectionGroupRepository.class);
+        UserAccountRepository accounts = mock(UserAccountRepository.class);
+        ConnectionService connections = mock(ConnectionService.class);
+        ConnectionGroupEntity regularGroup = new ConnectionGroupEntity();
+        regularGroup.setName("Film crew");
+        ConnectionGroupEntity bannerGroup = new ConnectionGroupEntity();
+        bannerGroup.setName("Banner");
+        bannerGroup.setGroupType("BANNER");
+        when(groups.findAllByOrderByCreatedAtDesc()).thenReturn(List.of(regularGroup, bannerGroup));
+
+        ConnectionGroupService service = service(groups, accounts, connections);
+
+        assertEquals(1, service.getGroups("owner@example.com").size());
+        assertEquals(false, ((Map<?, ?>) service.getGroups("owner@example.com").get(0)).get("isBanner"));
+        assertEquals(1, service.getBannerGroups("owner@example.com").size());
+        assertEquals(true, ((Map<?, ?>) service.getBannerGroups("owner@example.com").get(0)).get("isBanner"));
+    }
+
+    @Test
     void createGroupRejectsPeopleOutsideTheOwnersConnections() {
         ConnectionGroupRepository groups = mock(ConnectionGroupRepository.class);
         UserAccountRepository accounts = mock(UserAccountRepository.class);
@@ -414,6 +457,46 @@ class ConnectionGroupServiceTest {
         assertEquals("/uploads/recent.jpg", preview.get("imageUrl"));
         assertEquals(false, preview.containsKey("content"));
         assertEquals(false, preview.containsKey("mediaUrl"));
+    }
+
+    @Test
+    void bannerMediaIsHiddenFromNonFollowersAndCannotContainText() {
+        ConnectionGroupRepository groups = mock(ConnectionGroupRepository.class);
+        ConnectionGroupPostRepository posts = mock(ConnectionGroupPostRepository.class);
+        UserAccountRepository accounts = mock(UserAccountRepository.class);
+        ConnectionService connections = mock(ConnectionService.class);
+        UserAccountEntity viewer = account(2L, "viewer@example.com", "viewer-id");
+        UserAccountEntity owner = account(1L, "owner@example.com", "owner-id");
+        ConnectionGroupEntity banner = new ConnectionGroupEntity();
+        banner.setOwnerId("owner-id");
+        banner.setGroupType("BANNER");
+        ConnectionGroupPostEntity image = new ConnectionGroupPostEntity();
+        image.setMediaUrl("/uploads/banner.jpg");
+        image.setMediaType("image/jpeg");
+        when(accounts.findByEmail("viewer@example.com")).thenReturn(Optional.of(viewer));
+        when(accounts.findByEmail("owner@example.com")).thenReturn(Optional.of(owner));
+        when(groups.findById(7L)).thenReturn(Optional.of(banner));
+        when(groups.findByIdAndOwnerId(7L, "owner-id")).thenReturn(Optional.of(banner));
+        when(groups.findAllByOrderByCreatedAtDesc()).thenReturn(List.of(banner));
+        when(posts.findAllByGroupIdOrderByCreatedAtDesc(7L)).thenReturn(List.of(image));
+        when(posts.save(any(ConnectionGroupPostEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ConnectionGroupService service = new ConnectionGroupService(groups, posts, accounts, connections);
+        Map<String, Object> feed = service.getGroupPosts("viewer@example.com", 7L);
+        Map<String, Object> bannerDto = service.getBannerGroups("viewer@example.com").get(0);
+
+        assertEquals(false, feed.get("canViewAll"));
+        assertNull(feed.get("preview"));
+        assertEquals(List.of(), bannerDto.get("followerUserIds"));
+        assertThrows(
+                BadRequestException.class,
+                () -> service.createGroupPost(
+                        "owner@example.com", 7L, "caption", "/uploads/banner.jpg", "image/jpeg"));
+        Map<String, Object> createdPost = service.createGroupPost(
+                "owner@example.com", 7L, "", "/uploads/banner.mp4", "video/mp4");
+        assertEquals("/uploads/banner.mp4", createdPost.get("mediaUrl"));
+        assertEquals("", createdPost.get("content"));
+        verify(posts).save(any(ConnectionGroupPostEntity.class));
     }
 
     @Test

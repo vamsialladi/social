@@ -73,8 +73,35 @@ public class ConnectionGroupService {
     public List<Map<String, Object>> getGroups(String ownerIdentifier) {
         Set<String> viewerIdentities = resolveViewerIdentities(ownerIdentifier);
         return groupRepository.findAllByOrderByCreatedAtDesc().stream()
+                .filter(group -> !isBannerGroup(group))
                 .map(group -> toDto(group, viewerIdentities))
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> getBannerGroups(String ownerIdentifier) {
+        Set<String> viewerIdentities = resolveViewerIdentities(ownerIdentifier);
+        return groupRepository.findAllByOrderByCreatedAtDesc().stream()
+                .filter(this::isBannerGroup)
+                .map(group -> toDto(group, viewerIdentities))
+                .toList();
+    }
+
+    @Transactional
+    public Map<String, Object> createBannerGroup(String ownerIdentifier) {
+        String ownerId = resolveOwnerId(ownerIdentifier);
+        List<ConnectionGroupEntity> ownedGroups = groupRepository.findAllByOwnerIdOrderByCreatedAtDesc(ownerId);
+        if (ownedGroups != null && ownedGroups.stream().anyMatch(this::isBannerGroup)) {
+            throw new BadRequestException("You already have a banner group.");
+        }
+
+        ConnectionGroupEntity group = new ConnectionGroupEntity();
+        group.setOwnerId(ownerId);
+        group.setName("Banner");
+        group.setGroupType("BANNER");
+        group.setMemberProfileIds(new ArrayList<>());
+        group.setFollowerUserIds(new ArrayList<>());
+        return toDto(groupRepository.save(group), ownerId);
     }
 
     @Transactional(readOnly = true)
@@ -234,6 +261,10 @@ public class ConnectionGroupService {
         }
 
         result.put("posts", List.of());
+        if (isBannerGroup(group)) {
+            result.put("preview", null);
+            return result;
+        }
         result.put("preview", posts.stream()
                 .filter(post -> post.getMediaUrl() != null
                         && post.getMediaType() != null
@@ -261,6 +292,9 @@ public class ConnectionGroupService {
         String cleanContent = content == null ? "" : content.trim();
         String cleanMediaUrl = mediaUrl == null ? "" : mediaUrl.trim();
         String cleanMediaType = mediaType == null ? "" : mediaType.trim().toLowerCase(Locale.ROOT);
+        if (isBannerGroup(group) && (!cleanContent.isEmpty() || cleanMediaUrl.isEmpty())) {
+            throw new BadRequestException("Banner updates must contain an image or video only.");
+        }
         if (cleanContent.isEmpty() && cleanMediaUrl.isEmpty()) {
             throw new BadRequestException("Add text or attach an image or video before posting.");
         }
@@ -484,6 +518,8 @@ public class ConnectionGroupService {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("id", group.getId());
         result.put("name", group.getName());
+        result.put("groupType", group.getGroupType());
+        result.put("isBanner", isBannerGroup(group));
         result.put("imageUrl", group.getImageUrl());
         result.put("memberProfileIds", group.getMemberProfileIds() != null ? new ArrayList<>(group.getMemberProfileIds()) : new ArrayList<>());
         result.put("ownerId", group.getOwnerId());
@@ -499,9 +535,16 @@ public class ConnectionGroupService {
         result.put("isOwner", isOwner);
         result.put("isFollowing", isFollowing);
         result.put("followerCount", group.getFollowerUserIds() != null ? group.getFollowerUserIds().size() : 0);
-        result.put("followerUserIds", group.getFollowerUserIds() != null ? new ArrayList<>(group.getFollowerUserIds()) : new ArrayList<>());
+        result.put("followerUserIds", group.getFollowerUserIds() != null
+                && (isOwner || !isBannerGroup(group))
+                        ? new ArrayList<>(group.getFollowerUserIds())
+                        : new ArrayList<>());
         result.put("createdAt", group.getCreatedAt());
         return result;
+    }
+
+    private boolean isBannerGroup(ConnectionGroupEntity group) {
+        return "BANNER".equalsIgnoreCase(group.getGroupType());
     }
 
     private List<String> identityValues(Map<String, Object> profile) {

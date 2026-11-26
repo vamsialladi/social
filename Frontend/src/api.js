@@ -334,11 +334,14 @@ export const api = {
   getProfileMutualConnections: (profileId) =>
     fetchJson(`/connections/profiles/${encodeURIComponent(profileId)}/mutual`),
   getConnectionGroups: () => fetchJson("/connections/groups"),
+  getConnectionBanners: () => fetchJson("/connections/groups/banners"),
   createConnectionGroup: (name, memberProfileIds, imageUrl = "") =>
     fetchJson("/connections/groups", {
       method: "POST",
       body: { name, memberProfileIds, imageUrl },
     }),
+  createConnectionBanner: () =>
+    fetchJson("/connections/groups/banners", { method: "POST" }),
   updateConnectionGroup: (id, name, memberProfileIds, imageUrl = "") =>
     fetchJson(`/connections/groups/${encodeURIComponent(id)}`, {
       method: "PUT",

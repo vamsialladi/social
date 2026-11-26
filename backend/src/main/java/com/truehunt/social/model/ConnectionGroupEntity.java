@@ -31,6 +31,9 @@ public class ConnectionGroupEntity {
     @Column(nullable = false, length = 80)
     private String name;
 
+    @Column(name = "group_type", length = 20)
+    private String groupType = "GROUP";
+
     @Lob
     @Column(name = "image_url", columnDefinition = "TEXT")
     private String imageUrl;
@@ -71,6 +74,14 @@ public class ConnectionGroupEntity {
 
     public void setName(String name) {
         this.name = name;
+    }
+
+    public String getGroupType() {
+        return groupType == null ? "GROUP" : groupType;
+    }
+
+    public void setGroupType(String groupType) {
+        this.groupType = groupType;
     }
 
     public String getImageUrl() {

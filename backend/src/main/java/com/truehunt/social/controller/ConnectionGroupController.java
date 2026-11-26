@@ -43,6 +43,24 @@ public class ConnectionGroupController {
                 connectionGroupService.getGroups(resolveOwnerIdentifier(userEmail, userId, authentication))));
     }
 
+    @GetMapping("/banners")
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getBannerGroups(
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId,
+            Authentication authentication) {
+        return ResponseEntity.ok(ApiResponse.success(
+                connectionGroupService.getBannerGroups(resolveOwnerIdentifier(userEmail, userId, authentication))));
+    }
+
+    @PostMapping("/banners")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> createBannerGroup(
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId,
+            Authentication authentication) {
+        return ResponseEntity.ok(ApiResponse.success(connectionGroupService.createBannerGroup(
+                resolveOwnerIdentifier(userEmail, userId, authentication))));
+    }
+
     @PostMapping
     public ResponseEntity<ApiResponse<Map<String, Object>>> createGroup(
             @RequestBody CreateConnectionGroupRequest request,
