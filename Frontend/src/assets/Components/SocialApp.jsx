@@ -1554,7 +1554,6 @@ export default function SocialApp() {
   const ownProfilePath = ownProfileId
     ? `/social/${encodeURIComponent(ownProfileId)}/profile`
     : '/social/profile'
-  const previousOwnProfileIdRef = useRef(ownProfileId)
 
   const handleThemeChange = useCallback((nextTheme) => {
     setTheme(nextTheme)
@@ -1847,22 +1846,10 @@ export default function SocialApp() {
   }, [location.pathname, location.search, location.state, navigate])
 
   useEffect(() => {
-    const previousOwnProfileId = previousOwnProfileIdRef.current
-    previousOwnProfileIdRef.current = ownProfileId
-
     if (activeNavigation !== 'profile' || viewingCandidateProfile || !ownProfileId) return
 
-    const ownProfilePaths = [
-      '/social/profile',
-      previousOwnProfileId
-        ? `/social/${encodeURIComponent(previousOwnProfileId)}/profile`
-        : '',
-      ownProfilePath,
-    ]
-    const isOwnProfilePath = ownProfilePaths.some((path) => (
-      path && path.toLowerCase() === location.pathname.toLowerCase()
-    ))
-    if (isOwnProfilePath && location.pathname !== ownProfilePath) {
+    const isProfilePath = /^\/social\/(?:[^/]+\/)?profile\/?$/i.test(location.pathname)
+    if (isProfilePath && location.pathname !== ownProfilePath) {
       navigate(`${ownProfilePath}${location.search}`, { replace: true })
     }
   }, [
