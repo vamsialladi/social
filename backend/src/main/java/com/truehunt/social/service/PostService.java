@@ -1250,6 +1250,8 @@ public class PostService {
                     ? application.getAppliedAt().toString()
                     : "");
             applicationDto.put("shortlisted", application.isShortlisted());
+            applicationDto.put("shortlistDecisionMade",
+                    Boolean.TRUE.equals(application.getShortlistDecisionMade()) || application.isShortlisted());
             applications.add(applicationDto);
         }
         return applications;
@@ -1267,14 +1269,56 @@ public class PostService {
             throw new ResourceNotFoundException("Opportunity application", "id", applicationId);
         }
         OpportunityApplicationEntity application = opportunityApplicationRepository
-                .findByIdAndPostId(numericApplicationId, post.getId())
+                .findByIdAndPostIdForUpdate(numericApplicationId, post.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Opportunity application", "id", applicationId));
-        application.setShortlisted(shortlisted);
-        opportunityApplicationRepository.save(application);
+        boolean decisionMade = Boolean.TRUE.equals(application.getShortlistDecisionMade())
+                || application.isShortlisted();
+        if (decisionMade && application.isShortlisted() != shortlisted) {
+            throw new BadRequestException("The shortlist status has already been selected and cannot be changed.");
+        }
+
+        if (!decisionMade) {
+            application.setShortlisted(shortlisted);
+            application.setShortlistDecisionMade(true);
+            opportunityApplicationRepository.save(application);
+        }
+
+        if (!decisionMade
+                && notificationRepository != null
+                && application.getApplicantIdentity() != null
+                && !application.getApplicantIdentity().isBlank()) {
+            Map<String, Object> opportunityDetails = Optional.ofNullable(post.getOpportunityDetails())
+                    .orElseGet(Collections::emptyMap);
+            String opportunityTitle = firstNonBlank(
+                    Map.of(
+                            "title", post.getTitle() != null ? post.getTitle() : "",
+                            "projectName", opportunityDetails.get("projectName") != null
+                                    ? String.valueOf(opportunityDetails.get("projectName"))
+                                    : "",
+                            "projectCampaignName", opportunityDetails.get("projectCampaignName") != null
+                                    ? String.valueOf(opportunityDetails.get("projectCampaignName"))
+                                    : ""
+                    ),
+                    "title",
+                    "projectName",
+                    "projectCampaignName"
+            );
+            if (opportunityTitle.isBlank()) opportunityTitle = "casting call";
+
+            notificationRepository.save(new NotificationEntity(
+                    application.getApplicantIdentity(),
+                    shortlisted ? "Application Shortlisted" : "Application Not Shortlisted",
+                    shortlisted
+                            ? "Your application for \"" + opportunityTitle + "\" has been shortlisted."
+                            : "Your application for \"" + opportunityTitle + "\" was not shortlisted.",
+                    "opportunity_application",
+                    post.getAuthorId()));
+        }
 
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("id", String.valueOf(application.getId()));
         response.put("shortlisted", application.isShortlisted());
+        response.put("shortlistDecisionMade", true);
         return response;
     }
 

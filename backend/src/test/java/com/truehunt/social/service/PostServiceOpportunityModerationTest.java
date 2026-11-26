@@ -158,6 +158,34 @@ class PostServiceOpportunityModerationTest {
     }
 
     @Test
+    void acceptsApplicationsFromMultipleApplicantsForTheSameOpportunity() {
+        PostEntity opportunity = new PostEntity();
+        opportunity.setId(42L);
+        opportunity.setType("opportunity");
+        opportunity.setApplicationsCount(0);
+        when(postRepository.findById(42L)).thenReturn(Optional.of(opportunity));
+        when(opportunityApplicationRepository.existsByPostIdAndApplicantIdentity(42L, "first@example.com"))
+                .thenReturn(false);
+        when(opportunityApplicationRepository.existsByPostIdAndApplicantIdentity(42L, "second@example.com"))
+                .thenReturn(false);
+        when(opportunityApplicationRepository.save(any(OpportunityApplicationEntity.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        postService.applyToOpportunity("42", "first@example.com");
+        postService.applyToOpportunity("42", "second@example.com");
+
+        var applicationCaptor = forClass(OpportunityApplicationEntity.class);
+        verify(opportunityApplicationRepository, times(2)).save(applicationCaptor.capture());
+        assertEquals(
+                List.of("first@example.com", "second@example.com"),
+                applicationCaptor.getAllValues().stream()
+                        .map(OpportunityApplicationEntity::getApplicantIdentity)
+                        .toList()
+        );
+        assertEquals(2, opportunity.getApplicationsCount());
+    }
+
+    @Test
     void notifiesApplicantAndCastingPostOwnerWhenApplicationIsSubmitted() {
         PostEntity opportunity = new PostEntity();
         opportunity.setId(42L);
@@ -242,6 +270,7 @@ class PostServiceOpportunityModerationTest {
                 ((Map<?, ?>) applications.get(0).get("applicationDetails")).get("currentLocation")
         );
         assertEquals(false, applications.get(0).get("shortlisted"));
+        assertEquals(false, applications.get(0).get("shortlistDecisionMade"));
     }
 
     @Test
@@ -259,16 +288,17 @@ class PostServiceOpportunityModerationTest {
     }
 
     @Test
-    void ownerCanChangeShortlistStatusForApplicationOnTheirPost() {
+    void ownerCanSelectShortlistStatusForApplicationOnTheirPost() {
         PostEntity opportunity = new PostEntity();
         opportunity.setId(42L);
         opportunity.setAuthorId("owner@example.com");
+        opportunity.setTitle("Summer Campaign");
         opportunity.setType("opportunity");
         OpportunityApplicationEntity application =
                 new OpportunityApplicationEntity(42L, "applicant@example.com");
         application.setId(9L);
         when(postRepository.findById(42L)).thenReturn(Optional.of(opportunity));
-        when(opportunityApplicationRepository.findByIdAndPostId(9L, 42L))
+        when(opportunityApplicationRepository.findByIdAndPostIdForUpdate(9L, 42L))
                 .thenReturn(Optional.of(application));
         when(opportunityApplicationRepository.save(any(OpportunityApplicationEntity.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -282,6 +312,75 @@ class PostServiceOpportunityModerationTest {
 
         assertEquals(true, response.get("shortlisted"));
         verify(opportunityApplicationRepository).save(application);
+        var notificationCaptor = forClass(NotificationEntity.class);
+        verify(notificationRepository).save(notificationCaptor.capture());
+        NotificationEntity notification = notificationCaptor.getValue();
+        assertEquals("applicant@example.com", notification.getRecipientId());
+        assertEquals("Application Shortlisted", notification.getTitle());
+        assertEquals(
+                "Your application for \"Summer Campaign\" has been shortlisted.",
+                notification.getMessage()
+        );
+    }
+
+    @Test
+    void notifiesApplicantOnlyOnceWhenOwnerSelectsNotShortlisted() {
+        PostEntity opportunity = new PostEntity();
+        opportunity.setId(42L);
+        opportunity.setAuthorId("owner@example.com");
+        opportunity.setTitle("Summer Campaign");
+        opportunity.setType("opportunity");
+        OpportunityApplicationEntity application =
+                new OpportunityApplicationEntity(42L, "applicant@example.com");
+        application.setId(9L);
+        when(postRepository.findById(42L)).thenReturn(Optional.of(opportunity));
+        when(opportunityApplicationRepository.findByIdAndPostIdForUpdate(9L, 42L))
+                .thenReturn(Optional.of(application));
+        when(opportunityApplicationRepository.save(any(OpportunityApplicationEntity.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        postService.updateOpportunityApplicationShortlist("42", "9", false, "owner@example.com");
+        postService.updateOpportunityApplicationShortlist("42", "9", false, "owner@example.com");
+
+        var notificationCaptor = forClass(NotificationEntity.class);
+        verify(notificationRepository, times(1)).save(notificationCaptor.capture());
+        verify(opportunityApplicationRepository, times(1)).save(application);
+        NotificationEntity notification = notificationCaptor.getValue();
+        assertEquals("applicant@example.com", notification.getRecipientId());
+        assertEquals("Application Not Shortlisted", notification.getTitle());
+        assertEquals(
+                "Your application for \"Summer Campaign\" was not shortlisted.",
+                notification.getMessage()
+        );
+    }
+
+    @Test
+    void rejectsChangingShortlistStatusAfterOwnerHasSelectedIt() {
+        PostEntity opportunity = new PostEntity();
+        opportunity.setId(42L);
+        opportunity.setAuthorId("owner@example.com");
+        opportunity.setType("opportunity");
+        OpportunityApplicationEntity application =
+                new OpportunityApplicationEntity(42L, "applicant@example.com");
+        application.setId(9L);
+        application.setShortlisted(false);
+        application.setShortlistDecisionMade(true);
+        when(postRepository.findById(42L)).thenReturn(Optional.of(opportunity));
+        when(opportunityApplicationRepository.findByIdAndPostIdForUpdate(9L, 42L))
+                .thenReturn(Optional.of(application));
+
+        assertThrows(
+                BadRequestException.class,
+                () -> postService.updateOpportunityApplicationShortlist(
+                        "42",
+                        "9",
+                        true,
+                        "owner@example.com"
+                )
+        );
+
+        verify(opportunityApplicationRepository, never()).save(any(OpportunityApplicationEntity.class));
+        verify(notificationRepository, never()).save(any(NotificationEntity.class));
     }
 
     @Test

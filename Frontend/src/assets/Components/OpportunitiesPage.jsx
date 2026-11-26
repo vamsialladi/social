@@ -62,7 +62,7 @@ function getTotalOpenings(genders, openingsByGender) {
 
 const initialForm = {
   projectName: '',
-  projectType: 'Feature Film',
+  projectType: '',
   craft: 'Acting',
   openings: '1',
   openingsByGender: { Any: '1' },
@@ -242,6 +242,11 @@ export default function OpportunitiesPage({ onClose, onPublish, initialData, isE
   }
 
   function validateStep() {
+    if (step === 1 && !form.projectType) {
+      setError('Select a project category to continue.')
+      return false
+    }
+
     if (step === 1 && (!form.genderPreferences.length || form.genderPreferences.some((gender) => (
       !/^\d+$/.test(String(form.openingsByGender[gender] || ''))
       || Number(form.openingsByGender[gender]) < 1
@@ -382,6 +387,7 @@ export default function OpportunitiesPage({ onClose, onPublish, initialData, isE
                 <div className="opportunity-form-grid">
                   <Field label="Project Type">
                     <select className="opportunity-input" value={form.projectType} onChange={(event) => updateField('projectType', event.target.value)}>
+                      <option value="">Select category</option>
                       {projectTypes.map((type) => <option key={type}>{type}</option>)}
                     </select>
                   </Field>

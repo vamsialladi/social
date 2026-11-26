@@ -683,11 +683,15 @@ public class ProfileService {
                     return userAccountRepository.save(fallback);
                 });
         String oldUserId = currentAccount.getPublicUserId();
-        String newUserId = req.getUserId() == null ? oldUserId : req.getUserId().trim();
-        if (newUserId == null || !newUserId.matches("(?i)[A-Z0-9_-]{3,14}")) {
-            throw new BadRequestException("User ID must be 3 to 14 letters, numbers, underscores, or hyphens.");
+        String requestedUserId = req.getUserId();
+        String newUserId = requestedUserId == null || requestedUserId.isBlank()
+                ? oldUserId
+                : requestedUserId.trim();
+        boolean userIdChanged = !Objects.equals(newUserId, oldUserId);
+        if (newUserId == null || (userIdChanged && !newUserId.matches("(?i)[A-Z0-9_-]{3,11}"))) {
+            throw new BadRequestException("User ID must be 3 to 11 letters, numbers, underscores, or hyphens.");
         }
-        if (!Objects.equals(newUserId, oldUserId)) {
+        if (userIdChanged) {
             boolean usedByAnotherAccount = userAccountRepository.findByPublicUserId(newUserId)
                     .filter(account -> !Objects.equals(account.getId(), currentAccount.getId()))
                     .isPresent();

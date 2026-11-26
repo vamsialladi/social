@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import './Article.css'
 import api from '../../api'
 import MediaSafetyStatus from '../../components/common/MediaSafetyStatus.jsx'
-import { useMediaSafety } from '../../hooks/useMediaSafety.js'
+import { getMediaKind, useMediaSafety } from '../../hooks/useMediaSafety.js'
 
 function Article({ hidden, onBack, onPublish }) {
   const [title, setTitle] = useState('')
@@ -12,7 +12,7 @@ function Article({ hidden, onBack, onPublish }) {
   const [publishError, setPublishError] = useState('')
   const [isPublishing, setIsPublishing] = useState(false)
   const mediaSafety = useMediaSafety(media?.file)
-  const isMediaBlocked = Boolean(media?.file && mediaSafety.isBlocked)
+  const isMediaBlocked = Boolean(media?.file && media.kind !== 'audio' && mediaSafety.isBlocked)
   const fileInputRef = useRef(null)
   const mediaKindRef = useRef('')
   const mediaRef = useRef(null)
@@ -26,8 +26,8 @@ function Article({ hidden, onBack, onPublish }) {
   }, [])
 
   function chooseMedia(kind) {
-    if (kind !== 'image') {
-      setPublishError('Only image attachments can currently be moderated and published.')
+    if (!['image', 'video', 'audio'].includes(kind)) {
+      setPublishError('Choose an image, video, or audio attachment.')
       setIsAddMenuOpen(false)
       return
     }
@@ -36,7 +36,6 @@ function Article({ hidden, onBack, onPublish }) {
       image: 'image/*',
       video: 'video/*',
       audio: 'audio/*',
-      document: '.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.rtf',
     }
     mediaKindRef.current = kind
     fileInputRef.current.accept = acceptByKind[kind]
@@ -49,12 +48,22 @@ function Article({ hidden, onBack, onPublish }) {
     event.target.value = ''
     if (!file) return
 
+    const detectedKind = getMediaKind(file)
+      || (file.type.toLowerCase().startsWith('audio/')
+        || /\.(aac|flac|m4a|mp3|oga|ogg|wav|weba)$/i.test(file.name)
+        ? 'audio'
+        : '')
+    if (!detectedKind || detectedKind !== mediaKindRef.current) {
+      setPublishError('Choose a supported image, video, or audio file.')
+      return
+    }
+
     if (mediaRef.current) URL.revokeObjectURL(mediaRef.current.url)
     const nextMedia = {
       file,
       name: file.name,
       url: URL.createObjectURL(file),
-      kind: mediaKindRef.current,
+      kind: detectedKind,
     }
     mediaRef.current = nextMedia
     setMedia(nextMedia)
@@ -83,7 +92,7 @@ function Article({ hidden, onBack, onPublish }) {
     const articleContent = content.trim()
     if (!articleTitle || !articleContent || isPublishing) return
     if (isMediaBlocked) {
-      setPublishError(mediaSafety.error || 'Wait for image moderation to finish before publishing.')
+      setPublishError(mediaSafety.error || `Wait for ${media.kind} moderation to finish before publishing.`)
       return
     }
 
@@ -126,15 +135,12 @@ function Article({ hidden, onBack, onPublish }) {
               {media.kind === 'image' && <img src={media.url} alt="Article cover" />}
               {media.kind === 'video' && <video src={media.url} controls />}
               {media.kind === 'audio' && <audio src={media.url} controls />}
-              {media.kind === 'document' && (
-                <span className="article-document-preview">Document added: {media.name}</span>
-              )}
               <button className="article-remove-media" type="button" onClick={removeMedia}>
                 Remove
               </button>
             </>
           ) : (
-            <span className="article-cover-placeholder">Add a cover image, video, audio, or document</span>
+            <span className="article-cover-placeholder">Add a cover image, video, or audio</span>
           )}
           <div className="article-add-control">
             <button
@@ -148,7 +154,7 @@ function Article({ hidden, onBack, onPublish }) {
             </button>
             {isAddMenuOpen && (
               <div className="article-add-menu" role="menu" aria-label="Choose attachment type">
-                {['image', 'video', 'audio', 'document'].map((kind) => (
+                {['image', 'video', 'audio'].map((kind) => (
                   <button
                     key={kind}
                     type="button"
@@ -168,12 +174,17 @@ function Article({ hidden, onBack, onPublish }) {
             aria-label="Choose article attachment"
             onChange={handleMediaChange}
           />
-          {media?.file && (
+          {media?.file && media.kind !== 'audio' && (
             <MediaSafetyStatus
               safety={mediaSafety}
-              blockedMessage="This image has high adult content and cannot be published."
-              safeMessage="Safe content verified. Ready to publish."
+              blockedMessage={`This ${media.kind} has high adult content and cannot be published.`}
+              safeMessage="Content safety check passed. Ready to publish."
             />
+          )}
+          {media?.kind === 'audio' && (
+            <p className="media-safety" role="status">
+              Audio moderation is unavailable. This audio will be published without a safety scan.
+            </p>
           )}
         </section>
 

@@ -402,6 +402,28 @@
   font-size: 13px;
 }
 
+.home-casting-shortlist-field select.is-shortlisted {
+  border-color: #9bd3ae;
+  background: #eaf7ee;
+  color: #176b36;
+}
+
+.home-casting-shortlist-field select.is-not-shortlisted {
+  border-color: #e8b0ad;
+  background: #fff0ef;
+  color: #a52c26;
+}
+
+.home-casting-shortlist-field option[value="shortlisted"] {
+  background: #eaf7ee;
+  color: #176b36;
+}
+
+.home-casting-shortlist-field option[value="not-shortlisted"] {
+  background: #fff0ef;
+  color: #a52c26;
+}
+
 .home-casting-application-experience {
   margin: 0;
   color: var(--home-ink);

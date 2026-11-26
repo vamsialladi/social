@@ -101,7 +101,7 @@ function Notifications({
       userId: senderProfileId,
       profileId: senderProfileId,
       name: item.senderName || 'Connection',
-    })
+    }, { openEndorsementResponse: true })
   }
 
   return (

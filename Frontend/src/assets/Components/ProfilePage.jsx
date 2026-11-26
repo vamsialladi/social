@@ -687,6 +687,8 @@
     isOwner = true,
     isActive = true,
     accountUserId = '',
+    endorsementResponseProfileId = '',
+    onEndorsementResponseRequestHandled,
     profileDetails,
     setProfileDetails,
     profilePreview,
@@ -2504,6 +2506,18 @@
       setIsSubmitted(false)
 
       const form = event.currentTarget
+      const userIdInput = form.elements.namedItem('userId')
+      const submittedUserId = userIdInput?.value.trim() || displayedUserId
+      const userIdError = 'User ID must be 3 to 11 letters, numbers, underscores, or hyphens.'
+      if (submittedUserId !== displayedUserId
+        && !/^[A-Za-z0-9_-]{3,11}$/.test(submittedUserId)) {
+        userIdInput.setCustomValidity(userIdError)
+        userIdInput.reportValidity()
+        setValidationError(userIdError)
+        return
+      }
+      userIdInput.setCustomValidity('')
+
       const addressField = form.elements.namedItem('address')
       if (addressField.value.trim()) {
         addressField.setCustomValidity('')
@@ -2587,7 +2601,7 @@
 
         const nextDetails = {
           ...profileDetails,
-          userId: formData.get('userId')?.toString().trim() || '',
+          userId: formData.get('userId')?.toString().trim() || displayedUserId,
           name: formData.get('name') || '',
           phone: phoneDraft.trim(),
           professionalPhone: professionalPhoneDraft.trim(),
@@ -2717,7 +2731,7 @@
       }
     }
 
-    function openEndorsementResponseForm() {
+    const openEndorsementResponseForm = useCallback(() => {
       if (hasResponded) return
 
       setEndorsementError('')
@@ -2736,7 +2750,29 @@
       })
       setIsEndorsementFormOpen(true)
       setOpenProfileActionsFor(null)
-    }
+    }, [
+      hasResponded,
+      profileDetails.avatar,
+      profileDetails.name,
+      profileDetails.profileImageUrl,
+      targetProfileId,
+    ])
+
+    useEffect(() => {
+      if (!endorsementResponseProfileId || !isActive || isOwnerView) return
+      if (endorsementResponseProfileId.trim().toLowerCase() !== targetProfileId.trim().toLowerCase()) return
+
+      openEndorsementResponseForm()
+      onEndorsementResponseRequestHandled?.()
+    }, [
+      endorsementResponseProfileId,
+      hasResponded,
+      isActive,
+      isOwnerView,
+      openEndorsementResponseForm,
+      onEndorsementResponseRequestHandled,
+      targetProfileId,
+    ])
 
     function closeEndorsementForm() {
       setIsEndorsementFormOpen(false)
@@ -5087,9 +5123,8 @@
                     name="userId"
                     type="text"
                     defaultValue={displayedUserId}
-                    maxLength={14}
-                    pattern="[A-Za-z0-9_-]{3,14}"
-                    title="Use 3 to 14 letters, numbers, underscores, or hyphens."
+                    maxLength={Math.max(11, displayedUserId.length)}
+                    title="Use 3 to 11 letters, numbers, underscores, or hyphens."
                     required
                     autoComplete="off"
                     placeholder="Enter a unique TrueHunt ID"

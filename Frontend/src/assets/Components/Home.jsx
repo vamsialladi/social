@@ -217,7 +217,11 @@ function getPostPreviewMedia(post) {
   if (!url) return null
 
   const type = String(media.kind || media.type || media.contentType || post.mediaType || '').toLowerCase()
-  return { url, isVideo: type.includes('video') }
+  return {
+    url,
+    isVideo: type.includes('video'),
+    isAudio: type.includes('audio'),
+  }
 }
 
 function formatOpportunityFieldLabel(field) {
@@ -803,7 +807,11 @@ function Home({
     setDraftType(post.type || 'post')
     setDraftAudience(post.audience || 'public')
     setDraftMedia(media
-      ? { url: media.url, kind: media.isVideo ? 'video' : 'image', isExisting: true }
+      ? {
+        url: media.url,
+        kind: media.isVideo ? 'video' : media.isAudio ? 'audio' : 'image',
+        isExisting: true,
+      }
       : null)
     setIsAudienceMenuOpen(false)
     setIsComposerOpen(true)
@@ -1404,7 +1412,11 @@ function Home({
       )
       setOpportunityApplications((current) => current.map((entry) => (
         String(entry.id) === applicationId
-          ? { ...entry, shortlisted: Boolean(updated.shortlisted) }
+          ? {
+              ...entry,
+              shortlisted: Boolean(updated.shortlisted),
+              shortlistDecisionMade: true,
+            }
           : entry
       )))
     } catch (error) {
@@ -2463,11 +2475,12 @@ function Home({
     const media = getPostPreviewMedia(post)
     return (
       <>
-        {media && !media.isVideo && (
+        {media && !media.isVideo && !media.isAudio && (
           <img className="home-my-post-thumbnail" src={media.url} alt="" />
         )}
         {text && <span className="home-my-post-copy">{text}</span>}
         {!text && media?.isVideo && <span className="home-my-post-copy">Video post</span>}
+        {!text && media?.isAudio && <span className="home-my-post-copy">Audio post</span>}
         {!text && !media && <span className="home-my-post-copy">Content unavailable</span>}
       </>
     )
@@ -3071,11 +3084,13 @@ function Home({
                     <>
                       {post.title && <h2 className="home-post-title">{post.title}</h2>}
                       {post.content && <p className="home-post-content">{post.content}</p>}
-                      {post.media?.kind === 'video'
-                        ? <video className="home-post-media" src={post.media.url} controls />
-                        : post.media && (
-                          <img className="home-post-media" src={post.media.url} alt="Post attachment" />
-                        )}
+                      {postMedia?.isVideo
+                        ? <video className="home-post-media" src={postMedia.url} controls />
+                        : postMedia?.isAudio
+                          ? <audio className="home-post-media" src={postMedia.url} controls />
+                          : postMedia && (
+                            <img className="home-post-media" src={postMedia.url} alt="Post attachment" />
+                          )}
                     </>
                   )}
                   {post.type === 'article' && <span className="home-post-type">Article</span>}
@@ -3787,6 +3802,16 @@ function Home({
                   ['Skills', 'actingSkills'],
                   ['Portfolio', 'portfolioUrl'],
                 ].filter(([, field]) => details[field])
+                const hasShortlistDecision = application.shortlistDecisionMade === true
+                  || application.shortlisted === true
+                const shortlistStatus = application.shortlisted
+                  ? 'shortlisted'
+                  : 'not-shortlisted'
+                const shortlistStatusClass = !hasShortlistDecision
+                  ? ''
+                  : application.shortlisted
+                    ? 'is-shortlisted'
+                    : 'is-not-shortlisted'
 
                 return (
                   <article className="home-casting-application-card" key={application.id}>
@@ -3814,15 +3839,18 @@ function Home({
                       <label className="home-casting-shortlist-field">
                         <span className="home-sr-only">Shortlist status for {applicantName}</span>
                         <select
-                          value={application.shortlisted ? 'shortlisted' : 'not-shortlisted'}
+                          className={shortlistStatusClass}
+                          value={hasShortlistDecision ? shortlistStatus : ''}
                           onChange={(event) => {
+                            if (!event.target.value) return
                             void updateApplicationShortlist(
                               application,
                               event.target.value === 'shortlisted',
                             )
                           }}
-                          disabled={updatingApplicationIds.includes(String(application.id))}
+                          disabled={updatingApplicationIds.includes(String(application.id)) || hasShortlistDecision}
                         >
+                          <option value="" disabled>Select category</option>
                           <option value="not-shortlisted">Not shortlisted</option>
                           <option value="shortlisted">Shortlisted</option>
                         </select>

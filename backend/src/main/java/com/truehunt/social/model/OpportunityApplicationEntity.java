@@ -36,6 +36,9 @@ public class OpportunityApplicationEntity {
     @Column(name = "shortlisted", nullable = false)
     private boolean shortlisted;
 
+    @Column(name = "shortlist_decision_made")
+    private Boolean shortlistDecisionMade = false;
+
     private LocalDateTime appliedAt = LocalDateTime.now();
 
     public OpportunityApplicationEntity() {}
@@ -65,6 +68,11 @@ public class OpportunityApplicationEntity {
 
     public boolean isShortlisted() { return shortlisted; }
     public void setShortlisted(boolean shortlisted) { this.shortlisted = shortlisted; }
+
+    public Boolean getShortlistDecisionMade() { return shortlistDecisionMade; }
+    public void setShortlistDecisionMade(Boolean shortlistDecisionMade) {
+        this.shortlistDecisionMade = shortlistDecisionMade;
+    }
 
     public LocalDateTime getAppliedAt() { return appliedAt; }
     public void setAppliedAt(LocalDateTime appliedAt) { this.appliedAt = appliedAt; }

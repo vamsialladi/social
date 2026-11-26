@@ -111,6 +111,59 @@ class ProfileServiceUpdateByPublicIdTest {
     }
 
     @Test
+    void acceptsThreeCharacterUserId() {
+        ProfileUpdateRequest request = new ProfileUpdateRequest();
+        request.setUserId("A_1");
+        request.setEmail("alex@example.com");
+
+        profileService.updateMyProfile(request, PUBLIC_ID);
+
+        assertEquals("A_1", account.getPublicUserId());
+        assertEquals("A_1", profile.getUserId());
+    }
+
+    @Test
+    void rejectsUserIdsLongerThanElevenCharacters() {
+        ProfileUpdateRequest request = new ProfileUpdateRequest();
+        request.setUserId("thscAL123456");
+        request.setEmail("alex@example.com");
+
+        assertThrows(
+                BadRequestException.class,
+                () -> profileService.updateMyProfile(request, PUBLIC_ID)
+        );
+    }
+
+    @Test
+    void rejectsUserIdsWithUnsupportedCharacters() {
+        ProfileUpdateRequest request = new ProfileUpdateRequest();
+        request.setUserId("thsc@123");
+        request.setEmail("alex@example.com");
+
+        assertThrows(
+                BadRequestException.class,
+                () -> profileService.updateMyProfile(request, PUBLIC_ID)
+        );
+    }
+
+    @Test
+    void preservesExistingGeneratedUserIdWhenSavingOtherProfileDetails() {
+        String generatedUserId = "THSCAM123456";
+        profile.setUserId(generatedUserId);
+        account.setPublicUserId(generatedUserId);
+        ProfileUpdateRequest request = new ProfileUpdateRequest();
+        request.setUserId("");
+        request.setProfileImageUrl("data:image/jpeg;base64,profile-image");
+        request.setEmail("alex@example.com");
+
+        profileService.updateMyProfile(request, PUBLIC_ID);
+
+        assertEquals(generatedUserId, account.getPublicUserId());
+        assertEquals(generatedUserId, profile.getUserId());
+        assertEquals("data:image/jpeg;base64,profile-image", profile.getProfileImageUrl());
+    }
+
+    @Test
     void resolvesCurrentProfileFromAccountWhenOnlyPublicIdMatches() {
         when(profileRepository.findByUserId(PUBLIC_ID)).thenReturn(Optional.empty());
 

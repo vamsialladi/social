@@ -1436,6 +1436,11 @@ export default function SocialApp() {
       profileImageUrl: candidateProfile.profileImageUrl || candidateProfile.avatar || '',
     }
   })
+  const [endorsementResponseProfileId, setEndorsementResponseProfileId] = useState('')
+  const clearEndorsementResponseRequest = useCallback(
+    () => setEndorsementResponseProfileId(''),
+    [],
+  )
   const openConversationRef = useRef(null)
 
   async function handleLogout() {
@@ -1721,7 +1726,7 @@ export default function SocialApp() {
     return () => document.removeEventListener('keydown', closeOnEscape)
   }, [isBusinessExploreOpen])
 
-  function showCandidateProfile(candidateProfile) {
+  function showCandidateProfile(candidateProfile, options = {}) {
     const candidateId = String(
       candidateProfile.userId
         || candidateProfile.user_id
@@ -1764,6 +1769,9 @@ export default function SocialApp() {
       isPending: Boolean(candidateProfile.isPending || candidateProfile.isOutgoingPending),
     }
     setViewingCandidateProfile(selectedCandidate)
+    if (options.openEndorsementResponse) {
+      setEndorsementResponseProfileId(candidateId)
+    }
     setActiveNavigationState('profile')
     navigate(candidateId ? `/social/${encodeURIComponent(candidateId)}/profile` : '/social/profile', {
       state: { connectTalent: selectedCandidate },
@@ -2107,6 +2115,7 @@ export default function SocialApp() {
           profilePreview={profilePreview}
           isActive={activeNavigation === 'notifications'}
           onViewProfile={showMyProfile}
+          onViewConnection={(candidateProfile, options) => showCandidateProfile(candidateProfile, options)}
           onManageNotifications={() => setActiveNavigation('settings')}
         />
       </div>
@@ -2161,6 +2170,8 @@ export default function SocialApp() {
               isActive={activeNavigation === 'profile'}
               accountUserId={user?.publicUserId || user?.userId || ''}
               profileDetails={activeProfileDetails}
+              endorsementResponseProfileId={endorsementResponseProfileId}
+              onEndorsementResponseRequestHandled={clearEndorsementResponseRequest}
               setProfileDetails={(updater) => {
                 if (!isProfileOwner) {
                   setViewingCandidateProfile((currentProfile) => (
