@@ -10,15 +10,15 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Validates Indian mobile numbers (10 digits starting with 6-9, no alphabets/special characters/empty values).
+ * Validates international mobile numbers using Google's libphonenumber.
+ * Supports both class-level (e.g. RegisterRequest) and field-level targets.
  */
 @Documented
 @Constraint(validatedBy = PhoneNumberPolicy.JakartaValidator.class)
-@Target({ElementType.FIELD, ElementType.METHOD, ElementType.PARAMETER})
+@Target({ElementType.TYPE, ElementType.FIELD, ElementType.METHOD, ElementType.PARAMETER})
 @Retention(RetentionPolicy.RUNTIME)
 public @interface ValidPhoneNumber {
-    String message() default "Enter a valid 10-digit Indian mobile number starting with 6, 7, 8, or 9.";
+    String message() default "Please enter a valid mobile number for the selected country.";
     Class<?>[] groups() default {};
     Class<? extends Payload>[] payload() default {};
 }
-

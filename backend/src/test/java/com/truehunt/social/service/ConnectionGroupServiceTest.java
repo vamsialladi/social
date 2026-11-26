@@ -513,6 +513,26 @@ class ConnectionGroupServiceTest {
         verify(groups, never()).delete(any(ConnectionGroupEntity.class));
     }
 
+    @Test
+    void getGroupsAndCreateGroupSucceedEvenWhenUserNotYetInDatabase() {
+        ConnectionGroupRepository groups = mock(ConnectionGroupRepository.class);
+        UserAccountRepository accounts = mock(UserAccountRepository.class);
+        ConnectionService connections = mock(ConnectionService.class);
+        when(accounts.findByEmail("aabbb@gmail.com")).thenReturn(Optional.empty());
+        when(accounts.findByPublicUserId("aabbb@gmail.com")).thenReturn(Optional.empty());
+        when(groups.findAllByOrderByCreatedAtDesc()).thenReturn(List.of());
+        when(groups.save(any(ConnectionGroupEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ConnectionGroupService service = service(groups, accounts, connections);
+        List<Map<String, Object>> returnedGroups = service.getGroups("aabbb@gmail.com");
+        assertEquals(0, returnedGroups.size());
+
+        Map<String, Object> created = service.createGroup("aabbb@gmail.com", "xx", List.of(), null);
+        assertEquals("xx", created.get("name"));
+        assertEquals("aabbb@gmail.com", created.get("ownerId"));
+        assertEquals(true, created.get("isOwner"));
+    }
+
     private static UserAccountEntity account(Long id, String email, String publicUserId) {
         UserAccountEntity account = new UserAccountEntity();
         account.setId(id);

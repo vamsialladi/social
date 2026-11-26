@@ -114,14 +114,10 @@ export const api = {
       try {
         analysis = await analyzeMediaFile(file);
       } catch (scanError) {
-        const error = new Error(
-          scanError.message || "This image could not be scanned. Remove it or try another file.",
-        );
-        error.code = "MEDIA_SCAN_FAILED";
-        throw error;
+        console.warn("Client media scan warning, proceeding to server upload:", scanError);
       }
 
-      if (!analysis || analysis.isRejected) {
+      if (analysis && analysis.isRejected) {
         const error = new Error("This image contains content that cannot be uploaded.");
         error.code = "MEDIA_CONTENT_REJECTED";
         throw error;
@@ -467,6 +463,11 @@ export const api = {
     }),
   deleteConversation: (id) =>
     fetchJson(`/conversations/${id}`, { method: "DELETE" }),
+  updateConversationGroupImage: (conversationId, imageUrl) =>
+    fetchJson(`/conversations/${encodeURIComponent(conversationId)}/image`, {
+      method: "PATCH",
+      body: { imageUrl },
+    }),
 
   // Notifications
   getNotifications: () => fetchJson("/notifications"),

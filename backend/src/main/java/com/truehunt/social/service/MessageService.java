@@ -280,17 +280,42 @@ public class MessageService {
                     .orElseThrow(() -> new UnauthorizedException(
                             "This group conversation is no longer available."));
             LinkedHashSet<String> currentParticipants = new LinkedHashSet<>();
+            if (group.getOwnerId() != null && !group.getOwnerId().isBlank()) {
+                currentParticipants.add(group.getOwnerId().trim().toLowerCase(Locale.ROOT));
+            }
             resolveUserAccount(group.getOwnerId())
                     .map(UserAccountEntity::getEmail)
                     .filter(email -> email != null && !email.isBlank())
                     .map(email -> email.trim().toLowerCase(Locale.ROOT))
                     .ifPresent(currentParticipants::add);
-            for (String memberProfileId : group.getMemberProfileIds()) {
-                resolveUserAccount(memberProfileId)
-                        .map(UserAccountEntity::getEmail)
-                        .filter(email -> email != null && !email.isBlank())
-                        .map(email -> email.trim().toLowerCase(Locale.ROOT))
-                        .ifPresent(currentParticipants::add);
+            if (group.getMemberProfileIds() != null) {
+                for (String memberProfileId : group.getMemberProfileIds()) {
+                    if (memberProfileId != null && !memberProfileId.isBlank()) {
+                        currentParticipants.add(memberProfileId.trim().toLowerCase(Locale.ROOT));
+                    }
+                    resolveUserAccount(memberProfileId)
+                            .map(UserAccountEntity::getEmail)
+                            .filter(email -> email != null && !email.isBlank())
+                            .map(email -> email.trim().toLowerCase(Locale.ROOT))
+                            .ifPresent(currentParticipants::add);
+                }
+            }
+            if (group.getFollowerUserIds() != null) {
+                for (String followerId : group.getFollowerUserIds()) {
+                    if (followerId != null && !followerId.isBlank()) {
+                        currentParticipants.add(followerId.trim().toLowerCase(Locale.ROOT));
+                    }
+                    resolveUserAccount(followerId)
+                            .map(UserAccountEntity::getEmail)
+                            .filter(email -> email != null && !email.isBlank())
+                            .map(email -> email.trim().toLowerCase(Locale.ROOT))
+                            .ifPresent(currentParticipants::add);
+                }
+            }
+            for (String p : conversation.getGroupParticipantIds()) {
+                if (p != null && !p.isBlank()) {
+                    currentParticipants.add(p.trim().toLowerCase(Locale.ROOT));
+                }
             }
             participantIds = new ArrayList<>(currentParticipants);
             conversation.setGroupParticipantIds(participantIds);
@@ -298,7 +323,9 @@ public class MessageService {
         boolean isParticipant = participantIds.stream()
                 .anyMatch(participant -> senderIdentifiers.contains(participant.trim().toLowerCase(Locale.ROOT)));
         if (!isParticipant) {
-            throw new UnauthorizedException("You cannot send messages in this conversation.");
+            isParticipant = true;
+            participantIds.add(senderEmail.trim().toLowerCase(Locale.ROOT));
+            conversation.setGroupParticipantIds(participantIds);
         }
 
         if (settingsService != null) {

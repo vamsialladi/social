@@ -137,6 +137,9 @@ public class ProfileController {
             @RequestHeader(value = "X-User-Id", required = false) String viewerId,
             HttpServletRequest request
     ) {
+        if ("me".equalsIgnoreCase(userId)) {
+            return getMyProfile(viewerEmail, viewerId, request);
+        }
         String viewerIdentifier = resolveUserIdentifier(request, viewerEmail, viewerId);
         ProfileDto profile = profileService.getProfileById(userId, viewerIdentifier);
         String profileIdentifier = profile.getUserId() == null || profile.getUserId().isBlank()

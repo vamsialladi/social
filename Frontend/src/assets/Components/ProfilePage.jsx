@@ -2678,6 +2678,17 @@
         const sentCount = Array.isArray(createdNotifications)
           ? createdNotifications.length
           : selectedResponseRecipientIds.length
+
+        const now = Date.now()
+        const cooldownExpiry = now + 86_400 * 1000
+        setResponseRequestCooldowns((current) => ({
+          ...current,
+          ...Object.fromEntries(
+            selectedResponseRecipientIds.map((id) => [String(id).trim().toLowerCase(), cooldownExpiry])
+          ),
+        }))
+        setResponseRequestCooldownClock(now)
+
         setSelectedResponseRecipientIds([])
         setResponseRequestSuccess(`Request${sentCount === 1 ? '' : 's'} sent to ${sentCount} connection${sentCount === 1 ? '' : 's'}.`)
       } catch (error) {
@@ -2756,7 +2767,6 @@
         updatedDate: item.updatedDate || now,
         acceptedDate: String(item.acceptedDate || '').slice(0, 10),
       })
-      setIsEndorsementsFullPage(false)
       setIsEndorsementFormOpen(true)
       setOpenProfileActionsFor(null)
     }
@@ -2982,45 +2992,64 @@
     }
 
     async function deleteEndorsement(item) {
-      const endorsementId = String(item.endorsementId || item.id || '')
+      const endorsementId = String(item.endorsementId || item.id || '').trim()
       const endorserId = String(
         item.endorserProfileId || item.endorserId || item.authorId || '',
       ).trim().toLowerCase()
-      if (!endorsementId || !currentUserProfileIds.has(endorserId)) return
+      if (!currentUserProfileIds.has(endorserId)) return
 
-      if (remoteEndorsements.some(
-        (endorsement) => String(endorsement.endorsementId || endorsement.id || '') === endorsementId,
-      )) {
+      const matchesTarget = (entry) => {
+        if (!entry) return false
+        const entryId = String(entry.endorsementId || entry.id || '').trim()
+        if (endorsementId && entryId && entryId === endorsementId) return true
+        const entryEndorser = String(entry.endorserProfileId || entry.endorserId || entry.authorId || '').trim().toLowerCase()
+        return Boolean(endorserId && entryEndorser && entryEndorser === endorserId)
+      }
+
+      if (endorsementId && remoteEndorsements.some((e) => String(e.endorsementId || e.id || '').trim() === endorsementId)) {
         try {
           await api.deleteProfileEndorsement(targetProfileId, endorsementId)
-          setRemoteEndorsementsByProfile((current) => ({
-            ...current,
-            [targetProfileId]: (current[targetProfileId] ?? remoteEndorsements).filter(
-              (endorsement) => String(endorsement.endorsementId || endorsement.id || '') !== endorsementId,
-            ),
-          }))
-          setEndorsementError('')
         } catch (error) {
           console.error('Could not delete profile endorsement:', error)
           setEndorsementError(
             error instanceof Error ? error.message : 'Could not delete this endorsement. Please try again.',
           )
+          return
         }
-        return
       }
 
-      setLocalEndorsementsByProfile((current) => ({
+      setRemoteEndorsementsByProfile((current) => ({
         ...current,
-        [targetProfileId]: (current[targetProfileId] ?? localEndorsements).filter(
-          (endorsement) => String(endorsement.endorsementId || endorsement.id || '') !== endorsementId,
+        [targetProfileId]: (current[targetProfileId] ?? remoteEndorsements).filter(
+          (endorsement) => !matchesTarget(endorsement),
         ),
       }))
+
+      setLocalEndorsementsByProfile((current) => {
+        const nextList = (current[targetProfileId] ?? localEndorsements).filter(
+          (endorsement) => !matchesTarget(endorsement),
+        )
+        try {
+          localStorage.setItem(
+            getProfileEndorsementsStorageKey(targetProfileId),
+            JSON.stringify(nextList),
+          )
+        } catch (storageError) {
+          console.warn('Could not update localStorage after deleting endorsement:', storageError)
+        }
+        return {
+          ...current,
+          [targetProfileId]: nextList,
+        }
+      })
+
       setProfileDetails((current) => ({
         ...current,
         endorsements: (Array.isArray(current.endorsements) ? current.endorsements : []).filter(
-          (endorsement) => String(endorsement.endorsementId || endorsement.id || '') !== endorsementId,
+          (endorsement) => !matchesTarget(endorsement),
         ),
       }))
+      setEndorsementError('')
     }
 
     function renderEndorsementCards(items, showDetails = false) {
@@ -3313,6 +3342,194 @@
       )
     }
 
+    function renderResponseRequestDialog() {
+      if (!isResponseRequestOpen) return null
+      return (
+        <div
+          className="endorsement-form-backdrop"
+          onClick={() => {
+            if (!isSendingResponseRequests) setIsResponseRequestOpen(false)
+          }}
+        >
+          <section
+            className="endorsement-form-dialog response-request-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="response-request-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <header className="endorsement-form-header">
+              <div>
+                <span className="eyebrow">YOUR CONNECTIONS</span>
+                <h2 id="response-request-title">Send response</h2>
+              </div>
+              <button
+                type="button"
+                className="profile-modal-close"
+                onClick={() => setIsResponseRequestOpen(false)}
+                disabled={isSendingResponseRequests}
+                aria-label="Close response request dialog"
+              >
+                ×
+              </button>
+            </header>
+            <form className="endorsement-form-body" onSubmit={sendResponseRequests}>
+              <p className="endorsement-form-intro">
+                Choose connections to ask for an endorsement on your profile.
+              </p>
+              {responseRequestError && <p className="profile-empty-hint" role="alert">{responseRequestError}</p>}
+              {responseRequestSuccess && <p className="response-request-success" role="status">{responseRequestSuccess}</p>}
+              {isLoadingResponseConnections ? (
+                <p role="status">Loading your connections…</p>
+              ) : connectedProfiles?.length ? (
+                <div className="response-request-list">
+                  {connectedProfiles.map((connection, index) => {
+                    const recipientId = String(
+                      connection.userId
+                        || connection.publicUserId
+                        || connection.profileId
+                        || connection.id
+                        || connection.email
+                        || '',
+                    ).trim()
+                    if (!recipientId) return null
+                    const displayName = connection.name || connection.fullName || 'Cinema Professional'
+                    const image = connection.profileImageUrl || connection.avatar || ''
+                    const cooldownExpiresAt = responseRequestCooldowns[recipientId.toLowerCase()] || 0
+                    const cooldownRemainingSeconds = Math.max(
+                      0,
+                      Math.ceil((cooldownExpiresAt - responseRequestCooldownClock) / 1000),
+                    )
+                    const cooldownHours = Math.floor(cooldownRemainingSeconds / 3600)
+                    const cooldownMinutes = Math.ceil((cooldownRemainingSeconds % 3600) / 60)
+                    return (
+                      <label className="response-request-person" key={`${recipientId}-${index}`}>
+                        <input
+                          type="checkbox"
+                          checked={selectedResponseRecipientIds.includes(recipientId)}
+                          onChange={() => toggleResponseRecipient(recipientId)}
+                          disabled={isSendingResponseRequests || cooldownRemainingSeconds > 0}
+                        />
+                        {image ? (
+                          <img src={image} alt="" />
+                        ) : (
+                          <span className="response-request-avatar" aria-hidden="true">
+                            {displayName.charAt(0).toUpperCase()}
+                          </span>
+                        )}
+                        <span>
+                          <strong>{displayName}</strong>
+                          {cooldownRemainingSeconds > 0 ? (
+                            <small>
+                              You can send another request in {cooldownHours > 0 ? `${cooldownHours}h ` : ''}{cooldownMinutes}m
+                            </small>
+                          ) : connection.role ? (
+                            <small>{connection.role}</small>
+                          ) : null}
+                        </span>
+                      </label>
+                    )
+                  })}
+                </div>
+              ) : (
+                !responseRequestError && (
+                  <p className="profile-empty-hint">
+                    You do not have any connections to request an endorsement from yet.
+                  </p>
+                )
+              )}
+              <div className="endorsement-form-actions">
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => setIsResponseRequestOpen(false)}
+                  disabled={isSendingResponseRequests}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="contact-button"
+                  disabled={
+                    isLoadingResponseConnections
+                    || isSendingResponseRequests
+                    || selectedResponseRecipientIds.length === 0
+                  }
+                >
+                  {isSendingResponseRequests ? 'Sending response…' : 'Send response'}
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )
+    }
+
+    function renderEndorsementFormDialog() {
+      if (!isEndorsementFormOpen || !endorsementDraft) return null
+      return (
+        <div
+          className="endorsement-form-backdrop"
+          onClick={closeEndorsementForm}
+        >
+          <section
+            className="endorsement-form-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="endorsement-response-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <header className="endorsement-form-header">
+              <div>
+                <span className="eyebrow">PROFILE RESPONSE</span>
+                <h2 id="endorsement-response-title">
+                  {editingEndorsementId ? 'Edit your endorsement' : 'Respond with an endorsement'}
+                </h2>
+              </div>
+              <button
+                type="button"
+                className="profile-modal-close"
+                onClick={closeEndorsementForm}
+                aria-label="Close endorsement form"
+              >
+                ×
+              </button>
+            </header>
+            <form className="endorsement-form-body" onSubmit={submitEndorsement}>
+              <p className="endorsement-form-intro">
+                {editingEndorsementId
+                  ? 'Update your endorsement for this profile.'
+                  : 'Your endorsement will be saved on this profile and visible to profile visitors.'}
+              </p>
+              {endorsementError && <p className="profile-empty-hint" role="alert">{endorsementError}</p>}
+              {(editingEndorsementId ? endorsementFormGroups : endorsementResponseFormGroups).map((group) => (
+                <section className="endorsement-form-section" key={group.title}>
+                  <h3>{group.title}</h3>
+                  <div className="endorsement-form-grid">
+                    {group.fields.map(renderEndorsementField)}
+                  </div>
+                </section>
+              ))}
+              <div className="endorsement-form-actions">
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={closeEndorsementForm}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="contact-button" disabled={isSubmittingEndorsement}>
+                  {isSubmittingEndorsement
+                    ? 'Saving…'
+                    : editingEndorsementId ? 'Update Response' : 'Submit'}
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )
+    }
+
     if (isEndorsementsFullPage) {
       return (
         <main
@@ -3341,7 +3558,7 @@
                     type="button"
                     onClick={openResponseRequestDialog}
                   >
-                    Get Responses
+                    Send response
                   </button>
                 )}
                 {!isOwnerView && (
@@ -3349,10 +3566,7 @@
                     type="button"
                     className="contact-button"
                     disabled={hasResponded}
-                    onClick={() => {
-                      setIsEndorsementsFullPage(false)
-                      openEndorsementResponseForm()
-                    }}
+                    onClick={openEndorsementResponseForm}
                   >
                     {hasResponded ? 'Responded' : 'Respond'}
                   </button>
@@ -3368,6 +3582,8 @@
             </header>
             {renderEndorsementCards(endorsements, true)}
           </div>
+          {renderResponseRequestDialog()}
+          {renderEndorsementFormDialog()}
         </main>
       )
     }
@@ -3648,7 +3864,7 @@
                           type="button"
                           onClick={openResponseRequestDialog}
                         >
-                          Get Responses
+                          Send response
                         </button>
                       )}
                       {!isOwnerView && (
@@ -3863,7 +4079,7 @@
                                   }}
                                 />
                               )}
-                              {post.likesCount > 0 && (
+                              {post.likesCount > 0 && (isOwnerView || post.isAuthor || (post.showLikesCount !== false && !post.likeCountDisabled)) && (
                                 <div className="profile-post-reactions" aria-label={`${post.likesCount} likes`}>
                                   👍 {post.likesCount}
                                 </div>
@@ -5139,186 +5355,8 @@
             </section>
           </div>
         )}
-        {isResponseRequestOpen && (
-          <div
-            className="endorsement-form-backdrop"
-            onClick={() => {
-              if (!isSendingResponseRequests) setIsResponseRequestOpen(false)
-            }}
-          >
-            <section
-              className="endorsement-form-dialog response-request-dialog"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="response-request-title"
-              onClick={(event) => event.stopPropagation()}
-            >
-              <header className="endorsement-form-header">
-                <div>
-                  <span className="eyebrow">YOUR CONNECTIONS</span>
-                  <h2 id="response-request-title">Get responses</h2>
-                </div>
-                <button
-                  type="button"
-                  className="profile-modal-close"
-                  onClick={() => setIsResponseRequestOpen(false)}
-                  disabled={isSendingResponseRequests}
-                  aria-label="Close response request dialog"
-                >
-                  ×
-                </button>
-              </header>
-              <form className="endorsement-form-body" onSubmit={sendResponseRequests}>
-                <p className="endorsement-form-intro">
-                  Choose connections to ask for an endorsement on your profile.
-                </p>
-                {responseRequestError && <p className="profile-empty-hint" role="alert">{responseRequestError}</p>}
-                {responseRequestSuccess && <p className="response-request-success" role="status">{responseRequestSuccess}</p>}
-                {isLoadingResponseConnections ? (
-                  <p role="status">Loading your connections…</p>
-                ) : connectedProfiles?.length ? (
-                  <div className="response-request-list">
-                    {connectedProfiles.map((connection, index) => {
-                      const recipientId = String(
-                        connection.userId
-                          || connection.publicUserId
-                          || connection.profileId
-                          || connection.id
-                          || connection.email
-                          || '',
-                      ).trim()
-                      if (!recipientId) return null
-                      const displayName = connection.name || connection.fullName || 'Cinema Professional'
-                      const image = connection.profileImageUrl || connection.avatar || ''
-                      const cooldownExpiresAt = responseRequestCooldowns[recipientId.toLowerCase()] || 0
-                      const cooldownRemainingSeconds = Math.max(
-                        0,
-                        Math.ceil((cooldownExpiresAt - responseRequestCooldownClock) / 1000),
-                      )
-                      const cooldownHours = Math.floor(cooldownRemainingSeconds / 3600)
-                      const cooldownMinutes = Math.ceil((cooldownRemainingSeconds % 3600) / 60)
-                      return (
-                        <label className="response-request-person" key={`${recipientId}-${index}`}>
-                          <input
-                            type="checkbox"
-                            checked={selectedResponseRecipientIds.includes(recipientId)}
-                            onChange={() => toggleResponseRecipient(recipientId)}
-                            disabled={isSendingResponseRequests || cooldownRemainingSeconds > 0}
-                          />
-                          {image ? (
-                            <img src={image} alt="" />
-                          ) : (
-                            <span className="response-request-avatar" aria-hidden="true">
-                              {displayName.charAt(0).toUpperCase()}
-                            </span>
-                          )}
-                          <span>
-                            <strong>{displayName}</strong>
-                            {cooldownRemainingSeconds > 0 ? (
-                              <small>
-                                You can send another request in {cooldownHours > 0 ? `${cooldownHours}h ` : ''}{cooldownMinutes}m
-                              </small>
-                            ) : connection.role ? (
-                              <small>{connection.role}</small>
-                            ) : null}
-                          </span>
-                        </label>
-                      )
-                    })}
-                  </div>
-                ) : (
-                  !responseRequestError && (
-                    <p className="profile-empty-hint">
-                      You do not have any connections to request an endorsement from yet.
-                    </p>
-                  )
-                )}
-                <div className="endorsement-form-actions">
-                  <button
-                    type="button"
-                    className="secondary-button"
-                    onClick={() => setIsResponseRequestOpen(false)}
-                    disabled={isSendingResponseRequests}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="contact-button"
-                    disabled={
-                      isLoadingResponseConnections
-                      || isSendingResponseRequests
-                      || selectedResponseRecipientIds.length === 0
-                    }
-                  >
-                    {isSendingResponseRequests ? 'Sending…' : 'Send'}
-                  </button>
-                </div>
-              </form>
-            </section>
-          </div>
-        )}
-        {isEndorsementFormOpen && endorsementDraft && (
-          <div
-            className="endorsement-form-backdrop"
-            onClick={closeEndorsementForm}
-          >
-            <section
-              className="endorsement-form-dialog"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="endorsement-response-title"
-              onClick={(event) => event.stopPropagation()}
-            >
-              <header className="endorsement-form-header">
-                <div>
-                  <span className="eyebrow">PROFILE RESPONSE</span>
-                  <h2 id="endorsement-response-title">
-                    {editingEndorsementId ? 'Edit your endorsement' : 'Respond with an endorsement'}
-                  </h2>
-                </div>
-                <button
-                  type="button"
-                  className="profile-modal-close"
-                  onClick={closeEndorsementForm}
-                  aria-label="Close endorsement form"
-                >
-                  ×
-                </button>
-              </header>
-              <form className="endorsement-form-body" onSubmit={submitEndorsement}>
-                <p className="endorsement-form-intro">
-                  {editingEndorsementId
-                    ? 'Update your endorsement for this profile.'
-                    : 'Your endorsement will be saved on this profile and visible to profile visitors.'}
-                </p>
-                {endorsementError && <p className="profile-empty-hint" role="alert">{endorsementError}</p>}
-                {(editingEndorsementId ? endorsementFormGroups : endorsementResponseFormGroups).map((group) => (
-                  <section className="endorsement-form-section" key={group.title}>
-                    <h3>{group.title}</h3>
-                    <div className="endorsement-form-grid">
-                      {group.fields.map(renderEndorsementField)}
-                    </div>
-                  </section>
-                ))}
-                <div className="endorsement-form-actions">
-                  <button
-                    type="button"
-                    className="secondary-button"
-                    onClick={closeEndorsementForm}
-                  >
-                    Cancel
-                  </button>
-                  <button type="submit" className="contact-button" disabled={isSubmittingEndorsement}>
-                    {isSubmittingEndorsement
-                      ? 'Saving…'
-                      : editingEndorsementId ? 'Update Response' : 'Submit'}
-                  </button>
-                </div>
-              </form>
-            </section>
-          </div>
-        )}
+        {renderResponseRequestDialog()}
+        {renderEndorsementFormDialog()}
         {editingOpportunityPost && (
           <OpportunitiesPage
             onClose={() => setEditingOpportunityPost(null)}

@@ -297,7 +297,7 @@ public class ConnectionService {
                 continue;
             }
             String profileId = profile.getId();
-            if (settingsService != null && !settingsService.isConnectingWithOthersEnabled(profileId)) {
+            if (settingsService != null && (!settingsService.isConnectingWithOthersEnabled(profileId) || !settingsService.isPublicProfileEnabled(profileId))) {
                 continue;
             }
             Map<String, Object> dto = profile.toDto();
@@ -321,6 +321,10 @@ public class ConnectionService {
             dto.put("isIncomingPending", isIncomingPending);
             dto.put("connectionStatus", isConnected ? "CONNECTED"
                     : (isPending ? (isOutgoingPending ? "PENDING_OUTGOING" : "PENDING_INCOMING") : "NONE"));
+            boolean isActivity = settingsService == null || settingsService.isActivityStatusEnabled(profileId);
+            dto.put("activityStatus", isActivity);
+            dto.put("activeStatus", isActivity);
+            dto.put("status", isActivity ? "active" : "offline");
             profiles.put(profileId, dto);
         }
 
@@ -334,7 +338,7 @@ public class ConnectionService {
                 candidateId = owner;
             }
             if (candidateId != null) {
-                if (settingsService != null && !settingsService.isConnectingWithOthersEnabled(candidateId)) {
+                if (settingsService != null && (!settingsService.isConnectingWithOthersEnabled(candidateId) || !settingsService.isPublicProfileEnabled(candidateId))) {
                     continue;
                 }
                 final String finalCandidateId = candidateId;
@@ -373,7 +377,9 @@ public class ConnectionService {
                     || lowerOwnerIds.contains(candidateId.toLowerCase(Locale.ROOT))) {
                 continue;
             }
-            if (settingsService != null && !settingsService.isConnectingWithOthersEnabled(candidateId)) {
+            if (settingsService != null && (!settingsService.isConnectingWithOthersEnabled(candidateId)
+                    || !settingsService.isPublicProfileEnabled(candidateId)
+                    || (p.getEmail() != null && !settingsService.isPublicProfileEnabled(p.getEmail())))) {
                 continue;
             }
             final String finalCandidateId = candidateId;
@@ -412,7 +418,9 @@ public class ConnectionService {
                     || lowerOwnerIds.contains(candidateId.toLowerCase(Locale.ROOT))) {
                 continue;
             }
-            if (settingsService != null && !settingsService.isConnectingWithOthersEnabled(candidateId)) {
+            if (settingsService != null && (!settingsService.isConnectingWithOthersEnabled(candidateId)
+                    || !settingsService.isPublicProfileEnabled(candidateId)
+                    || (acc.getEmail() != null && !settingsService.isPublicProfileEnabled(acc.getEmail())))) {
                 continue;
             }
             final String finalCandidateId = candidateId;
@@ -1210,6 +1218,14 @@ public class ConnectionService {
         dto.put("userId", canonicalId);
         dto.putIfAbsent("publicUserId", canonicalId);
         dto.putIfAbsent("profileId", canonicalId);
+        boolean isPublicProfile = settingsService == null || settingsService.isPublicProfileEnabled(canonicalId);
+        dto.put("profileVisibility", isPublicProfile);
+        dto.put("publicProfile", isPublicProfile);
+        dto.put("isPublicProfile", isPublicProfile);
+        boolean isActivity = settingsService == null || settingsService.isActivityStatusEnabled(canonicalId);
+        dto.put("activityStatus", isActivity);
+        dto.put("activeStatus", isActivity);
+        dto.put("status", isActivity ? "active" : "offline");
         dto.put("isConnected", connected);
         dto.put("connected", connected);
         dto.put("isFollowing", following);
@@ -1418,6 +1434,7 @@ public class ConnectionService {
                 String authorId = post.getAuthorId() != null ? post.getAuthorId().trim().toLowerCase(Locale.ROOT) : "";
                 if (authorId.isEmpty() || !connectedIds.contains(authorId)) continue;
                 if ("private".equalsIgnoreCase(post.getAudience())) continue;
+                if (settingsService != null && !settingsService.isPublicProfileEnabled(authorId)) continue;
 
                 Map<String, Object> item = new LinkedHashMap<>();
                 item.put("id", "post-" + post.getId());

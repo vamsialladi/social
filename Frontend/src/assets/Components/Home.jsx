@@ -1206,15 +1206,17 @@ function Home({
   }
 
   async function handleLike(post) {
-    if (post?.likeCountDisabled) return
     const postId = String(post.id)
     if (pendingLikePostIds.includes(postId)) return
 
     const wasLiked = Boolean(post.liked)
+    const canShowCount = shouldShowPostLikeCount(post)
     const previousCount = Number(post.likesCount) || 0
     const optimisticLike = {
       liked: !wasLiked,
-      likesCount: Math.max(0, previousCount + (wasLiked ? -1 : 1)),
+      likesCount: canShowCount ? Math.max(0, previousCount + (wasLiked ? -1 : 1)) : 0,
+      showLikesCount: canShowCount,
+      likeCountDisabled: !canShowCount,
     }
 
     setLikeErrors((current) => {
@@ -1231,14 +1233,21 @@ function Home({
     setPendingLikePostIds((current) => [...current, postId])
     try {
       const updated = await api.likePost(postId)
-      setPosts((current) => current.map((item) => (
-        String(item.id) === postId ? { ...item, ...updated } : item
-      )))
+      setPosts((current) => current.map((item) => {
+        if (String(item.id) !== postId) return item
+        const merged = { ...item, ...updated }
+        if (!shouldShowPostLikeCount(merged)) {
+          merged.likesCount = 0
+          merged.showLikesCount = false
+          merged.likeCountDisabled = true
+        }
+        return merged
+      }))
     } catch (err) {
       console.warn('Like error:', err)
       setPosts((current) => current.map((item) => (
         String(item.id) === postId
-          ? { ...item, liked: wasLiked, likesCount: previousCount }
+          ? { ...item, liked: wasLiked, likesCount: canShowCount ? previousCount : 0 }
           : item
       )))
       setLikeErrors((current) => ({
@@ -1518,11 +1527,6 @@ function Home({
   }
 
   async function handleCopyPostLink(postId) {
-    const targetPost = posts.find((item) => String(item.id) === String(postId))
-    if (targetPost?.shareCountDisabled) {
-      setOpenPostMenuId('')
-      return
-    }
     const link = `${window.location.origin}/social/home?postId=${encodeURIComponent(String(postId))}`
     try {
       await navigator.clipboard.writeText(link)
@@ -1533,22 +1537,20 @@ function Home({
   }
 
   async function handleSharePost(post) {
-    if (post?.shareCountDisabled) return
     if (!post?.localOnly && /^\d+$/.test(String(post.id))) {
       try {
         const res = await api.sharePost(post.id)
-        if (res?.shareCountDisabled || res?.allowed === false) {
-          setPosts((current) => current.map((item) => (
-            String(item.id) === String(post.id)
-              ? { ...item, sharesCount: 0, shareCountDisabled: true }
-              : item
-          )))
-          return
-        }
-        if (res && typeof res.sharesCount === 'number') {
-          setPosts((current) => current.map((item) => (
-            String(item.id) === String(post.id) ? { ...item, sharesCount: res.sharesCount } : item
-          )))
+        if (res) {
+          setPosts((current) => current.map((item) => {
+            if (String(item.id) !== String(post.id)) return item
+            const merged = { ...item, ...res }
+            if (!shouldShowPostShareCount(merged)) {
+              merged.sharesCount = 0
+              merged.showSharesCount = false
+              merged.shareCountDisabled = true
+            }
+            return merged
+          }))
         }
       } catch (err) {
         console.warn('Could not record post share:', err)
@@ -1760,6 +1762,10 @@ function Home({
   }
 
   function isOwnPost(post) {
+    if (!post) return false
+    if (post.isAuthor === true) return true
+    if (post.isAuthor === false) return false
+
     const authorId = String(post.authorId || '').trim().toLowerCase()
     const ownIds = [currentUserId, profileDetails.userId, profileDetails.id, profileDetails.email, accountEmail]
       .filter(Boolean)
@@ -1768,7 +1774,25 @@ function Home({
 
     const authorName = String(post.authorName || '').trim().toLowerCase()
     const ownName = String(profileDetails.name || '').trim().toLowerCase()
-    return Boolean(authorName && ownName && authorName === ownName)
+    const genericNames = ['cinema professional', 'truehunt member', 'truehunt user', 'your name', 'member', 'talent scout', 'talent']
+    if (authorName && ownName && authorName === ownName && !genericNames.includes(authorName)) return true
+    return false
+  }
+
+  function shouldShowPostLikeCount(post) {
+    if (!post) return false
+    if (post.showLikesCount === false || post.likeCountDisabled) {
+      return Boolean(post.isAuthor === true || (isOwnPost(post) && post.isAuthor !== false))
+    }
+    return true
+  }
+
+  function shouldShowPostShareCount(post) {
+    if (!post) return false
+    if (post.showSharesCount === false || post.shareCountDisabled) {
+      return Boolean(post.isAuthor === true || (isOwnPost(post) && post.isAuthor !== false))
+    }
+    return true
   }
 
   function canDeletePostComment(comment, post) {
@@ -2810,10 +2834,10 @@ function Home({
                       <button
                         type="button"
                         onClick={() => handleLike(post)}
-                        disabled={pendingLikePostIds.includes(String(post.id)) || Boolean(post.likeCountDisabled)}
+                        disabled={pendingLikePostIds.includes(String(post.id))}
                         className="home-post-icon-action"
-                        aria-label={post.likeCountDisabled ? 'Like count disabled' : `${post.liked ? 'Unlike' : 'Like'} post`}
-                        title={post.likeCountDisabled ? 'Like counts are turned off' : (post.liked ? 'Unlike' : 'Like')}
+                        aria-label={`${post.liked ? 'Unlike' : 'Like'} post`}
+                        title={post.liked ? 'Unlike' : 'Like'}
                         style={{
                           background: post.liked ? '#e8f0fe' : 'transparent',
                           color: post.liked ? '#1a73e8' : 'inherit',
@@ -2832,16 +2856,17 @@ function Home({
                       >
                         <ThumbsUp size={18} fill={post.liked ? 'currentColor' : 'none'} aria-hidden="true" />
                       </button>
-                      <button
-                        type="button"
-                        className="home-post-like-count-button"
-                        onClick={() => setPostLikesDialog(post)}
-                        disabled={Boolean(post.likeCountDisabled)}
-                        aria-label={`View ${post.likesCount ?? 0} likes`}
-                        title="View people who liked this post"
-                      >
-                        <span className="home-post-action-count">{post.likesCount ?? 0}</span>
-                      </button>
+                      {shouldShowPostLikeCount(post) && (
+                        <button
+                          type="button"
+                          className="home-post-like-count-button"
+                          onClick={() => setPostLikesDialog(post)}
+                          aria-label={`View ${post.likesCount ?? 0} likes`}
+                          title="View people who liked this post"
+                        >
+                          <span className="home-post-action-count">{post.likesCount ?? 0}</span>
+                        </button>
+                      )}
                     </div>
                     {likeErrors[String(post.id)] && (
                       <span role="alert" style={{ alignSelf: 'center', color: '#b3261e', fontSize: '12px' }}>
@@ -2877,10 +2902,9 @@ function Home({
                     <button
                       type="button"
                       onClick={() => handleSharePost(post)}
-                      disabled={Boolean(post.shareCountDisabled)}
                       className="home-post-icon-action"
-                      aria-label={post.shareCountDisabled ? 'Sharing disabled' : `Share post (${post.sharesCount ?? 0} shares)`}
-                      title={post.shareCountDisabled ? 'Sharing is turned off' : 'Share'}
+                      aria-label={`Share post${shouldShowPostShareCount(post) ? ` (${post.sharesCount ?? 0} shares)` : ''}`}
+                      title="Share"
                       style={{
                         background: 'transparent',
                         border: 'none',
@@ -2888,8 +2912,8 @@ function Home({
                         minWidth: '36px',
                         height: '36px',
                         padding: '0 8px',
-                        cursor: post.shareCountDisabled ? 'not-allowed' : 'pointer',
-                        opacity: post.shareCountDisabled ? 0.45 : 1,
+                        cursor: 'pointer',
+                        opacity: 1,
                         display: 'inline-flex',
                         alignItems: 'center',
                         justifyContent: 'center',
@@ -2898,7 +2922,9 @@ function Home({
                       }}
                     >
                       <Share2 size={18} aria-hidden="true" />
-                      <span className="home-post-action-count">{post.sharesCount ?? 0}</span>
+                      {shouldShowPostShareCount(post) && (
+                        <span className="home-post-action-count">{post.sharesCount ?? 0}</span>
+                      )}
                     </button>
 
                     {post.type === 'opportunity' && (
@@ -3720,12 +3746,10 @@ function Home({
               <small>{isMenuPostSaved ? 'Remove this post from your saved items' : 'Save for later'}</small>
             </span>
           </button>
-          {!menuPost.shareCountDisabled && (
-            <button type="button" role="menuitem" onClick={() => handleCopyPostLink(menuPost.id)}>
-              <Link2 size={18} aria-hidden="true" />
-              <span><strong>Copy link to post</strong></span>
-            </button>
-          )}
+          <button type="button" role="menuitem" onClick={() => handleCopyPostLink(menuPost.id)}>
+            <Link2 size={18} aria-hidden="true" />
+            <span><strong>Copy link to post</strong></span>
+          </button>
           <button type="button" role="menuitem" onClick={() => handleHidePostsByAuthor(menuPost)}>
             <EyeOff size={18} aria-hidden="true" />
             <span><strong>Hide posts </strong></span>

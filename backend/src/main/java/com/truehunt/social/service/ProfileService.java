@@ -109,7 +109,9 @@ public class ProfileService {
             String checkIdentity = profile.getEmail() != null && !profile.getEmail().isBlank()
                     ? profile.getEmail()
                     : publicUserId;
-            if (settingsService != null && !settingsService.isPublicProfileEnabled(checkIdentity)) {
+            if (settingsService != null && (!settingsService.isPublicProfileEnabled(checkIdentity)
+                    || !settingsService.isPublicProfileEnabled(publicUserId)
+                    || (profile.getUserId() != null && !settingsService.isPublicProfileEnabled(profile.getUserId())))) {
                 continue;
             }
 
@@ -131,7 +133,8 @@ public class ProfileService {
             String checkIdentity = account.getEmail() != null && !account.getEmail().isBlank()
                     ? account.getEmail()
                     : publicUserId;
-            if (settingsService != null && !settingsService.isPublicProfileEnabled(checkIdentity)) {
+            if (settingsService != null && (!settingsService.isPublicProfileEnabled(checkIdentity)
+                    || !settingsService.isPublicProfileEnabled(publicUserId))) {
                 continue;
             }
 
@@ -222,6 +225,16 @@ public class ProfileService {
                         .findFirst()
                         .orElse("");
         directoryProfile.put("location", location);
+        boolean isPublicProfile = settingsService == null || (settingsService.isPublicProfileEnabled(publicUserId)
+                && (profile.getEmail() == null || settingsService.isPublicProfileEnabled(profile.getEmail())));
+        directoryProfile.put("profileVisibility", isPublicProfile);
+        directoryProfile.put("publicProfile", isPublicProfile);
+        directoryProfile.put("isPublicProfile", isPublicProfile);
+        boolean isActivityStatus = settingsService == null || (settingsService.isActivityStatusEnabled(publicUserId)
+                && (profile.getEmail() == null || settingsService.isActivityStatusEnabled(profile.getEmail())));
+        directoryProfile.put("activityStatus", isActivityStatus);
+        directoryProfile.put("activeStatus", isActivityStatus);
+        directoryProfile.put("status", isActivityStatus ? "active" : "offline");
         return directoryProfile;
     }
 
@@ -230,6 +243,15 @@ public class ProfileService {
         ProfileEntity entity = findCurrentProfile(userEmail);
         ProfileDto dto = mapEntityToDto(entity);
         dto.setIsOwner(true);
+        if (dto.getPosts() != null) {
+            for (Map<String, Object> postDto : dto.getPosts()) {
+                postDto.put("isAuthor", true);
+                postDto.put("showLikesCount", true);
+                postDto.put("showSharesCount", true);
+                postDto.put("likeCountDisabled", false);
+                postDto.put("shareCountDisabled", false);
+            }
+        }
         return dto;
     }
 
@@ -238,6 +260,9 @@ public class ProfileService {
     }
 
     public ProfileDto getProfileById(String id, String userEmail) {
+        if ("me".equalsIgnoreCase(id)) {
+            return getMyProfile(userEmail);
+        }
         if (isAdminAccount(findAccountByEmail(id).or(() -> findAccountByPublicUserId(id)))) {
             throw new ResourceNotFoundException("Profile", "id", id);
         }
@@ -464,6 +489,11 @@ public class ProfileService {
                         "This profile is private. Only connections and mutual connections can view this profile.");
             }
 
+            boolean isActivityStatus = settingsService == null || settingsService.isActivityStatusEnabled(ownerIdentity);
+            dto.setActivityStatus(isActivityStatus);
+            dto.setActiveStatus(isActivityStatus);
+            dto.setStatus(isActivityStatus ? "active" : "offline");
+
             dto.setPhone(null);
             dto.setEmail(null);
             dto.setProfessionalPhone(null);
@@ -503,7 +533,41 @@ public class ProfileService {
                             return true;
                         })
                         .collect(Collectors.toList());
+                String ownerEngagementKey = dto.getEmail() != null && !dto.getEmail().isBlank()
+                        ? dto.getEmail()
+                        : dto.getUserId();
+                boolean likeCountEnabled = settingsService == null
+                        || settingsService.isLikeCountEnabledForAuthor(ownerEngagementKey);
+                boolean shareCountEnabled = settingsService == null
+                        || settingsService.isShareCountEnabledForAuthor(ownerEngagementKey);
+                for (Map<String, Object> postDto : visiblePosts) {
+                    postDto.put("isAuthor", false);
+                    if (!likeCountEnabled) {
+                        postDto.put("likesCount", 0);
+                        postDto.put("showLikesCount", false);
+                        postDto.put("likeCountDisabled", true);
+                    } else {
+                        postDto.put("showLikesCount", true);
+                        postDto.put("likeCountDisabled", false);
+                    }
+                    if (!shareCountEnabled) {
+                        postDto.put("sharesCount", 0);
+                        postDto.put("showSharesCount", false);
+                        postDto.put("shareCountDisabled", true);
+                    } else {
+                        postDto.put("showSharesCount", true);
+                        postDto.put("shareCountDisabled", false);
+                    }
+                }
                 dto.setPosts(visiblePosts);
+            }
+        } else if (dto.getPosts() != null) {
+            for (Map<String, Object> postDto : dto.getPosts()) {
+                postDto.put("isAuthor", true);
+                postDto.put("showLikesCount", true);
+                postDto.put("showSharesCount", true);
+                postDto.put("likeCountDisabled", false);
+                postDto.put("shareCountDisabled", false);
             }
         }
 
@@ -1172,7 +1236,16 @@ public class ProfileService {
                 return profileRepository.save(profile);
             }
 
-            throw new ResourceNotFoundException("Profile", "user", clean);
+            ProfileEntity newProfile = new ProfileEntity();
+            newProfile.setUserId(clean);
+            if (clean.contains("@")) {
+                newProfile.setEmail(clean);
+                String prefix = clean.substring(0, clean.indexOf('@')).trim();
+                newProfile.setName(!prefix.isEmpty() ? prefix : "Cinema Professional");
+            } else {
+                newProfile.setName("Cinema Professional");
+            }
+            return profileRepository.save(newProfile);
         }
 
         // Fallback to 1000001 / pro@truehunt.in only if not found
@@ -1558,19 +1631,22 @@ public class ProfileService {
                         && profileIds.contains(post.getAuthorId().trim().toLowerCase(Locale.ROOT)))
                 .map(post -> {
                     Map<String, Object> postDto = post.toDto();
-                    if (!likeCountEnabled) {
-                        postDto.put("likesCount", 0);
-                        postDto.put("liked", false);
-                        postDto.put("likeCountDisabled", true);
-                    }
-                    if (!shareCountEnabled) {
-                        postDto.put("sharesCount", 0);
-                        postDto.put("shareCountDisabled", true);
-                    }
+                    postDto.put("likesCount", post.getLikesCount());
+                    postDto.put("sharesCount", post.getSharesCount());
+                    postDto.put("showLikesCount", likeCountEnabled);
+                    postDto.put("showSharesCount", shareCountEnabled);
+                    postDto.put("likeCountDisabled", !likeCountEnabled);
+                    postDto.put("shareCountDisabled", !shareCountEnabled);
                     return postDto;
                 })
                 .collect(Collectors.toList());
         dto.setPosts(profilePosts);
+
+        boolean isActivity = settingsService == null
+                || settingsService.isActivityStatusEnabled(ownerEngagementKey);
+        dto.setActiveStatus(isActivity);
+        dto.setActivityStatus(isActivity);
+        dto.setStatus(isActivity ? "active" : "offline");
 
         return dto;
     }

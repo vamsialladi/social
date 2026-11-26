@@ -1,6 +1,7 @@
 package com.truehunt.social.service;
 
 import com.truehunt.social.dto.ProfileDto;
+import com.truehunt.social.exception.ResourceNotFoundException;
 import com.truehunt.social.exception.UnauthorizedException;
 import com.truehunt.social.model.ContactAccessRequestEntity;
 import com.truehunt.social.repository.ContactAccessRequestRepository;
@@ -8,6 +9,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -154,6 +156,26 @@ class ContactAccessServiceTest {
                 "Riley Owner rejected your request to access their contact details.",
                 "contact-access"
         );
+    }
+
+    @Test
+    void getIncomingRequestsReturnsEmptyListWhenProfileNotFound() {
+        when(profileService.getMyProfile("unknown@example.com"))
+                .thenThrow(new ResourceNotFoundException("Profile", "user", "unknown@example.com"));
+
+        List<Map<String, Object>> incoming = contactAccessService.getIncomingRequests("unknown@example.com");
+
+        assertEquals(0, incoming.size());
+    }
+
+    @Test
+    void getOutgoingRequestsReturnsEmptyListWhenProfileNotFound() {
+        when(profileService.getMyProfile("unknown@example.com"))
+                .thenThrow(new ResourceNotFoundException("Profile", "user", "unknown@example.com"));
+
+        List<Map<String, Object>> outgoing = contactAccessService.getOutgoingRequests("unknown@example.com");
+
+        assertEquals(0, outgoing.size());
     }
 
     private static ProfileDto profile(String id, String name) {

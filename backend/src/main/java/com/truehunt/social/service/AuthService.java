@@ -149,7 +149,9 @@ public class AuthService {
 
         PasswordPolicy.requireValid(req.getPassword(), "password");
         PasswordPolicy.requireConfirmed(req.getPassword(), req.getConfirmPassword(), false);
-        String normalizedPhone = PhoneNumberPolicy.validateAndNormalize(req.getPhone());
+        String normalizedPhone = PhoneNumberPolicy.validateAndNormalize(req.getPhone(), req.getCountry(), req.getCountryCode());
+        String country = PhoneNumberPolicy.resolveCountry(req.getPhone(), req.getCountry(), req.getCountryCode());
+        String countryCode = PhoneNumberPolicy.resolveCountryCode(req.getPhone(), req.getCountry(), req.getCountryCode());
 
         if (userAccountRepository.existsByEmail(email) || userAccountRepository.existsByEmailIgnoreCase(email)) {
             throw duplicateEmailConflict();
@@ -161,7 +163,7 @@ public class AuthService {
             throw duplicateEmailConflict();
         });
 
-        if (normalizedPhone != null && userAccountRepository.existsByPhoneNumber(normalizedPhone)) {
+        if (normalizedPhone != null && (userAccountRepository.existsByPhoneNumber(normalizedPhone) || userAccountRepository.existsByPhone(normalizedPhone))) {
             throw duplicatePhoneConflict();
         }
 
@@ -176,6 +178,9 @@ public class AuthService {
         user.setPasswordHash(passwordEncoder.encode(req.getPassword()));
         user.setName(name);
         user.setPhone(normalizedPhone);
+        user.setPhoneNumber(normalizedPhone);
+        user.setCountry(country);
+        user.setCountryCode(countryCode);
         user.setRole(role);
         user.setPublicUserId(publicUserId);
         user.setPrimaryCraft(req.getPrimaryCraft());
@@ -271,6 +276,8 @@ public class AuthService {
         resp.setRole(user.getRole());
         resp.setName(user.getName());
         resp.setPhone(user.getPhone());
+        resp.setCountry(user.getCountry());
+        resp.setCountryCode(user.getCountryCode());
         resp.setPrimaryCraft(user.getPrimaryCraft());
         resp.setSubCraft(user.getSubCraft());
         resp.setUser(buildUserMap(user, publicId));
@@ -288,6 +295,8 @@ public class AuthService {
         data.put("role", u.getRole());
         data.put("phone", u.getPhone());
         data.put("phoneNumber", u.getPhone());
+        data.put("country", u.getCountry());
+        data.put("countryCode", u.getCountryCode());
         data.put("primaryCraft", u.getPrimaryCraft());
         data.put("craft", u.getPrimaryCraft());
         data.put("subCraft", u.getSubCraft());

@@ -57,6 +57,9 @@ public class ProfileDto {
     private Boolean isOutgoingPending = false;
     private Boolean isIncomingPending = false;
     private String connectionStatus = "NONE";
+    private Boolean activeStatus = true;
+    private Boolean activityStatus = true;
+    private String status = "active";
 
     private List<String> skills = new ArrayList<>();
     private List<String> talents = new ArrayList<>();
@@ -615,5 +618,29 @@ public class ProfileDto {
 
     public void setEndorsements(List<Map<String, Object>> endorsements) {
         this.endorsements = endorsements;
+    }
+
+    public Boolean getActiveStatus() {
+        return activeStatus;
+    }
+
+    public void setActiveStatus(Boolean activeStatus) {
+        this.activeStatus = activeStatus;
+    }
+
+    public Boolean getActivityStatus() {
+        return activityStatus;
+    }
+
+    public void setActivityStatus(Boolean activityStatus) {
+        this.activityStatus = activityStatus;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
     }
 }

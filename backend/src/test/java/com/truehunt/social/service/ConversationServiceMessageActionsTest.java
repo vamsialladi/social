@@ -301,6 +301,21 @@ class ConversationServiceMessageActionsTest {
         assertEquals(false, readDto.get("unread"));
     }
 
+    @Test
+    void groupConversationDtoIncludesGroupImageAndUpdatesProperly() {
+        ConversationEntity groupConversation = new ConversationEntity();
+        groupConversation.setId(99L);
+        groupConversation.setConnectionGroupId(42L);
+        groupConversation.setName("Production Crew");
+        groupConversation.setGroupImageUrl("/uploads/group-avatar.png");
+        groupConversation.setGroupParticipantIds(List.of(OWNER_EMAIL, OTHER_EMAIL));
+
+        Map<String, Object> dto = groupConversation.toDto(OTHER_EMAIL, java.util.Set.of(OTHER_EMAIL));
+        assertEquals("/uploads/group-avatar.png", dto.get("groupImageUrl"));
+        assertEquals("/uploads/group-avatar.png", dto.get("avatar"));
+        assertEquals("/uploads/group-avatar.png", dto.get("profileImageUrl"));
+    }
+
     private static UserAccountEntity account(String email, String publicUserId) {
         UserAccountEntity account = new UserAccountEntity();
         account.setEmail(email);

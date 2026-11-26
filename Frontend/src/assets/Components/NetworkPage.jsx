@@ -261,6 +261,9 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
     && !isProfilePending(profile)
     && !isProfileFollowed(profile)
     && profile.canConnect !== false
+    && profile.profileVisibility !== false
+    && profile.publicProfile !== false
+    && profile.isPublicProfile !== false
   )))
   const displayedProfiles = (
     activeSection === 'connections'
@@ -987,6 +990,13 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
           const profileIdentifiers = getProfileIdentityKeys(profile)
           return !profileIdentifiers.some((identifier) => normalizedCurrentUserIdentifiers.has(identifier))
         })
+        .filter((profile) => {
+          if (profile.profileVisibility === false || profile.publicProfile === false || profile.isPublicProfile === false) {
+            const profileIdentityKeys = getProfileIdentityKeys(profile)
+            return profileIdentityKeys.some((key) => serverConnectedKeys.has(key))
+          }
+          return true
+        })
         .map((profile, index) => {
           const profileIdentityKeys = getProfileIdentityKeys(profile)
           const registeredProfile = (Array.isArray(registeredProfiles) ? registeredProfiles : []).find((item) => (
@@ -1007,12 +1017,22 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
             || Boolean(connection?.isConnected)
           const isPend = !isConn && Boolean(connection?.isPending || connection?.isOutgoingPending || profile.isPending)
 
+          const isOffline = profile.activeStatus === false
+            || profile.activityStatus === false
+            || connection?.activeStatus === false
+            || connection?.activityStatus === false
+            || connection?.status === 'offline'
+            || profile.status === 'offline'
+          const presenceStatus = isOffline ? 'offline' : 'active'
+
           return {
             ...profile,
             id,
             name,
             initials: profile.initials || nameParts.slice(0, 2).map((part) => part[0]).join('').toUpperCase() || 'TH',
-            status: connection?.status || profile.status || '',
+            status: presenceStatus,
+            activeStatus: !isOffline,
+            activityStatus: !isOffline,
             role: profile.headline || profile.role || profile.primaryCraft || profile.category || '',
             location: profile.location || profile.address || '',
             mutualConnections: getMutualConnectionsLabel(connection?.mutualConnections),
@@ -1038,13 +1058,19 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
         } else {
           const name = getProfileName(conn) || 'Profile'
           const nameParts = name.split(/\s+/)
+          const isOffline = conn.activeStatus === false
+            || conn.activityStatus === false
+            || conn.status === 'offline'
+          const presenceStatus = isOffline ? 'offline' : 'active'
           allProfiles.unshift({
             ...conn,
             id: conn.id || conn.userId || conn.profileId || cKey,
             userId: conn.userId || conn.id || conn.profileId || cKey,
             name,
             initials: conn.initials || nameParts.slice(0, 2).map((part) => part[0]).join('').toUpperCase() || 'TH',
-            status: conn.status || '',
+            status: presenceStatus,
+            activeStatus: !isOffline,
+            activityStatus: !isOffline,
             role: conn.role || conn.headline || conn.primaryCraft || '',
             location: conn.location || conn.address || '',
             mutualConnections: getMutualConnectionsLabel(conn.mutualConnections),
@@ -1130,6 +1156,9 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
         } else if (notifs.connections === true || notifs['connecting-with-others'] === true) {
           setConnectingWithOthersEnabled(true)
         }
+      }
+      if (event.detail?.privacyPreferences) {
+        loadNetworkData()
       }
     }
 
@@ -1547,13 +1576,11 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
               ? <img src={profile.profileImageUrl} alt="" />
               : profile.initials}
           </button>
-            {profile.status && (
-              <span
-                className={`network-presence-dot is-${profile.status}`}
-                role="img"
-                aria-label={`${profile.name} is ${profile.status}`}
-              />
-            )}
+          <span
+            className={`network-presence-dot is-${(profile.activeStatus === false || profile.activityStatus === false || profile.status === 'offline') ? 'offline' : 'active'}`}
+            role="img"
+            aria-label={`${profile.name} is ${(profile.activeStatus === false || profile.activityStatus === false || profile.status === 'offline') ? 'offline' : 'active'}`}
+          />
         </div>
         <div className="network-profile-content">
           <h3>{profile.name}</h3>

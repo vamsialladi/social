@@ -13,6 +13,7 @@ import com.truehunt.social.service.TalentService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -51,10 +52,18 @@ public class SearchController {
     }
 
     @GetMapping
-    public ResponseEntity<ApiResponse<Map<String, Object>>> search(@RequestParam(value = "q", defaultValue = "") String query) {
+    public ResponseEntity<ApiResponse<Map<String, Object>>> search(
+            @RequestParam(value = "q", defaultValue = "") String query,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId,
+            org.springframework.security.core.Authentication authentication) {
+        String caller = (userEmail != null && !userEmail.isBlank()) ? userEmail.trim()
+                : (userId != null && !userId.isBlank()) ? userId.trim()
+                : (authentication != null && authentication.isAuthenticated() && !"anonymousUser".equals(authentication.getPrincipal())) ? authentication.getName() : null;
         String q = query.trim().toLowerCase();
 
         List<Map<String, Object>> matchedPeople = networkProfileRepository.findAll().stream()
+                .filter(p -> settingsService == null || settingsService.isPublicProfileEnabled(p.getId()))
                 .filter(p -> q.isEmpty() ||
                         p.getName().toLowerCase().contains(q) ||
                         (p.getRole() != null && p.getRole().toLowerCase().contains(q)) ||
@@ -71,15 +80,39 @@ public class SearchController {
                         (p.getAuthorName() != null && p.getAuthorName().toLowerCase().contains(q)))
                 .map(p -> {
                     Map<String, Object> dto = p.toDto();
+                    boolean isAuthor = caller != null && !caller.isBlank()
+                            && p.getAuthorId() != null
+                            && (p.getAuthorId().equalsIgnoreCase(caller)
+                                    || (caller.equalsIgnoreCase("pro@truehunt.in") && "1000001".equalsIgnoreCase(p.getAuthorId()))
+                                    || (caller.equalsIgnoreCase("1000001") && "pro@truehunt.in".equalsIgnoreCase(p.getAuthorId())));
+                    dto.put("isAuthor", isAuthor);
                     if (settingsService != null) {
-                        if (!settingsService.isLikeCountEnabledForAuthor(p.getAuthorId())) {
-                            dto.put("likesCount", 0);
-                            dto.put("liked", false);
-                            dto.put("likeCountDisabled", true);
-                        }
-                        if (!settingsService.isShareCountEnabledForAuthor(p.getAuthorId())) {
-                            dto.put("sharesCount", 0);
-                            dto.put("shareCountDisabled", true);
+                        boolean likeCountEnabled = settingsService.isLikeCountEnabledForAuthor(p.getAuthorId());
+                        boolean shareCountEnabled = settingsService.isShareCountEnabledForAuthor(p.getAuthorId());
+                        if (isAuthor) {
+                            dto.put("likesCount", p.getLikesCount());
+                            dto.put("sharesCount", p.getSharesCount());
+                            dto.put("showLikesCount", true);
+                            dto.put("showSharesCount", true);
+                            dto.put("likeCountDisabled", false);
+                            dto.put("shareCountDisabled", false);
+                        } else {
+                            if (!likeCountEnabled) {
+                                dto.put("likesCount", 0);
+                                dto.put("showLikesCount", false);
+                                dto.put("likeCountDisabled", true);
+                            } else {
+                                dto.put("showLikesCount", true);
+                                dto.put("likeCountDisabled", false);
+                            }
+                            if (!shareCountEnabled) {
+                                dto.put("sharesCount", 0);
+                                dto.put("showSharesCount", false);
+                                dto.put("shareCountDisabled", true);
+                            } else {
+                                dto.put("showSharesCount", true);
+                                dto.put("shareCountDisabled", false);
+                            }
                         }
                     }
                     return dto;

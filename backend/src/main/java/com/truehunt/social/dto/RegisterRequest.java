@@ -14,6 +14,7 @@ import java.util.List;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 @PasswordMatches
+@ValidPhoneNumber
 public class RegisterRequest {
     private String name;
     private String fullName;
@@ -22,10 +23,10 @@ public class RegisterRequest {
     @Email(message = "Please enter a valid email address.")
     private String email;
 
-    @ValidPhoneNumber
     private String phone;
-    @ValidPhoneNumber
     private String phoneNumber;
+    private String country;
+    private String countryCode;
 
     @NotBlank(message = "Password is required")
     @Size(min = PasswordPolicy.MIN_LENGTH, max = PasswordPolicy.MAX_LENGTH,
@@ -99,6 +100,22 @@ public class RegisterRequest {
 
     public void setPhoneNumber(String phoneNumber) {
         this.phoneNumber = phoneNumber;
+    }
+
+    public String getCountry() {
+        return country;
+    }
+
+    public void setCountry(String country) {
+        this.country = country;
+    }
+
+    public String getCountryCode() {
+        return countryCode;
+    }
+
+    public void setCountryCode(String countryCode) {
+        this.countryCode = countryCode;
     }
 
     public String getPassword() {

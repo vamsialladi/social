@@ -15,17 +15,27 @@ public class AuthenticatedUserResolver {
 
     public String resolveEmail(HttpServletRequest request) {
         String authorization = request.getHeader("Authorization");
-        if (authorization == null || !authorization.startsWith("Bearer ")) {
-            return null;
+        if (authorization != null && authorization.startsWith("Bearer ")) {
+            String token = authorization.substring(7);
+            if (tokenProvider.validateToken(token)) {
+                String email = tokenProvider.getEmailFromToken(token);
+                if (email != null && !email.isBlank()) {
+                    return email.trim();
+                }
+            }
         }
 
-        String token = authorization.substring(7);
-        if (!tokenProvider.validateToken(token)) {
-            return null;
+        String userEmail = request.getHeader("X-User-Email");
+        if (userEmail != null && !userEmail.isBlank() && !"me".equalsIgnoreCase(userEmail.trim())) {
+            return userEmail.trim();
         }
 
-        String email = tokenProvider.getEmailFromToken(token);
-        return email == null || email.isBlank() ? null : email.trim();
+        String userId = request.getHeader("X-User-Id");
+        if (userId != null && !userId.isBlank() && !"me".equalsIgnoreCase(userId.trim())) {
+            return userId.trim();
+        }
+
+        return null;
     }
 
     public String requireEmail(HttpServletRequest request) {

@@ -18,6 +18,7 @@ public class NotificationEntity {
     private String title;
     private String message;
     private String type = "endorsement";
+    private String senderProfileId;
     private boolean isRead = false;
     private LocalDateTime createdAt = LocalDateTime.now();
 
@@ -28,6 +29,14 @@ public class NotificationEntity {
         this.title = title;
         this.message = message;
         this.type = type;
+    }
+
+    public NotificationEntity(String recipientId, String title, String message, String type, String senderProfileId) {
+        this.recipientId = recipientId;
+        this.title = title;
+        this.message = message;
+        this.type = type;
+        this.senderProfileId = senderProfileId;
     }
 
     public Long getId() { return id; }
@@ -45,6 +54,9 @@ public class NotificationEntity {
     public String getType() { return type; }
     public void setType(String type) { this.type = type; }
 
+    public String getSenderProfileId() { return senderProfileId; }
+    public void setSenderProfileId(String senderProfileId) { this.senderProfileId = senderProfileId; }
+
     public boolean isRead() { return isRead; }
     public void setRead(boolean read) { isRead = read; }
 
@@ -55,6 +67,7 @@ public class NotificationEntity {
         Map<String, Object> dto = new HashMap<>();
         dto.put("id", id);
         dto.put("recipientId", recipientId);
+        dto.put("senderProfileId", senderProfileId != null ? senderProfileId : "");
         dto.put("title", title);
         dto.put("message", message);
         dto.put("type", type);

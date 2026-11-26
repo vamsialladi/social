@@ -42,13 +42,16 @@ class NewFrontendFeaturesContractIntegrationTest {
     @Autowired
     private SupportTicketRepository supportTicketRepository;
 
+    private static final java.util.concurrent.atomic.AtomicLong PHONE_COUNTER = new java.util.concurrent.atomic.AtomicLong(9811000000L);
+
     private String registerAndGetToken(String name, String email, String phone) throws Exception {
+        String phoneToUse = String.valueOf(PHONE_COUNTER.incrementAndGet());
         MvcResult res = mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
                                 "fullName", name,
                                 "email", email,
-                                "phoneNumber", phone,
+                                "phoneNumber", phoneToUse,
                                 "password", "TrueHunt2026!",
                                 "confirmPassword", "TrueHunt2026!",
                                 "role", "TALENT",
@@ -817,45 +820,55 @@ class NewFrontendFeaturesContractIntegrationTest {
                 .andExpect(jsonPath("$.data.engagementPreferences.likeCounts").value(false))
                 .andExpect(jsonPath("$.data.engagementPreferences.shareCounts").value(false));
 
-        // Liking does NOT count while likeCounts is Off
+        // Liking succeeds, but count is not shown to viewer (showLikesCount: false, likesCount: 0)
         mockMvc.perform(post("/api/posts/" + postId + "/like")
                         .header("Authorization", "Bearer " + viewerToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.liked").value(false))
-                .andExpect(jsonPath("$.data.likesCount").value(0));
+                .andExpect(jsonPath("$.data.liked").value(true))
+                .andExpect(jsonPath("$.data.likesCount").value(0))
+                .andExpect(jsonPath("$.data.showLikesCount").value(false));
 
-        // Sharing is blocked and does NOT count while shareCounts is Off
+        // Sharing succeeds and is allowed, but count is not shown to viewer (showSharesCount: false, sharesCount: 0)
         mockMvc.perform(post("/api/posts/" + postId + "/share")
                         .header("Authorization", "Bearer " + viewerToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.sharesCount").value(0))
                 .andExpect(jsonPath("$.data.shareCountDisabled").value(true))
-                .andExpect(jsonPath("$.data.allowed").value(false));
+                .andExpect(jsonPath("$.data.allowed").value(true))
+                .andExpect(jsonPath("$.data.showSharesCount").value(false));
 
-        // GET /api/posts/{id} confirms 0 likes and 0 shares
+        // GET /api/posts/{id} by viewer confirms counts are not shown to other user
         mockMvc.perform(get("/api/posts/" + postId)
                         .header("Authorization", "Bearer " + viewerToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.likesCount").value(0))
-                .andExpect(jsonPath("$.data.sharesCount").value(0));
+                .andExpect(jsonPath("$.data.sharesCount").value(0))
+                .andExpect(jsonPath("$.data.showLikesCount").value(false))
+                .andExpect(jsonPath("$.data.showSharesCount").value(false));
 
-        // Turn ON Like counts and Share counts again -> likes and shares count normally
+        // GET /api/posts/{id} by author (original user) confirms counts ARE shown to original user
+        mockMvc.perform(get("/api/posts/" + postId)
+                        .header("Authorization", "Bearer " + authorToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.likesCount").value(1))
+                .andExpect(jsonPath("$.data.sharesCount").value(1))
+                .andExpect(jsonPath("$.data.showLikesCount").value(true))
+                .andExpect(jsonPath("$.data.showSharesCount").value(true));
+
+        // Turn ON Like counts and Share counts again -> viewer now sees counts
         mockMvc.perform(patch("/api/settings/engagement")
                         .header("Authorization", "Bearer " + authorToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"likeCounts\":true,\"shareCounts\":true}"))
                 .andExpect(status().isOk());
 
-        mockMvc.perform(post("/api/posts/" + postId + "/like")
+        mockMvc.perform(get("/api/posts/" + postId)
                         .header("Authorization", "Bearer " + viewerToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.liked").value(true))
-                .andExpect(jsonPath("$.data.likesCount").value(1));
-
-        mockMvc.perform(post("/api/posts/" + postId + "/share")
-                        .header("Authorization", "Bearer " + viewerToken))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.sharesCount").value(1));
+                .andExpect(jsonPath("$.data.likesCount").value(1))
+                .andExpect(jsonPath("$.data.sharesCount").value(1))
+                .andExpect(jsonPath("$.data.showLikesCount").value(true))
+                .andExpect(jsonPath("$.data.showSharesCount").value(true));
     }
 
     @Test
@@ -1570,6 +1583,16 @@ class NewFrontendFeaturesContractIntegrationTest {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.success").value(false));
 
+        // When Public profile is stopped, User A does NOT appear in public directory or suggestions for Stranger D
+        mockMvc.perform(get("/api/profiles/directory"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[?(@.id == '" + userAId + "')]").doesNotExist());
+
+        mockMvc.perform(get("/api/connections/suggestions")
+                        .header("Authorization", "Bearer " + userDToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[?(@.id == '" + userAId + "')]").doesNotExist());
+
         // Direct Connection User B CAN VIEW (200 OK)
         mockMvc.perform(get("/api/profiles/" + userAId)
                         .header("Authorization", "Bearer " + userBToken))
@@ -1604,6 +1627,16 @@ class NewFrontendFeaturesContractIntegrationTest {
                         .header("Authorization", "Bearer " + userDToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.name").value("Vamsi Privacy"));
+
+        // User A appears in public directory and suggestions again
+        mockMvc.perform(get("/api/profiles/directory"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[?(@.id == '" + userAId + "')]").exists());
+
+        mockMvc.perform(get("/api/connections/suggestions")
+                        .header("Authorization", "Bearer " + userDToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[?(@.id == '" + userAId + "')]").exists());
     }
 
     @Test
@@ -1689,5 +1722,76 @@ class NewFrontendFeaturesContractIntegrationTest {
                         .header("Authorization", "Bearer " + tokenA))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.length()").value(2));
+    }
+
+    @Test
+    void activeStatusPrivacySettingControlsPresenceStatusInDirectoryAndSuggestions() throws Exception {
+        long seed = System.nanoTime();
+        String userEmail = "status.test." + seed + "@truehunt.in";
+        String token = registerAndGetToken("Active Tester", userEmail, "9799" + (seed % 1000000));
+
+        MvcResult meRes = mockMvc.perform(get("/api/profiles/me")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn();
+        String userId = objectMapper.readTree(meRes.getResponse().getContentAsString()).path("data").path("id").asText();
+
+        // 1. By default, active status is NOT stopped: status is "active"
+        MvcResult dirRes1 = mockMvc.perform(get("/api/profiles/directory"))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode dirList1 = objectMapper.readTree(dirRes1.getResponse().getContentAsString()).path("data");
+        String status1 = "none";
+        for (JsonNode p : dirList1) {
+            if (userId.equals(p.path("id").asText())) {
+                status1 = p.path("status").asText();
+                break;
+            }
+        }
+        assertEquals("active", status1);
+
+        // 2. User stops active status in Settings -> Privacy
+        mockMvc.perform(patch("/api/settings/privacy")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"activityStatus\":false}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.privacyPreferences.activityStatus").value(false));
+
+        // 3. User now shows "offline" (red mark in network)
+        MvcResult dirRes2 = mockMvc.perform(get("/api/profiles/directory"))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode dirList2 = objectMapper.readTree(dirRes2.getResponse().getContentAsString()).path("data");
+        String status2 = "none";
+        for (JsonNode p : dirList2) {
+            if (userId.equals(p.path("id").asText())) {
+                status2 = p.path("status").asText();
+                break;
+            }
+        }
+        assertEquals("offline", status2);
+
+        // 4. User turns active status back ON
+        mockMvc.perform(patch("/api/settings/privacy")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"activityStatus\":true}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.privacyPreferences.activityStatus").value(true));
+
+        // 5. User now shows "active" again (green mark in network)
+        MvcResult dirRes3 = mockMvc.perform(get("/api/profiles/directory"))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode dirList3 = objectMapper.readTree(dirRes3.getResponse().getContentAsString()).path("data");
+        String status3 = "none";
+        for (JsonNode p : dirList3) {
+            if (userId.equals(p.path("id").asText())) {
+                status3 = p.path("status").asText();
+                break;
+            }
+        }
+        assertEquals("active", status3);
     }
 }

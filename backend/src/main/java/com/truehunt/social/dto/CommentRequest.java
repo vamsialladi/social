@@ -10,6 +10,12 @@ public class CommentRequest {
     @JsonAlias({"content", "message", "comment", "body"})
     private String text;
 
+    @JsonAlias({"name", "author"})
+    private String authorName;
+
+    @JsonAlias({"avatar", "profileImageUrl"})
+    private String authorAvatar;
+
     public CommentRequest() {}
 
     public CommentRequest(String text) {
@@ -30,6 +36,22 @@ public class CommentRequest {
 
     public void setText(String text) {
         this.text = text;
+    }
+
+    public String getAuthorName() {
+        return authorName;
+    }
+
+    public void setAuthorName(String authorName) {
+        this.authorName = authorName;
+    }
+
+    public String getAuthorAvatar() {
+        return authorAvatar;
+    }
+
+    public void setAuthorAvatar(String authorAvatar) {
+        this.authorAvatar = authorAvatar;
     }
 }
 

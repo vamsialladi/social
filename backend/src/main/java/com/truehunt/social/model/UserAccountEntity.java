@@ -38,6 +38,12 @@ public class UserAccountEntity {
 
     @Column(name = "phone_number", unique = true)
     private String phoneNumber;
+
+    @Column(name = "country", length = 10)
+    private String country;
+
+    @Column(name = "country_code", length = 10)
+    private String countryCode;
     private String role;
     private String craft;
     @Column(nullable = false, columnDefinition = "boolean default true")
@@ -105,6 +111,22 @@ public class UserAccountEntity {
 
     public void setPhone(String phone) {
         this.phoneNumber = phone;
+    }
+
+    public String getCountry() {
+        return country;
+    }
+
+    public void setCountry(String country) {
+        this.country = country;
+    }
+
+    public String getCountryCode() {
+        return countryCode;
+    }
+
+    public void setCountryCode(String countryCode) {
+        this.countryCode = countryCode;
     }
 
     public String getRole() {

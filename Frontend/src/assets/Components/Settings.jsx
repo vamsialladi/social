@@ -601,9 +601,19 @@ function Settings({
           'publicProfile': nextVal,
           'public-profile': nextVal,
           'profile_visibility': nextVal
+        } : {}),
+        ...(id === 'activityStatus' || id === 'activeStatus' ? {
+          'activityStatus': nextVal,
+          'activeStatus': nextVal,
+          'activity-status': nextVal,
+          'active_status': nextVal
         } : {})
       }
-      api.updatePrivacySettings(payload).catch((err) => console.warn('Privacy API note:', err))
+      api.updatePrivacySettings(payload)
+        .then(() => {
+          window.dispatchEvent(new CustomEvent('truehunt-settings-updated', { detail: { privacyPreferences: payload } }))
+        })
+        .catch((err) => console.warn('Privacy API note:', err))
     } else if (key === 'restrictedPreferences') {
       api.updateRestrictedSettings(next).catch((err) => console.warn('Restricted API note:', err))
     } else if (key === 'engagementPreferences') {

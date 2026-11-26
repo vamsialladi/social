@@ -41,11 +41,9 @@ export default function ProfileActivity({ profile, isOwner, onOpenPostModal }) {
 
   const handleSharePost = async (post) => {
     const postId = typeof post === 'object' ? post?.id : post;
-    if (typeof post === 'object' && post?.shareCountDisabled) return;
     if (/^\d+$/.test(String(postId))) {
       try {
-        const res = await socialApi.sharePost(postId);
-        if (res?.shareCountDisabled || res?.allowed === false) return;
+        await socialApi.sharePost(postId);
       } catch {
         // ignore network errors
       }
@@ -237,23 +235,28 @@ export default function ProfileActivity({ profile, isOwner, onOpenPostModal }) {
                 {/* Engagement Bar */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '10px', borderTop: '1px solid var(--color-border-subtle)' }}>
                   <div style={{ display: 'flex', gap: '16px' }}>
-                    <button
-                      onClick={() => handleLike(post.id, post.likesCount)}
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        background: 'none',
-                        border: 'none',
-                        fontSize: '13px',
-                        fontWeight: 600,
-                        color: isLiked ? 'var(--color-maroon)' : 'var(--color-text-secondary)',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      <Heart size={16} fill={isLiked ? 'var(--color-maroon)' : 'none'} color={isLiked ? 'var(--color-maroon)' : 'currentColor'} />
-                      <span>{currentLikes}</span>
-                    </button>
+                    {(() => {
+                      const showLikes = isOwner || post.isAuthor || (post.showLikesCount !== false && !post.likeCountDisabled);
+                      return (
+                        <button
+                          onClick={() => handleLike(post.id, post.likesCount)}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            background: 'none',
+                            border: 'none',
+                            fontSize: '13px',
+                            fontWeight: 600,
+                            color: isLiked ? 'var(--color-maroon)' : 'var(--color-text-secondary)',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <Heart size={16} fill={isLiked ? 'var(--color-maroon)' : 'none'} color={isLiked ? 'var(--color-maroon)' : 'currentColor'} />
+                          {showLikes && <span>{currentLikes}</span>}
+                        </button>
+                      );
+                    })()}
 
                     <button
                       onClick={() => showNotification('Comments are open for verified network peers.', 'info')}
@@ -275,19 +278,18 @@ export default function ProfileActivity({ profile, isOwner, onOpenPostModal }) {
 
                   <button
                     onClick={() => handleSharePost(post)}
-                    disabled={Boolean(post.shareCountDisabled)}
                     style={{
                       background: 'none',
                       border: 'none',
                       fontSize: '13px',
                       color: 'var(--color-text-muted)',
-                      cursor: post.shareCountDisabled ? 'not-allowed' : 'pointer',
-                      opacity: post.shareCountDisabled ? 0.45 : 1,
+                      cursor: 'pointer',
+                      opacity: 1,
                       display: 'inline-flex',
                       alignItems: 'center',
                       gap: '4px'
                     }}
-                    title={post.shareCountDisabled ? 'Sharing is turned off' : 'Share post'}
+                    title="Share post"
                   >
                     <Share2 size={14} />
                     <span className="hide-on-mobile">Share</span>

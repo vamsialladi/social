@@ -45,6 +45,8 @@ public class ConversationEntity {
     @Column(name = "group_cleared_at", columnDefinition = "TEXT")
     private String groupClearedAtJson = "{}";
 
+    @Lob
+    @Column(name = "group_image_url", columnDefinition = "TEXT")
     private String groupImageUrl;
 
     private String name;
@@ -338,7 +340,9 @@ public class ConversationEntity {
         if (isGroupConversation()) {
             dto.put("connectionGroupId", connectionGroupId);
             dto.put("groupParticipantIds", getGroupParticipantIds());
-            dto.put("groupImageUrl", groupImageUrl);
+            dto.put("groupImageUrl", groupImageUrl != null ? groupImageUrl : "");
+            dto.put("avatar", groupImageUrl != null ? groupImageUrl : "");
+            dto.put("profileImageUrl", groupImageUrl != null ? groupImageUrl : "");
         }
 
         LocalDateTime callerHiddenAt = isGroupConversation()

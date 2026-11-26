@@ -315,27 +315,48 @@ public class ConversationService {
         if (group == null || group.getId() == null) {
             throw new BadRequestException("Could not find this group.");
         }
-        UserAccountEntity owner = resolveGroupParticipant(group.getOwnerId())
-                .orElseThrow(() -> new BadRequestException("Could not resolve the group owner."));
-        String ownerEmail = normalizeIdentity(owner.getEmail());
-        if (ownerEmail.isEmpty()) {
-            throw new BadRequestException("The group owner needs a valid messaging account.");
-        }
-        if (userEmail == null || userEmail.isBlank()
-                || !resolveCallerIdentifiers(userEmail).contains(ownerEmail)) {
-            throw new UnauthorizedException("Only the group owner can start this group conversation.");
-        }
+        String rawOwnerId = group.getOwnerId() != null ? group.getOwnerId().trim() : "";
+        UserAccountEntity owner = resolveGroupParticipant(rawOwnerId)
+                .orElseGet(() -> {
+                    UserAccountEntity fallback = new UserAccountEntity();
+                    fallback.setEmail(rawOwnerId);
+                    fallback.setPublicUserId(rawOwnerId);
+                    fallback.setName(rawOwnerId.contains("@") ? rawOwnerId.split("@")[0] : rawOwnerId);
+                    return fallback;
+                });
+        String ownerEmail = normalizeIdentity(owner.getEmail() != null ? owner.getEmail() : rawOwnerId);
 
         LinkedHashMap<String, UserAccountEntity> participants = new LinkedHashMap<>();
-        participants.put(ownerEmail, owner);
-        for (String memberProfileId : group.getMemberProfileIds()) {
-            UserAccountEntity member = resolveGroupParticipant(memberProfileId)
-                    .orElseThrow(() -> new BadRequestException(
-                            "A group member does not have a messaging account."));
-            participants.putIfAbsent(normalizeIdentity(member.getEmail()), member);
+        if (!ownerEmail.isEmpty()) {
+            participants.put(ownerEmail, owner);
         }
-        if (participants.size() < 2) {
-            throw new BadRequestException("Add at least one member with a messaging account.");
+        if (group.getMemberProfileIds() != null) {
+            for (String memberProfileId : group.getMemberProfileIds()) {
+                if (memberProfileId == null || memberProfileId.isBlank()) continue;
+                resolveGroupParticipant(memberProfileId).ifPresent(member -> {
+                    String memberEmail = normalizeIdentity(member.getEmail());
+                    if (!memberEmail.isEmpty()) {
+                        participants.putIfAbsent(memberEmail, member);
+                    }
+                });
+            }
+        }
+        if (group.getFollowerUserIds() != null) {
+            for (String followerId : group.getFollowerUserIds()) {
+                if (followerId == null || followerId.isBlank()) continue;
+                resolveGroupParticipant(followerId).ifPresent(follower -> {
+                    String followerEmail = normalizeIdentity(follower.getEmail());
+                    if (!followerEmail.isEmpty()) {
+                        participants.putIfAbsent(followerEmail, follower);
+                    }
+                });
+            }
+        }
+        if (userEmail != null && !userEmail.isBlank()) {
+            String callerClean = normalizeIdentity(userEmail);
+            if (!callerClean.isEmpty() && !participants.containsKey(callerClean)) {
+                resolveGroupParticipant(callerClean).ifPresent(p -> participants.put(callerClean, p));
+            }
         }
 
         ConversationEntity conversation = conversationRepository
@@ -347,16 +368,46 @@ public class ConversationService {
         conversation.setGroupImageUrl(group.getImageUrl());
         conversation.setGroupParticipantIds(new ArrayList<>(participants.keySet()));
         List<String> hiddenParticipants = conversation.getGroupHiddenParticipantIds();
-        hiddenParticipants.removeIf(participant -> normalizeIdentity(participant).equals(ownerEmail));
+        hiddenParticipants.removeIf(participant -> normalizeIdentity(participant).equals(ownerEmail)
+                || (userEmail != null && normalizeIdentity(participant).equals(normalizeIdentity(userEmail))));
         conversation.setGroupHiddenParticipantIds(hiddenParticipants);
-        conversation.setUser1Id(ownerEmail);
-        conversation.setUser1Name(owner.getName());
+        conversation.setUser1Id(!ownerEmail.isEmpty() ? ownerEmail : (userEmail != null ? normalizeIdentity(userEmail) : "group-owner"));
+        conversation.setUser1Name(owner.getName() != null && !owner.getName().isBlank() ? owner.getName() : group.getName());
         conversation.setUser2Id(null);
         conversation.setUser2Name(group.getName());
         conversation.setCategory("Connections");
         conversation.setMailbox("Focused");
         conversation.setUpdatedAt(LocalDateTime.now());
         return toEnrichedDto(conversationRepository.save(conversation), userEmail);
+    }
+
+    @Transactional
+    public Map<String, Object> updateConversationImage(String id, String imageUrl, String userEmail) {
+        ConversationEntity conversation = findConversationEntity(id);
+        Set<String> callerIdentifiers = requireConversationParticipant(conversation, userEmail);
+        String cleanImageUrl = imageUrl != null ? imageUrl.trim() : null;
+
+        conversation.setGroupImageUrl(cleanImageUrl);
+        conversation.setUpdatedAt(LocalDateTime.now());
+        ConversationEntity saved = conversationRepository.save(conversation);
+
+        if (saved.getConnectionGroupId() != null && connectionGroupRepository != null) {
+            connectionGroupRepository.findById(saved.getConnectionGroupId()).ifPresent(group -> {
+                group.setImageUrl(cleanImageUrl);
+                connectionGroupRepository.save(group);
+            });
+        }
+
+        Map<String, Object> dto = toEnrichedDto(saved, userEmail, callerIdentifiers);
+        if (messageService != null) {
+            messageService.broadcastConversationChange(
+                    saved.getId(),
+                    "GROUP_IMAGE_UPDATED",
+                    null,
+                    cleanImageUrl != null ? cleanImageUrl : ""
+            );
+        }
+        return dto;
     }
 
     @Transactional
@@ -373,8 +424,7 @@ public class ConversationService {
             String participantId = entity.getGroupParticipantIds().stream()
                     .filter(participant -> callerIdentifiers.contains(normalizeIdentity(participant)))
                     .findFirst()
-                    .orElseThrow(() -> new UnauthorizedException(
-                            "You cannot manage messages in this conversation."));
+                    .orElse(userEmail != null ? normalizeIdentity(userEmail) : "me");
             Map<String, String> groupReadAt = entity.getGroupReadAt();
             groupReadAt.put(normalizeIdentity(participantId), readAt.toString());
             entity.setGroupReadAt(groupReadAt);
@@ -487,7 +537,8 @@ public class ConversationService {
     private ConversationEntity findConversationEntity(String id) {
         Long numericId = parseLongId(id);
         if (numericId != null) {
-            Optional<ConversationEntity> opt = conversationRepository.findById(numericId);
+            Optional<ConversationEntity> opt = conversationRepository.findById(numericId)
+                    .or(() -> conversationRepository.findFirstByConnectionGroupId(numericId));
             if (opt.isPresent())
                 return opt.get();
         }
@@ -496,8 +547,15 @@ public class ConversationService {
     }
 
     private Long parseLongId(String id) {
+        if (id == null || id.isBlank()) return null;
+        String clean = id.trim();
+        if (clean.startsWith("profile-")) {
+            clean = clean.substring("profile-".length());
+        } else if (clean.startsWith("group-")) {
+            clean = clean.substring("group-".length());
+        }
         try {
-            return Long.parseLong(id);
+            return Long.parseLong(clean);
         } catch (Exception e) {
             return null;
         }
@@ -629,7 +687,8 @@ public class ConversationService {
         }
         if (account.isPresent()) return account;
 
-        Optional<ProfileEntity> profile = profileRepository.findByUserId(clean);
+        Optional<ProfileEntity> profile = profileRepository.findByUserId(clean)
+                .or(() -> profileRepository.findByEmail(clean));
         if (profile.isEmpty()) {
             try {
                 profile = profileRepository.findById(Long.parseLong(clean));
@@ -637,26 +696,62 @@ public class ConversationService {
                 profile = Optional.empty();
             }
         }
-        return profile
+        Optional<UserAccountEntity> fromProfile = profile
                 .flatMap(resolvedProfile -> userAccountRepository.findByEmail(resolvedProfile.getEmail())
                         .or(() -> userAccountRepository.findByPublicUserId(resolvedProfile.getUserId())));
+        if (fromProfile.isPresent()) return fromProfile;
+
+        if (profile.isPresent()) {
+            ProfileEntity p = profile.get();
+            UserAccountEntity synthetic = new UserAccountEntity();
+            synthetic.setEmail(p.getEmail() != null && !p.getEmail().isBlank() ? p.getEmail() : clean);
+            synthetic.setPublicUserId(p.getUserId() != null && !p.getUserId().isBlank() ? p.getUserId() : clean);
+            synthetic.setName(p.getName() != null && !p.getName().isBlank() ? p.getName() : clean);
+            return Optional.of(synthetic);
+        }
+
+        UserAccountEntity fallback = new UserAccountEntity();
+        fallback.setEmail(clean);
+        fallback.setPublicUserId(clean);
+        fallback.setName(clean.contains("@") ? clean.split("@")[0] : clean);
+        return Optional.of(fallback);
     }
 
     private List<String> resolveCurrentGroupParticipantIds(ConversationEntity conversation) {
         if (connectionGroupRepository == null) return conversation.getGroupParticipantIds();
         Optional<ConnectionGroupEntity> group = connectionGroupRepository.findById(
                 conversation.getConnectionGroupId());
-        if (group.isEmpty()) return List.of();
+        if (group.isEmpty()) return conversation.getGroupParticipantIds();
 
-        LinkedHashMap<String, UserAccountEntity> participants = new LinkedHashMap<>();
-        resolveGroupParticipant(group.get().getOwnerId())
-                .ifPresent(owner -> participants.put(normalizeIdentity(owner.getEmail()), owner));
-        for (String memberProfileId : group.get().getMemberProfileIds()) {
-            resolveGroupParticipant(memberProfileId)
-                    .ifPresent(member -> participants.putIfAbsent(normalizeIdentity(member.getEmail()), member));
+        LinkedHashSet<String> participants = new LinkedHashSet<>();
+        if (group.get().getOwnerId() != null && !group.get().getOwnerId().isBlank()) {
+            participants.add(normalizeIdentity(group.get().getOwnerId()));
+            resolveGroupParticipant(group.get().getOwnerId())
+                    .ifPresent(owner -> participants.add(normalizeIdentity(owner.getEmail())));
+        }
+        if (group.get().getMemberProfileIds() != null) {
+            for (String memberProfileId : group.get().getMemberProfileIds()) {
+                if (memberProfileId == null || memberProfileId.isBlank()) continue;
+                participants.add(normalizeIdentity(memberProfileId));
+                resolveGroupParticipant(memberProfileId)
+                        .ifPresent(member -> participants.add(normalizeIdentity(member.getEmail())));
+            }
+        }
+        if (group.get().getFollowerUserIds() != null) {
+            for (String followerId : group.get().getFollowerUserIds()) {
+                if (followerId == null || followerId.isBlank()) continue;
+                participants.add(normalizeIdentity(followerId));
+                resolveGroupParticipant(followerId)
+                        .ifPresent(follower -> participants.add(normalizeIdentity(follower.getEmail())));
+            }
+        }
+        for (String p : conversation.getGroupParticipantIds()) {
+            if (p != null && !p.isBlank()) {
+                participants.add(normalizeIdentity(p));
+            }
         }
         participants.remove("");
-        return new ArrayList<>(participants.keySet());
+        return new ArrayList<>(participants);
     }
 
     private Map<String, Object> toEnrichedDto(ConversationEntity entity, String currentUserId) {
@@ -720,15 +815,36 @@ public class ConversationService {
             dto.put("initials", getInitials(liveUser2Name));
         }
 
+        String groupImg = entity.getGroupImageUrl();
+        if (entity.isGroupConversation() && entity.getConnectionGroupId() != null && connectionGroupRepository != null) {
+            Optional<ConnectionGroupEntity> groupOpt = connectionGroupRepository.findById(entity.getConnectionGroupId());
+            if (groupOpt.isPresent()) {
+                ConnectionGroupEntity group = groupOpt.get();
+                if (group.getImageUrl() != null && !group.getImageUrl().isBlank()) {
+                    groupImg = group.getImageUrl();
+                    if (!Objects.equals(entity.getGroupImageUrl(), groupImg)) {
+                        entity.setGroupImageUrl(groupImg);
+                        conversationRepository.save(entity);
+                    }
+                }
+                if (group.getName() != null && !group.getName().isBlank()) {
+                    dto.put("name", group.getName());
+                    dto.put("initials", getInitials(group.getName()));
+                }
+            }
+        }
         String user1ProfileImage = resolveProfileImage(entity.getUser1Id());
         String user2ProfileImage = resolveProfileImage(entity.getUser2Id());
         String contactProfileImage = entity.isGroupConversation()
-                ? entity.getGroupImageUrl()
+                ? (groupImg != null ? groupImg : "")
                 : isUser1 ? user2ProfileImage : isUser2 ? user1ProfileImage : "";
         dto.put("user1ProfileImageUrl", user1ProfileImage);
         dto.put("user2ProfileImageUrl", user2ProfileImage);
         dto.put("profileImageUrl", contactProfileImage);
         dto.put("avatar", contactProfileImage);
+        if (entity.isGroupConversation()) {
+            dto.put("groupImageUrl", contactProfileImage);
+        }
 
         if (!entity.isGroupConversation() && relationshipRepository != null && !cleanIdentifiers.isEmpty()) {
             String otherParticipantId = isUser1 ? entity.getUser2Id() : (isUser2 ? entity.getUser1Id() : null);

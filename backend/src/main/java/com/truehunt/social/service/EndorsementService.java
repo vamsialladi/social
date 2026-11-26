@@ -66,7 +66,12 @@ public class EndorsementService {
 
     @Transactional(readOnly = true)
     public List<Map<String, Object>> getProfileEndorsements(String receiverIdentifier, String viewerIdentifier) {
-        ProfileIdentity receiver = resolveProfile(receiverIdentifier);
+        ProfileIdentity receiver;
+        try {
+            receiver = resolveProfile(receiverIdentifier);
+        } catch (ResourceNotFoundException e) {
+            return List.of();
+        }
         String viewerProfileId = resolveViewerProfileId(viewerIdentifier);
 
         return endorsementRepository
@@ -139,8 +144,9 @@ public class EndorsementService {
         ProfileIdentity receiver = resolveProfile(receiverIdentifier);
         ProfileIdentity endorser = resolveEndorser(endorserIdentifier);
         EndorsementEntity endorsement = findEndorsement(receiver, endorsementId);
-        if (!sameIdentity(endorsement.getEndorserProfileId(), endorser.userId())) {
-            throw new UnauthorizedException("Only the person who submitted this endorsement can delete it.");
+        if (!sameIdentity(endorsement.getEndorserProfileId(), endorser.userId())
+                && !sameIdentity(endorsement.getReceiverProfileId(), endorser.userId())) {
+            throw new UnauthorizedException("Only the person who submitted this endorsement or the profile owner can delete it.");
         }
         endorsementRepository.delete(endorsement);
     }

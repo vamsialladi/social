@@ -71,16 +71,18 @@ public class ConnectionGroupService {
 
     @Transactional(readOnly = true)
     public List<Map<String, Object>> getGroups(String ownerIdentifier) {
-        String viewerId = resolveOwnerId(ownerIdentifier);
+        Set<String> viewerIdentities = resolveViewerIdentities(ownerIdentifier);
         return groupRepository.findAllByOrderByCreatedAtDesc().stream()
-                .map(group -> toDto(group, viewerId))
+                .map(group -> toDto(group, viewerIdentities))
                 .toList();
     }
 
     @Transactional(readOnly = true)
     public ConnectionGroupEntity getGroupForMessaging(String ownerIdentifier, Long groupId) {
-        String ownerId = resolveOwnerId(ownerIdentifier);
-        return groupRepository.findByIdAndOwnerId(groupId, ownerId)
+        if (groupId == null) {
+            throw new BadRequestException("Group id is required.");
+        }
+        return groupRepository.findById(groupId)
                 .orElseThrow(() -> new BadRequestException("Could not find this group."));
     }
 
@@ -315,9 +317,6 @@ public class ConnectionGroupService {
 
     private String normalizeImageUrl(String imageUrl) {
         String cleanImageUrl = imageUrl == null ? "" : imageUrl.trim();
-        if (cleanImageUrl.length() > 2048) {
-            throw new BadRequestException("Group photos must use an image URL under 2048 characters.");
-        }
         return cleanImageUrl.isEmpty() ? null : cleanImageUrl;
     }
 
@@ -403,22 +402,98 @@ public class ConnectionGroupService {
             }
         }
 
-        throw new BadRequestException("Could not resolve the account for these connection groups.");
+        String fallbackName = "Cinema Professional";
+        if (identifier.contains("@")) {
+            String prefix = identifier.substring(0, identifier.indexOf('@')).trim();
+            if (!prefix.isEmpty()) {
+                fallbackName = prefix;
+            }
+        }
+        return new ResolvedOwner(identifier, fallbackName);
     }
 
     private record ResolvedOwner(String id, String name) {}
 
+    private Set<String> resolveViewerIdentities(String ownerIdentifier) {
+        Set<String> identities = new LinkedHashSet<>();
+        if (ownerIdentifier == null || ownerIdentifier.isBlank()) {
+            return identities;
+        }
+        String clean = ownerIdentifier.trim();
+        identities.add(clean);
+        identities.add(clean.toLowerCase(Locale.ROOT));
+
+        try {
+            Optional<UserAccountEntity> account = userAccountRepository.findByEmail(clean)
+                    .or(() -> userAccountRepository.findByPublicUserId(clean));
+            if (account.isEmpty()) {
+                try {
+                    account = userAccountRepository.findById(Long.parseLong(clean));
+                } catch (NumberFormatException ignored) {}
+            }
+            account.ifPresent(acc -> {
+                if (acc.getId() != null) {
+                    identities.add(String.valueOf(acc.getId()));
+                }
+                if (acc.getPublicUserId() != null && !acc.getPublicUserId().isBlank()) {
+                    identities.add(acc.getPublicUserId().trim());
+                    identities.add(acc.getPublicUserId().trim().toLowerCase(Locale.ROOT));
+                }
+                if (acc.getEmail() != null && !acc.getEmail().isBlank()) {
+                    identities.add(acc.getEmail().trim());
+                    identities.add(acc.getEmail().trim().toLowerCase(Locale.ROOT));
+                }
+            });
+        } catch (Exception ignored) {}
+
+        if (profileRepository != null) {
+            try {
+                Optional<ProfileEntity> profile = profileRepository.findByEmail(clean)
+                        .or(() -> profileRepository.findByUserId(clean));
+                if (profile.isEmpty()) {
+                    try {
+                        profile = profileRepository.findById(Long.parseLong(clean));
+                    } catch (NumberFormatException ignored) {}
+                }
+                profile.ifPresent(prof -> {
+                    if (prof.getUserId() != null && !prof.getUserId().isBlank()) {
+                        identities.add(prof.getUserId().trim());
+                        identities.add(prof.getUserId().trim().toLowerCase(Locale.ROOT));
+                    }
+                    if (prof.getEmail() != null && !prof.getEmail().isBlank()) {
+                        identities.add(prof.getEmail().trim());
+                        identities.add(prof.getEmail().trim().toLowerCase(Locale.ROOT));
+                    }
+                });
+            } catch (Exception ignored) {}
+        }
+        return identities;
+    }
+
     private Map<String, Object> toDto(ConnectionGroupEntity group, String viewerId) {
+        return toDto(group, resolveViewerIdentities(viewerId));
+    }
+
+    private Map<String, Object> toDto(ConnectionGroupEntity group, Set<String> viewerIdentities) {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("id", group.getId());
         result.put("name", group.getName());
         result.put("imageUrl", group.getImageUrl());
-        result.put("memberProfileIds", new ArrayList<>(group.getMemberProfileIds()));
+        result.put("memberProfileIds", group.getMemberProfileIds() != null ? new ArrayList<>(group.getMemberProfileIds()) : new ArrayList<>());
         result.put("ownerId", group.getOwnerId());
-        result.put("isOwner", group.getOwnerId().equals(viewerId));
-        result.put("isFollowing", group.getFollowerUserIds().contains(viewerId));
-        result.put("followerCount", group.getFollowerUserIds().size());
-        result.put("followerUserIds", new ArrayList<>(group.getFollowerUserIds()));
+        boolean isOwner = false;
+        if (group.getOwnerId() != null && !group.getOwnerId().isBlank() && viewerIdentities != null && !viewerIdentities.isEmpty()) {
+            isOwner = viewerIdentities.stream().anyMatch(id -> id.equalsIgnoreCase(group.getOwnerId()));
+        }
+        boolean isFollowing = false;
+        if (group.getFollowerUserIds() != null && viewerIdentities != null && !viewerIdentities.isEmpty()) {
+            isFollowing = group.getFollowerUserIds().stream().anyMatch(f ->
+                    f != null && viewerIdentities.stream().anyMatch(v -> v.equalsIgnoreCase(f)));
+        }
+        result.put("isOwner", isOwner);
+        result.put("isFollowing", isFollowing);
+        result.put("followerCount", group.getFollowerUserIds() != null ? group.getFollowerUserIds().size() : 0);
+        result.put("followerUserIds", group.getFollowerUserIds() != null ? new ArrayList<>(group.getFollowerUserIds()) : new ArrayList<>());
         result.put("createdAt", group.getCreatedAt());
         return result;
     }

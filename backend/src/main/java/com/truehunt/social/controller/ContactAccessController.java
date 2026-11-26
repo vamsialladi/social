@@ -42,8 +42,12 @@ public class ContactAccessController {
     public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getIncomingRequests(
             HttpServletRequest request
     ) {
+        String email = authenticatedUserResolver.resolveEmail(request);
+        if (email == null || email.isBlank()) {
+            return ResponseEntity.ok(ApiResponse.success(List.of()));
+        }
         return ResponseEntity.ok(ApiResponse.success(
-                contactAccessService.getIncomingRequests(authenticatedUserResolver.requireEmail(request))
+                contactAccessService.getIncomingRequests(email)
         ));
     }
 
@@ -51,8 +55,12 @@ public class ContactAccessController {
     public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getOutgoingRequests(
             HttpServletRequest request
     ) {
+        String email = authenticatedUserResolver.resolveEmail(request);
+        if (email == null || email.isBlank()) {
+            return ResponseEntity.ok(ApiResponse.success(List.of()));
+        }
         return ResponseEntity.ok(ApiResponse.success(
-                contactAccessService.getOutgoingRequests(authenticatedUserResolver.requireEmail(request))
+                contactAccessService.getOutgoingRequests(email)
         ));
     }
 

@@ -9,6 +9,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
+import jakarta.persistence.Lob;
 import jakarta.persistence.OrderColumn;
 import jakarta.persistence.Table;
 
@@ -30,7 +31,8 @@ public class ConnectionGroupEntity {
     @Column(nullable = false, length = 80)
     private String name;
 
-    @Column(name = "image_url", length = 2048)
+    @Lob
+    @Column(name = "image_url", columnDefinition = "TEXT")
     private String imageUrl;
 
     @ElementCollection(fetch = FetchType.EAGER)

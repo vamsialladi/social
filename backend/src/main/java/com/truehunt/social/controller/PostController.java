@@ -279,9 +279,15 @@ public class PostController {
             @PathVariable String id,
             @Valid @RequestBody CommentRequest req,
             @RequestHeader(value = "X-User-Email", required = false) String userEmail,
-            @RequestHeader(value = "X-User-Id", required = false) String userId
+            @RequestHeader(value = "X-User-Id", required = false) String userId,
+            @RequestHeader(value = "X-User-Name", required = false) String userName
     ) {
-        return ResponseEntity.ok(ApiResponse.success(postService.commentOnPost(id, req.getText(), resolveIdentity(userEmail, userId))));
+        String effectiveName = (req.getAuthorName() != null && !req.getAuthorName().isBlank())
+                ? req.getAuthorName()
+                : userName;
+        return ResponseEntity.ok(ApiResponse.success(
+                postService.commentOnPost(id, req.getText(), resolveIdentity(userEmail, userId), effectiveName)
+        ));
     }
 
     @DeleteMapping("/posts/{id}/comments/{commentId}")
@@ -314,10 +320,14 @@ public class PostController {
             @PathVariable String commentId,
             @Valid @RequestBody CommentRequest req,
             @RequestHeader(value = "X-User-Email", required = false) String userEmail,
-            @RequestHeader(value = "X-User-Id", required = false) String userId
+            @RequestHeader(value = "X-User-Id", required = false) String userId,
+            @RequestHeader(value = "X-User-Name", required = false) String userName
     ) {
+        String effectiveName = (req.getAuthorName() != null && !req.getAuthorName().isBlank())
+                ? req.getAuthorName()
+                : userName;
         return ResponseEntity.ok(ApiResponse.success(
-                postService.replyToComment(id, commentId, req.getText(), resolveIdentity(userEmail, userId))
+                postService.replyToComment(id, commentId, req.getText(), resolveIdentity(userEmail, userId), effectiveName)
         ));
     }
 

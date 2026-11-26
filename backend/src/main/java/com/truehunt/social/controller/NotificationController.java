@@ -41,6 +41,44 @@ public class NotificationController {
         return ResponseEntity.ok(ApiResponse.success(notificationService.getNotifications(resolveCaller(userEmail, userId, authentication))));
     }
 
+    @GetMapping("/endorsement-requests/cooldowns")
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getEndorsementRequestCooldowns(
+            @RequestParam(value = "senderProfileId", required = false) String senderProfileId,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId,
+            Authentication authentication
+    ) {
+        String resolvedSender = (senderProfileId != null && !senderProfileId.isBlank())
+                ? senderProfileId.trim()
+                : resolveCaller(userEmail, userId, authentication);
+        return ResponseEntity.ok(ApiResponse.success(notificationService.getEndorsementRequestCooldowns(resolvedSender)));
+    }
+
+    @PostMapping("/endorsement-requests")
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> sendEndorsementRequests(
+            @RequestBody(required = false) Map<String, Object> body,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId,
+            Authentication authentication
+    ) {
+        String senderProfileId = body != null && body.get("senderProfileId") != null
+                ? String.valueOf(body.get("senderProfileId")).trim()
+                : resolveCaller(userEmail, userId, authentication);
+
+        List<String> recipientProfileIds = new java.util.ArrayList<>();
+        if (body != null && body.get("recipientProfileIds") instanceof List<?> list) {
+            for (Object item : list) {
+                if (item != null && !String.valueOf(item).isBlank()) {
+                    recipientProfileIds.add(String.valueOf(item).trim());
+                }
+            }
+        }
+
+        String caller = resolveCaller(userEmail, userId, authentication);
+        List<Map<String, Object>> created = notificationService.sendEndorsementRequests(senderProfileId, recipientProfileIds, caller);
+        return ResponseEntity.ok(ApiResponse.success(created));
+    }
+
     @PatchMapping("/{id}/read")
     public ResponseEntity<ApiResponse<Map<String, Object>>> markAsRead(@PathVariable String id) {
         return ResponseEntity.ok(ApiResponse.success(notificationService.markAsRead(id)));

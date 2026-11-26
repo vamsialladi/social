@@ -9,6 +9,8 @@ import com.truehunt.social.service.MessageService;
 import jakarta.validation.Valid;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -33,6 +35,22 @@ public class ConversationController {
     }
 
     private String resolveCaller(HttpServletRequest request) {
+        String email = authenticatedUserResolver.resolveEmail(request);
+        if (email != null && !email.isBlank()) {
+            return email.trim();
+        }
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.isAuthenticated() && !"anonymousUser".equals(auth.getPrincipal())) {
+            return auth.getName();
+        }
+        String headerEmail = request.getHeader("X-User-Email");
+        if (headerEmail != null && !headerEmail.isBlank()) {
+            return headerEmail.trim();
+        }
+        String headerId = request.getHeader("X-User-Id");
+        if (headerId != null && !headerId.isBlank()) {
+            return headerId.trim();
+        }
         return authenticatedUserResolver.requireEmail(request);
     }
 
@@ -133,6 +151,27 @@ public class ConversationController {
     ) {
         String mailbox = (req != null && req.containsKey("mailbox")) ? req.get("mailbox") : "Focused";
         return ResponseEntity.ok(ApiResponse.success(conversationService.updateMailbox(id, mailbox, resolveCaller(request))));
+    }
+
+    @PatchMapping("/{id}/image")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> updateGroupImage(
+            @PathVariable String id,
+            @RequestBody(required = false) Map<String, String> body,
+            HttpServletRequest request
+    ) {
+        String imageUrl = body != null ? (body.get("imageUrl") != null ? body.get("imageUrl") : body.get("groupImageUrl")) : null;
+        return ResponseEntity.ok(ApiResponse.success(
+                conversationService.updateConversationImage(id, imageUrl, resolveCaller(request))
+        ));
+    }
+
+    @PutMapping("/{id}/image")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> updateGroupImagePut(
+            @PathVariable String id,
+            @RequestBody(required = false) Map<String, String> body,
+            HttpServletRequest request
+    ) {
+        return updateGroupImage(id, body, request);
     }
 
     @PostMapping("/{id}/hide")

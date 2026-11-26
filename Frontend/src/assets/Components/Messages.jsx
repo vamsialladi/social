@@ -182,18 +182,28 @@ function createProfileConversation(conversation) {
   const name = conversation?.name?.trim()
   if (!name) return null
 
-  const id = `profile-${conversation.id || name.toLowerCase()}`
-  const avatar = conversation.profileImageUrl || conversation.avatar || ''
+  const isGroup = Boolean(conversation?.isGroupConversation || conversation?.connectionGroupId)
+  const id = isGroup && conversation.id && !String(conversation.id).startsWith('profile-')
+    ? String(conversation.id)
+    : `profile-${conversation.id || name.toLowerCase()}`
+  const avatar = conversation.groupImageUrl || conversation.profileImageUrl || conversation.avatar || ''
   return {
     id,
     name,
     initials: name.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase(),
     color: 'purple',
     avatar,
+    isGroupConversation: isGroup,
+    connectionGroupId: conversation.connectionGroupId || (isGroup ? conversation.id : null),
+    groupParticipantIds: conversation.groupParticipantIds || [],
+    groupImageUrl: avatar,
+    profileImageUrl: avatar,
     profile: {
       ...conversation,
       userId: conversation.userId || conversation.user_id || conversation.id || conversation._id || '',
       profileImageUrl: avatar,
+      groupImageUrl: avatar,
+      isGroupConversation: isGroup,
     },
     preview: 'Start a conversation',
     date: 'Now',
@@ -203,7 +213,7 @@ function createProfileConversation(conversation) {
     sponsored: false,
     subject: `Conversation with ${name}`,
     description: '',
-    thread: [],
+    thread: Array.isArray(conversation.thread) ? conversation.thread : [],
   }
 }
 
@@ -288,6 +298,8 @@ function Messages({
   const [isUpdatingMailbox, setIsUpdatingMailbox] = useState(false)
   const [isClearingChat, setIsClearingChat] = useState(false)
   const [conversationActionError, setConversationActionError] = useState('')
+  const [isUploadingGroupImage, setIsUploadingGroupImage] = useState(false)
+  const groupImageInputRef = useRef(null)
   const [search, setSearch] = useState('')
   const [isComposeOpen, setIsComposeOpen] = useState(false)
   const [recipient, setRecipient] = useState('')
@@ -482,11 +494,17 @@ function Messages({
                 && Date.parse(conversation.updatedAt || '') > cutoff
             })
             : fullThread
+          const freshAvatar = conversation.groupImageUrl
+            || conversation.profileImageUrl
+            || conversation.avatar
+            || ''
           return {
             ...conversation,
             name: resolvedName,
             initials: computeInitials(resolvedName),
-            avatar: conversation.profileImageUrl || conversation.avatar || '',
+            avatar: freshAvatar,
+            groupImageUrl: conversation.groupImageUrl || freshAvatar,
+            profileImageUrl: conversation.profileImageUrl || freshAvatar,
             thread,
             preview: thread.length
               ? thread[thread.length - 1].content
@@ -516,19 +534,29 @@ function Messages({
           })
           if (!previousConversation) return conversation
 
+          const freshAvatar = conversation.groupImageUrl
+            || conversation.profileImageUrl
+            || conversation.avatar
+            || ''
           return {
               ...conversation,
-              avatar: conversation.profileImageUrl
-                || conversation.avatar
+              avatar: freshAvatar
                 || previousConversation.avatar
+                || previousConversation.groupImageUrl
                 || previousConversation.profile?.profileImageUrl
                 || previousConversation.profile?.avatar
                 || '',
-              profileImageUrl: conversation.profileImageUrl
+              profileImageUrl: freshAvatar
                 || previousConversation.profileImageUrl
                 || previousConversation.avatar
+                || previousConversation.groupImageUrl
                 || previousConversation.profile?.profileImageUrl
                 || previousConversation.profile?.avatar
+                || '',
+              groupImageUrl: conversation.groupImageUrl
+                || freshAvatar
+                || previousConversation.groupImageUrl
+                || previousConversation.avatar
                 || '',
               ...(previousConversation.profile?.networkMessageLimit
                 ? { profile: previousConversation.profile }
@@ -653,6 +681,24 @@ function Messages({
           preview: String(thread[thread.length - 1]?.id) === messageId
             ? newMsg.content
             : conversation.preview,
+        }
+      }))
+      return
+    }
+    if (newMsg.type === 'GROUP_IMAGE_UPDATED') {
+      const updatedImageUrl = String(newMsg.content || '').trim()
+      setMessages((prevMessages) => prevMessages.map((conversation) => {
+        if (
+          String(conversation.id) !== String(convId) &&
+          (!conversation.connectionGroupId || String(conversation.connectionGroupId) !== String(convId))
+        ) {
+          return conversation
+        }
+        return {
+          ...conversation,
+          avatar: updatedImageUrl,
+          groupImageUrl: updatedImageUrl,
+          profileImageUrl: updatedImageUrl,
         }
       }))
       return
@@ -943,16 +989,27 @@ function Messages({
     setIsConnectPromptOpen(false)
     setConnectionRequestError('')
     const conversationId = String(conversation?.id || '')
-    if (conversationId && !conversationId.startsWith('profile-') && Array.isArray(conversation.thread)) {
+    const isGroup = Boolean(conversation?.isGroupConversation || conversation?.connectionGroupId)
+    if (conversationId && !conversationId.startsWith('profile-') && (isGroup || Array.isArray(conversation.thread))) {
       const contactName = getConversationContactName(conversation, currentUser)
         || String(conversation.name || '').trim()
         || 'Profile'
+      const conversationAvatar = conversation.groupImageUrl
+        || conversation.profileImageUrl
+        || conversation.avatar
+        || ''
       const persistedConversation = {
         ...conversation,
         id: conversation.id,
         name: contactName,
         initials: computeInitials(contactName),
-        avatar: conversation.profileImageUrl || conversation.avatar || '',
+        avatar: conversationAvatar,
+        groupImageUrl: conversation.groupImageUrl || conversationAvatar,
+        profileImageUrl: conversation.profileImageUrl || conversationAvatar,
+        isGroupConversation: isGroup || Boolean(conversation.isGroupConversation),
+        connectionGroupId: conversation.connectionGroupId,
+        groupParticipantIds: conversation.groupParticipantIds || [],
+        thread: Array.isArray(conversation.thread) ? conversation.thread : [],
         unread: false,
       }
 
@@ -1346,6 +1403,87 @@ function Messages({
     setEditMessageDraft('')
     setIsConversationMenuOpen(false)
     setConversationActionError('')
+  }
+
+  async function handleGroupImageUpload(event) {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file || !selectedMessage?.isGroupConversation) return
+
+    setIsUploadingGroupImage(true)
+    setConversationActionError('')
+    try {
+      let uploadedUrl = ''
+      try {
+        const res = await api.uploadMedia(file, 'connection-group-photo')
+        uploadedUrl = res?.url || ''
+      } catch (uploadErr) {
+        console.warn('api.uploadMedia error, falling back to data URL:', uploadErr)
+        const reader = new FileReader()
+        uploadedUrl = await new Promise((resolve, reject) => {
+          reader.onload = () => resolve(reader.result)
+          reader.onerror = reject
+          reader.readAsDataURL(file)
+        })
+      }
+
+      if (!uploadedUrl) {
+        throw new Error('Could not upload the group image.')
+      }
+
+      if (selectedMessage.connectionGroupId) {
+        try {
+          await api.updateConnectionGroup(
+            selectedMessage.connectionGroupId,
+            selectedMessage.name,
+            selectedMessage.groupParticipantIds || [],
+            uploadedUrl,
+          )
+        } catch (groupErr) {
+          console.warn('updateConnectionGroup non-blocking warning:', groupErr)
+        }
+      }
+
+      const targetConvId = selectedMessage.id && !String(selectedMessage.id).startsWith('profile-')
+        ? selectedMessage.id
+        : selectedMessage.connectionGroupId
+
+      if (targetConvId) {
+        try {
+          await api.updateConversationGroupImage(targetConvId, uploadedUrl)
+        } catch (convErr) {
+          console.warn('updateConversationGroupImage warning:', convErr)
+          if (selectedMessage.connectionGroupId && String(selectedMessage.connectionGroupId) !== String(targetConvId)) {
+            try {
+              await api.updateConversationGroupImage(selectedMessage.connectionGroupId, uploadedUrl)
+            } catch (fallbackErr) {
+              console.warn('updateConversationGroupImage fallback warning:', fallbackErr)
+            }
+          }
+        }
+      }
+
+      setMessages((current) => current.map((conv) => {
+        if (
+          String(conv.id) === String(selectedMessage.id) ||
+          (conv.connectionGroupId && String(conv.connectionGroupId) === String(selectedMessage.connectionGroupId))
+        ) {
+          return {
+            ...conv,
+            avatar: uploadedUrl,
+            groupImageUrl: uploadedUrl,
+            profileImageUrl: uploadedUrl,
+          }
+        }
+        return conv
+      }))
+      setIsConversationMenuOpen(false)
+    } catch (err) {
+      console.error('Failed to change group image:', err)
+      setConversationActionError(err.message || 'Could not change group image. Please try again.')
+    } finally {
+      setIsUploadingGroupImage(false)
+    }
   }
 
   async function sendReply(event) {
@@ -1900,10 +2038,14 @@ function Messages({
                   onClick={() => openMessageProfile(message)}
                 >
                   <span aria-hidden="true">{message.initials}</span>
-                  {message.avatar && (
+                  {(message.groupImageUrl || message.profileImageUrl || message.avatar) && (
                     <img
-                      src={message.avatar}
+                      key={message.groupImageUrl || message.profileImageUrl || message.avatar}
+                      src={message.groupImageUrl || message.profileImageUrl || message.avatar}
                       alt=""
+                      onLoad={(event) => {
+                        event.currentTarget.hidden = false
+                      }}
                       onError={(event) => {
                         event.currentTarget.hidden = true
                       }}
@@ -1957,14 +2099,25 @@ function Messages({
                     <button
                       className={`message-avatar message-profile-button avatar-${selectedMessage.color}`}
                       type="button"
-                      aria-label={`View ${selectedMessage.name}'s profile`}
-                      onClick={() => openMessageProfile(selectedMessage)}
+                      aria-label={selectedMessage.isGroupConversation ? 'Change group image' : `View ${selectedMessage.name}'s profile`}
+                      title={selectedMessage.isGroupConversation ? 'Click to change group image' : `View ${selectedMessage.name}'s profile`}
+                      onClick={() => {
+                        if (selectedMessage.isGroupConversation) {
+                          groupImageInputRef.current?.click()
+                        } else {
+                          openMessageProfile(selectedMessage)
+                        }
+                      }}
                     >
                       <span aria-hidden="true">{selectedMessage.initials}</span>
-                      {selectedMessage.avatar && (
+                      {(selectedMessage.groupImageUrl || selectedMessage.profileImageUrl || selectedMessage.avatar) && (
                         <img
-                          src={selectedMessage.avatar}
+                          key={selectedMessage.groupImageUrl || selectedMessage.profileImageUrl || selectedMessage.avatar}
+                          src={selectedMessage.groupImageUrl || selectedMessage.profileImageUrl || selectedMessage.avatar}
                           alt=""
+                          onLoad={(event) => {
+                            event.currentTarget.hidden = false
+                          }}
                           onError={(event) => {
                             event.currentTarget.hidden = true
                           }}
@@ -1973,12 +2126,44 @@ function Messages({
                     </button>
                     <div>
                       <h2>{selectedMessage.name}</h2>
-                      <p>{selectedMessage.sponsored
-                        ? 'Passionate about solving business challenges, driving growth, and creating impact.'
-                        : selectedMessage.description}</p>
+                      {selectedMessage.isGroupConversation ? (
+                        <button
+                          type="button"
+                          className="change-group-image-link"
+                          onClick={() => groupImageInputRef.current?.click()}
+                          disabled={isUploadingGroupImage}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: '#0a66c2',
+                            cursor: 'pointer',
+                            fontSize: '0.82rem',
+                            padding: 0,
+                            margin: 0,
+                            textAlign: 'left',
+                            display: 'block',
+                          }}
+                        >
+                          {isUploadingGroupImage ? 'Uploading image…' : 'Change group image'}
+                        </button>
+                      ) : (
+                        <p>{selectedMessage.sponsored
+                          ? 'Passionate about solving business challenges, driving growth, and creating impact.'
+                          : selectedMessage.description}</p>
+                      )}
                     </div>
                   </div>
                   <div className="message-detail-actions">
+                    {selectedMessage.isGroupConversation && (
+                      <input
+                        ref={groupImageInputRef}
+                        type="file"
+                        accept="image/*"
+                        style={{ display: 'none' }}
+                        onChange={handleGroupImageUpload}
+                        disabled={isUploadingGroupImage}
+                      />
+                    )}
                     <div className="conversation-menu-wrap" ref={conversationMenuRef}>
                       <button
                         className="messages-icon-button"
@@ -1994,6 +2179,19 @@ function Messages({
                       </button>
                       {isConversationMenuOpen && (
                         <div className="conversation-options-menu" role="menu">
+                          {selectedMessage.isGroupConversation && (
+                            <button
+                              type="button"
+                              role="menuitem"
+                              disabled={isUploadingGroupImage}
+                              onClick={() => {
+                                setIsConversationMenuOpen(false)
+                                groupImageInputRef.current?.click()
+                              }}
+                            >
+                              {isUploadingGroupImage ? 'Uploading photo…' : 'Change group photo'}
+                            </button>
+                          )}
                           <button
                             type="button"
                             role="menuitem"

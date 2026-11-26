@@ -36,6 +36,7 @@ public class SettingsService {
             "public-profile", true,
             "profile_visibility", true,
             "activityStatus", true,
+            "activeStatus", true,
             "searchVisibility", true
     );
     private static final Map<String, Object> DEFAULT_RESTRICTED_PREFERENCES = Map.of(
@@ -337,6 +338,7 @@ public class SettingsService {
         String key = resolveSettingsKey(caller);
         Map<String, Object> merged;
         Boolean profileVisibilityVal = null;
+        Boolean activityStatusVal = null;
         if (prefs != null) {
             for (String alias : List.of("profileVisibility", "publicProfile", "public-profile", "profile_visibility")) {
                 if (prefs.containsKey(alias)) {
@@ -346,6 +348,18 @@ public class SettingsService {
                         break;
                     } else if (v instanceof String s) {
                         profileVisibilityVal = !"false".equalsIgnoreCase(s.trim()) && !"off".equalsIgnoreCase(s.trim());
+                        break;
+                    }
+                }
+            }
+            for (String alias : List.of("activityStatus", "activeStatus", "activity-status", "active_status", "activity_status")) {
+                if (prefs.containsKey(alias)) {
+                    Object v = prefs.get(alias);
+                    if (v instanceof Boolean b) {
+                        activityStatusVal = b;
+                        break;
+                    } else if (v instanceof String s) {
+                        activityStatusVal = !"false".equalsIgnoreCase(s.trim()) && !"off".equalsIgnoreCase(s.trim());
                         break;
                     }
                 }
@@ -367,6 +381,13 @@ public class SettingsService {
                 merged.put("public-profile", profileVisibilityVal);
                 merged.put("profile_visibility", profileVisibilityVal);
             }
+            if (activityStatusVal != null) {
+                merged.put("activityStatus", activityStatusVal);
+                merged.put("activeStatus", activityStatusVal);
+                merged.put("activity-status", activityStatusVal);
+                merged.put("active_status", activityStatusVal);
+                merged.put("activity_status", activityStatusVal);
+            }
             entity.setPrivacyJson(toJson(merged));
             entity.setUpdatedAt(LocalDateTime.now());
             userSettingsRepository.save(entity);
@@ -377,6 +398,13 @@ public class SettingsService {
                 merged.put("publicProfile", profileVisibilityVal);
                 merged.put("public-profile", profileVisibilityVal);
                 merged.put("profile_visibility", profileVisibilityVal);
+            }
+            if (activityStatusVal != null) {
+                merged.put("activityStatus", activityStatusVal);
+                merged.put("activeStatus", activityStatusVal);
+                merged.put("activity-status", activityStatusVal);
+                merged.put("active_status", activityStatusVal);
+                merged.put("activity_status", activityStatusVal);
             }
         }
 
@@ -847,6 +875,34 @@ public class SettingsService {
         }
         if (val == null) {
             val = prefs.get("profile_visibility");
+        }
+        if (val instanceof Boolean b) {
+            return b;
+        }
+        if (val instanceof String s) {
+            return !"false".equalsIgnoreCase(s.trim()) && !"off".equalsIgnoreCase(s.trim());
+        }
+        return true;
+    }
+
+    @Transactional(readOnly = true)
+    public boolean isActivityStatusEnabled(String userIdentifier) {
+        if (userIdentifier == null || userIdentifier.isBlank()) {
+            return true;
+        }
+        Map<String, Object> prefs = getPrivacyPreferencesForUser(userIdentifier);
+        Object val = prefs.get("activityStatus");
+        if (val == null) {
+            val = prefs.get("activeStatus");
+        }
+        if (val == null) {
+            val = prefs.get("activity-status");
+        }
+        if (val == null) {
+            val = prefs.get("active_status");
+        }
+        if (val == null) {
+            val = prefs.get("activity_status");
         }
         if (val instanceof Boolean b) {
             return b;

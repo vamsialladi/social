@@ -149,6 +149,17 @@ public class PostService {
         return toUserAwareDto(post, userIdentity);
     }
 
+    private ProfileEntity findCurrentProfileSafely(String userEmail) {
+        if (profileService == null || userEmail == null || userEmail.isBlank()) {
+            return null;
+        }
+        try {
+            return profileService.findCurrentProfile(userEmail);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     @Transactional
     public Map<String, Object> createPost(CreatePostRequest req, String userEmail) {
         boolean hasTextContent = req != null && req.getContent() != null && !req.getContent().trim().isEmpty();
@@ -158,19 +169,22 @@ public class PostService {
         if (req == null || (!hasTextContent && !hasMedia)) {
             throw new BadRequestException("Post content cannot be empty.");
         }
-        ProfileEntity currentProfile = profileService.findCurrentProfile(userEmail);
+        ProfileEntity currentProfile = findCurrentProfileSafely(userEmail);
         boolean directProfile = isDirectProfileMatch(currentProfile, userEmail);
 
         PostEntity post = new PostEntity();
-        if (directProfile) {
+        if (directProfile && currentProfile != null) {
             post.setAuthorId(currentProfile.getUserId() != null ? currentProfile.getUserId() : "me");
+            post.setAuthorName(currentProfile.getName() != null ? currentProfile.getName() : "Cinema Professional");
+            post.setAuthorAvatar(currentProfile.getProfileImageUrl());
+            post.setAuthorHeadline(currentProfile.getPrimaryCraft() != null ? currentProfile.getPrimaryCraft()
+                    : "Film Industry Professional");
         } else {
-            post.setAuthorId(userEmail.trim().toLowerCase(Locale.ROOT));
+            post.setAuthorId(userEmail != null ? userEmail.trim().toLowerCase(Locale.ROOT) : "me");
+            post.setAuthorName("Cinema Professional");
+            post.setAuthorAvatar(null);
+            post.setAuthorHeadline("Film Industry Professional");
         }
-        post.setAuthorName(currentProfile.getName() != null ? currentProfile.getName() : "Cinema Professional");
-        post.setAuthorAvatar(currentProfile.getProfileImageUrl());
-        post.setAuthorHeadline(currentProfile.getPrimaryCraft() != null ? currentProfile.getPrimaryCraft()
-                : "Film Industry Professional");
         post.setType(req.getType() != null ? req.getType().toLowerCase() : "post");
         boolean explicitAudience = req.getAudience() != null && !req.getAudience().isBlank();
         post.setAudience(explicitAudience ? normalizeAudience(req.getAudience()) : "public");
@@ -251,9 +265,9 @@ public class PostService {
         }
         PostEntity post = postRepository.findById(numericId)
                 .orElseThrow(() -> new ResourceNotFoundException("Post", "id", id));
-        ProfileEntity currentProfile = profileService.findCurrentProfile(userEmail);
+        ProfileEntity currentProfile = findCurrentProfileSafely(userEmail);
         String authorId = post.getAuthorId() == null ? "" : post.getAuthorId().trim();
-        boolean directProfile = isDirectProfileMatch(currentProfile, userEmail);
+        boolean directProfile = currentProfile != null && isDirectProfileMatch(currentProfile, userEmail);
         boolean isOwner = authorId.equalsIgnoreCase(userEmail.trim())
                 || (directProfile && currentProfile.getUserId() != null
                         && authorId.equalsIgnoreCase(currentProfile.getUserId().trim()))
@@ -294,9 +308,9 @@ public class PostService {
             throw new ResourceNotFoundException("Opportunity", "id", id);
         }
 
-        ProfileEntity currentProfile = profileService.findCurrentProfile(userEmail);
+        ProfileEntity currentProfile = findCurrentProfileSafely(userEmail);
         String authorId = post.getAuthorId() == null ? "" : post.getAuthorId().trim();
-        boolean directProfile = isDirectProfileMatch(currentProfile, userEmail);
+        boolean directProfile = currentProfile != null && isDirectProfileMatch(currentProfile, userEmail);
         boolean isOwner = authorId.equalsIgnoreCase(userEmail.trim())
                 || (directProfile && currentProfile.getUserId() != null
                         && authorId.equalsIgnoreCase(currentProfile.getUserId().trim()))
@@ -328,9 +342,9 @@ public class PostService {
         PostEntity post = postRepository.findById(numericId)
                 .orElseThrow(() -> new ResourceNotFoundException("Post", "id", id));
 
-        ProfileEntity currentProfile = profileService.findCurrentProfile(userEmail);
+        ProfileEntity currentProfile = findCurrentProfileSafely(userEmail);
         String authorId = post.getAuthorId() == null ? "" : post.getAuthorId().trim();
-        boolean directProfile = isDirectProfileMatch(currentProfile, userEmail);
+        boolean directProfile = currentProfile != null && isDirectProfileMatch(currentProfile, userEmail);
         boolean isOwner = authorId.equalsIgnoreCase(userEmail.trim())
                 || (directProfile && currentProfile.getUserId() != null
                         && authorId.equalsIgnoreCase(currentProfile.getUserId().trim()))
@@ -397,24 +411,26 @@ public class PostService {
         PostEntity post = postRepository.findById(numericId)
                 .orElseThrow(() -> new ResourceNotFoundException("Post", "id", id));
 
-        if (settingsService != null && !settingsService.isLikeCountEnabledForAuthor(post.getAuthorId())) {
-            Map<String, Object> res = new HashMap<>();
-            res.put("id", id);
-            res.put("postId", id);
-            res.put("liked", false);
-            res.put("likesCount", 0);
-            res.put("likeCountDisabled", true);
-            return res;
-        }
-
         post.toggleLikeForUser(identity);
         postRepository.save(post);
+
+        boolean isAuthor = isAuthorOfPost(post, identity);
+        boolean likeCountEnabled = settingsService == null || settingsService.isLikeCountEnabledForAuthor(post.getAuthorId());
 
         Map<String, Object> res = new HashMap<>();
         res.put("id", id);
         res.put("postId", id);
         res.put("liked", post.isLikedByUser(identity));
-        res.put("likesCount", post.getLikesCount());
+        res.put("isAuthor", isAuthor);
+        if (isAuthor || likeCountEnabled) {
+            res.put("likesCount", post.getLikesCount());
+            res.put("showLikesCount", true);
+            res.put("likeCountDisabled", false);
+        } else {
+            res.put("likesCount", 0);
+            res.put("showLikesCount", false);
+            res.put("likeCountDisabled", true);
+        }
         return res;
     }
 
@@ -425,7 +441,9 @@ public class PostService {
         }
         PostEntity post = postRepository.findById(numericId)
                 .orElseThrow(() -> new ResourceNotFoundException("Post", "id", id));
-        if (settingsService != null && !settingsService.isLikeCountEnabledForAuthor(post.getAuthorId())) {
+        boolean isAuthor = isAuthorOfPost(post, userIdentity);
+        boolean likeCountEnabled = settingsService == null || settingsService.isLikeCountEnabledForAuthor(post.getAuthorId());
+        if (!isAuthor && !likeCountEnabled) {
             return Collections.emptyList();
         }
 
@@ -496,23 +514,26 @@ public class PostService {
         }
         PostEntity post = postRepository.findById(numericId)
                 .orElseThrow(() -> new ResourceNotFoundException("Post", "id", id));
-        if (settingsService != null && !settingsService.isShareCountEnabledForAuthor(post.getAuthorId())) {
-            Map<String, Object> res = new LinkedHashMap<>();
-            res.put("id", id);
-            res.put("postId", id);
-            res.put("sharesCount", 0);
-            res.put("shareCountDisabled", true);
-            res.put("allowed", false);
-            return res;
-        }
         post.setSharesCount(post.getSharesCount() + 1);
         postRepository.save(post);
+
+        boolean isAuthor = isAuthorOfPost(post, userIdentity);
+        boolean shareCountEnabled = settingsService == null || settingsService.isShareCountEnabledForAuthor(post.getAuthorId());
 
         Map<String, Object> res = new LinkedHashMap<>();
         res.put("id", id);
         res.put("postId", id);
-        res.put("sharesCount", post.getSharesCount());
         res.put("allowed", true);
+        res.put("isAuthor", isAuthor);
+        if (isAuthor || shareCountEnabled) {
+            res.put("sharesCount", post.getSharesCount());
+            res.put("showSharesCount", true);
+            res.put("shareCountDisabled", false);
+        } else {
+            res.put("sharesCount", 0);
+            res.put("showSharesCount", false);
+            res.put("shareCountDisabled", true);
+        }
         return res;
     }
 
@@ -782,6 +803,11 @@ public class PostService {
 
     @Transactional
     public Map<String, Object> commentOnPost(String id, String text, String userEmail) {
+        return commentOnPost(id, text, userEmail, null);
+    }
+
+    @Transactional
+    public Map<String, Object> commentOnPost(String id, String text, String userEmail, String userName) {
         if (text == null || text.trim().isEmpty()) {
             throw new BadRequestException("Comment text cannot be empty.");
         }
@@ -794,10 +820,10 @@ public class PostService {
                 .orElseThrow(() -> new ResourceNotFoundException("Post", "id", id));
 
         String identity = resolveCommentIdentity(userEmail);
-        ProfileEntity authorProfile = profileService.findCurrentProfile(identity);
+        ProfileEntity authorProfile = findCurrentProfileSafely(identity);
 
         post.addComment(
-                resolveCommentAuthorName(authorProfile),
+                resolveCommentAuthorName(authorProfile, identity, userName),
                 resolveCommentAuthorAvatar(authorProfile),
                 identity,
                 text);
@@ -805,13 +831,13 @@ public class PostService {
 
         String postAuthorId = post.getAuthorId() != null ? post.getAuthorId().trim() : "";
         ProfileEntity postAuthorProfile = (!postAuthorId.isBlank() && profileService != null)
-                ? profileService.findCurrentProfile(postAuthorId)
+                ? findCurrentProfileSafely(postAuthorId)
                 : null;
         boolean commenterNotificationsEnabled = isPostingAndCommentingAllowed(identity, authorProfile);
         boolean postAuthorNotificationsEnabled = isPostingAndCommentingAllowed(postAuthorId, postAuthorProfile);
 
         if (notificationRepository != null && commenterNotificationsEnabled && postAuthorNotificationsEnabled) {
-            String commenterName = resolveCommentAuthorName(authorProfile);
+            String commenterName = resolveCommentAuthorName(authorProfile, identity, userName);
             String commentSnippet = text.length() > 50 ? text.substring(0, 50) + "…" : text;
             Set<String> commenterIdentities = resolveTargetUserIdentities(identity, authorProfile);
             Set<String> postAuthorIdentities = resolveTargetUserIdentities(postAuthorId, postAuthorProfile);
@@ -921,6 +947,11 @@ public class PostService {
 
     @Transactional
     public Map<String, Object> replyToComment(String postId, String commentId, String text, String userIdentity) {
+        return replyToComment(postId, commentId, text, userIdentity, null);
+    }
+
+    @Transactional
+    public Map<String, Object> replyToComment(String postId, String commentId, String text, String userIdentity, String userName) {
         if (text == null || text.trim().isEmpty()) {
             throw new BadRequestException("Reply text cannot be empty.");
         }
@@ -932,10 +963,10 @@ public class PostService {
         PostEntity post = postRepository.findById(numericId)
                 .orElseThrow(() -> new ResourceNotFoundException("Post", "id", postId));
         String identity = resolveCommentIdentity(userIdentity);
-        ProfileEntity authorProfile = profileService.findCurrentProfile(identity);
+        ProfileEntity authorProfile = findCurrentProfileSafely(identity);
         if (!post.addReply(
                 commentId,
-                resolveCommentAuthorName(authorProfile),
+                resolveCommentAuthorName(authorProfile, identity, userName),
                 resolveCommentAuthorAvatar(authorProfile),
                 identity,
                 text.trim())) {
@@ -946,13 +977,13 @@ public class PostService {
 
         String postAuthorId = post.getAuthorId() != null ? post.getAuthorId().trim() : "";
         ProfileEntity postAuthorProfile = (!postAuthorId.isBlank() && profileService != null)
-                ? profileService.findCurrentProfile(postAuthorId)
+                ? findCurrentProfileSafely(postAuthorId)
                 : null;
         boolean replierNotificationsEnabled = isPostingAndCommentingAllowed(identity, authorProfile);
         boolean postAuthorNotificationsEnabled = isPostingAndCommentingAllowed(postAuthorId, postAuthorProfile);
 
         if (notificationRepository != null && replierNotificationsEnabled && postAuthorNotificationsEnabled) {
-            String replierName = resolveCommentAuthorName(authorProfile);
+            String replierName = resolveCommentAuthorName(authorProfile, identity, userName);
             String replySnippet = text.trim().length() > 50 ? text.trim().substring(0, 50) + "…" : text.trim();
             Set<String> replierIdentities = resolveTargetUserIdentities(identity, authorProfile);
             Set<String> postAuthorIdentities = resolveTargetUserIdentities(postAuthorId, postAuthorProfile);
@@ -1293,7 +1324,7 @@ public class PostService {
             throw new UnauthorizedException("Sign in to delete comments.");
         }
 
-        ProfileEntity profile = profileService.findCurrentProfile(userIdentity);
+        ProfileEntity profile = findCurrentProfileSafely(userIdentity);
         Set<String> identities = new HashSet<>();
         identities.add(normalizeCommentOwnerIdentity(userIdentity));
         if (profile != null) {
@@ -1324,9 +1355,28 @@ public class PostService {
     }
 
     private String resolveCommentAuthorName(ProfileEntity profile) {
-        return profile != null && profile.getName() != null && !profile.getName().isBlank()
-                ? profile.getName()
-                : "Cinema Professional";
+        return resolveCommentAuthorName(profile, null, null);
+    }
+
+    private String resolveCommentAuthorName(ProfileEntity profile, String identity, String explicitName) {
+        if (profile != null && profile.getName() != null && !profile.getName().isBlank()) {
+            return profile.getName();
+        }
+        if (explicitName != null && !explicitName.isBlank()) {
+            return explicitName.trim();
+        }
+        if (identity != null && !identity.isBlank() && !"me".equalsIgnoreCase(identity.trim())) {
+            String clean = identity.trim();
+            if (clean.contains("@")) {
+                String prefix = clean.substring(0, clean.indexOf('@')).trim();
+                if (!prefix.isEmpty()) {
+                    return prefix;
+                }
+            } else {
+                return clean;
+            }
+        }
+        return "Cinema Professional";
     }
 
     private String resolveCommentAuthorAvatar(ProfileEntity profile) {
@@ -1346,6 +1396,45 @@ public class PostService {
         return identity;
     }
 
+    public boolean isAuthorOfPost(PostEntity post, String userIdentity) {
+        if (post == null || userIdentity == null || userIdentity.isBlank()) {
+            return false;
+        }
+        String normUser = normalizeCommentOwnerIdentity(userIdentity);
+        String normAuthor = normalizeCommentOwnerIdentity(post.getAuthorId());
+        if (normAuthor.isEmpty()) {
+            return false;
+        }
+        if (normAuthor.equals(normUser)) {
+            return true;
+        }
+        if ("me".equals(normUser) && ("pro@truehunt.in".equals(normAuthor) || "1000001".equals(normAuthor))) {
+            return true;
+        }
+        if ("me".equals(normAuthor) && ("pro@truehunt.in".equals(normUser) || "1000001".equals(normUser))) {
+            return true;
+        }
+        Set<String> callerIdentities = resolveOptionalCallerIdentities(userIdentity);
+        if (callerIdentities.contains(normAuthor)) {
+            return true;
+        }
+        if (profileService != null) {
+            try {
+                ProfileEntity authorProfile = profileService.findCurrentProfile(normAuthor);
+                if (authorProfile != null) {
+                    String authId = normalizeCommentOwnerIdentity(authorProfile.getUserId());
+                    String authEmail = normalizeCommentOwnerIdentity(authorProfile.getEmail());
+                    if (callerIdentities.contains(authId) || callerIdentities.contains(authEmail)
+                            || normUser.equals(authId) || normUser.equals(authEmail)) {
+                        return true;
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        return false;
+    }
+
     private Map<String, Object> toUserAwareDto(PostEntity post, String userIdentity) {
         Map<String, Object> dto = post.toDto(userIdentity);
         if ("opportunity".equalsIgnoreCase(post.getType())) {
@@ -1358,16 +1447,44 @@ public class PostService {
             dto.put("saved",
                     !key.isEmpty() && savedPostRepository.existsByUserEmailIgnoreCaseAndPostId(key, post.getId()));
         }
+        boolean isAuthor = isAuthorOfPost(post, userIdentity);
+        dto.put("isAuthor", isAuthor);
         if (settingsService != null) {
-            if (!settingsService.isLikeCountEnabledForAuthor(post.getAuthorId())) {
-                dto.put("likesCount", 0);
-                dto.put("liked", false);
-                dto.put("likeCountDisabled", true);
+            boolean likeCountEnabled = settingsService.isLikeCountEnabledForAuthor(post.getAuthorId());
+            boolean shareCountEnabled = settingsService.isShareCountEnabledForAuthor(post.getAuthorId());
+
+            if (isAuthor) {
+                // Original user ALWAYS sees the like and share counts
+                dto.put("likesCount", post.getLikesCount());
+                dto.put("sharesCount", post.getSharesCount());
+                dto.put("showLikesCount", true);
+                dto.put("showSharesCount", true);
+                dto.put("likeCountDisabled", false);
+                dto.put("shareCountDisabled", false);
+            } else {
+                // Other users: if author stopped the count, do NOT show to other users
+                if (!likeCountEnabled) {
+                    dto.put("likesCount", 0);
+                    dto.put("showLikesCount", false);
+                    dto.put("likeCountDisabled", true);
+                } else {
+                    dto.put("showLikesCount", true);
+                    dto.put("likeCountDisabled", false);
+                }
+                if (!shareCountEnabled) {
+                    dto.put("sharesCount", 0);
+                    dto.put("showSharesCount", false);
+                    dto.put("shareCountDisabled", true);
+                } else {
+                    dto.put("showSharesCount", true);
+                    dto.put("shareCountDisabled", false);
+                }
             }
-            if (!settingsService.isShareCountEnabledForAuthor(post.getAuthorId())) {
-                dto.put("sharesCount", 0);
-                dto.put("shareCountDisabled", true);
-            }
+        } else {
+            dto.put("showLikesCount", true);
+            dto.put("showSharesCount", true);
+            dto.put("likeCountDisabled", false);
+            dto.put("shareCountDisabled", false);
         }
         return dto;
     }

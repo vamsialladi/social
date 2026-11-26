@@ -13,7 +13,18 @@ import { getProfileStorageKey } from '../services/profileStorage';
 
 const SORTED_REGISTRATION_CRAFTS = [...REGISTRATION_CRAFTS].sort((first, second) => first.localeCompare(second));
 
-const normalizeIndianPhone = (value = '') => String(value).trim();
+const SUPPORTED_COUNTRIES = [
+  { code: 'IN', name: 'India', dialCode: '+91', digits: 10, pattern: '^[6-9]\\d{9}$', placeholder: 'Enter 10-digit mobile number' },
+  { code: 'US', name: 'United States', dialCode: '+1', digits: 10, pattern: '^[2-9]\\d{9}$', placeholder: 'Enter 10-digit mobile number' },
+  { code: 'GB', name: 'United Kingdom', dialCode: '+44', digits: 10, pattern: '^7\\d{9}$', placeholder: 'Enter 10-digit mobile number' },
+  { code: 'CA', name: 'Canada', dialCode: '+1', digits: 10, pattern: '^[2-9]\\d{9}$', placeholder: 'Enter 10-digit mobile number' },
+  { code: 'AU', name: 'Australia', dialCode: '+61', digits: 9, pattern: '^4\\d{8}$', placeholder: 'Enter 9-digit mobile number' },
+  { code: 'AE', name: 'United Arab Emirates', dialCode: '+971', digits: 9, pattern: '^5\\d{8}$', placeholder: 'Enter 9-digit mobile number' },
+  { code: 'DE', name: 'Germany', dialCode: '+49', digits: 10, pattern: '^1[5-7]\\d{8,9}$', placeholder: 'Enter mobile number' },
+  { code: 'SG', name: 'Singapore', dialCode: '+65', digits: 8, pattern: '^[89]\\d{7}$', placeholder: 'Enter 8-digit mobile number' },
+];
+
+const normalizePhoneInput = (value = '') => String(value).trim();
 
 const normalizeEmail = (value = '') => String(value).trim().toLowerCase();
 
@@ -28,22 +39,25 @@ const getEmailValidationError = (value = '') => {
   return '';
 };
 
-const getIndianPhoneError = (value = '') => {
-  const normalized = normalizeIndianPhone(value);
+const validatePhoneInput = (value = '', countryObj = SUPPORTED_COUNTRIES[0]) => {
+  const normalized = normalizePhoneInput(value);
   if (!normalized) {
     return 'Phone number is required.';
   }
+  if (!countryObj) {
+    return 'Please select a valid country.';
+  }
   if (/[a-zA-Z]/.test(normalized)) {
-    return 'Phone number must not contain alphabets.';
+    return 'Phone number must contain digits only.';
   }
   if (/[^0-9]/.test(normalized)) {
-    return 'Phone number must contain only digits (no spaces or special characters).';
+    return 'Phone number must contain digits only.';
   }
-  if (normalized.length !== 10) {
-    return 'Phone number must be exactly 10 digits.';
+  if (countryObj.digits && normalized.length !== countryObj.digits) {
+    return 'Please enter the correct number of digits for the selected country.';
   }
-  if (!/^[6-9]/.test(normalized)) {
-    return 'Indian mobile number must start with 6, 7, 8, or 9.';
+  if (countryObj.pattern && !new RegExp(countryObj.pattern).test(normalized)) {
+    return 'Please enter a valid mobile number for the selected country.';
   }
   return '';
 };
@@ -61,6 +75,7 @@ export default function JoinNowPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const [selectedRole, setSelectedRole] = useState('TALENT');
+  const [selectedCountryCode, setSelectedCountryCode] = useState('IN');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
@@ -149,7 +164,8 @@ export default function JoinNowPage() {
     secondaryCrafts.flatMap((secondaryCraft) => SUB_CRAFTS_BY_PRIMARY_CRAFT[secondaryCraft] || [])
   )].sort((first, second) => first.localeCompare(second));
 
-  const isPhoneValid = !getIndianPhoneError(phoneNumber);
+  const selectedCountry = SUPPORTED_COUNTRIES.find((c) => c.code === selectedCountryCode) || SUPPORTED_COUNTRIES[0];
+  const isPhoneValid = !validatePhoneInput(phoneNumber, selectedCountry);
 
   useEffect(() => {
     if (resendCooldown <= 0) return undefined;
@@ -163,19 +179,20 @@ export default function JoinNowPage() {
   const handleOtpRequest = async () => {
     if (sendingOtp || resendCooldown > 0) return;
 
-    const validationMessage = getIndianPhoneError(phoneNumber);
+    const validationMessage = validatePhoneInput(phoneNumber, selectedCountry);
     if (validationMessage) {
       setPhoneError(validationMessage);
       showNotification(validationMessage, 'error');
       return;
     }
 
-    const normalizedPhone = normalizeIndianPhone(phoneNumber);
+    const normalizedPhone = normalizePhoneInput(phoneNumber);
+    const fullPhone = `${selectedCountry.dialCode}${normalizedPhone}`;
     setSendingOtp(true);
     setPhoneError('');
     setErrorMsg('');
     try {
-      await api.auth.sendOtp(normalizedPhone);
+      await api.auth.sendOtp(fullPhone);
       setOtpRequested(true);
       setResendCooldown(30);
       showNotification('OTP request submitted. Enter the 6-digit code below.', 'success');
@@ -229,7 +246,7 @@ export default function JoinNowPage() {
     }
     setEmailError('');
 
-    const phoneValidationError = getIndianPhoneError(phoneNumber);
+    const phoneValidationError = validatePhoneInput(phoneNumber, selectedCountry);
     if (phoneValidationError) {
       setPhoneError(phoneValidationError);
       showRegistrationError(phoneValidationError);
@@ -272,13 +289,16 @@ export default function JoinNowPage() {
     setCaptchaError('');
 
     const normalizedEmail = normalizeEmail(email);
-    const normalizedPhone = normalizeIndianPhone(phoneNumber);
+    const normalizedPhone = normalizePhoneInput(phoneNumber);
     setLoading(true);
     try {
       const payload = {
         fullName,
         email: normalizedEmail,
         phoneNumber: normalizedPhone,
+        phone: normalizedPhone,
+        country: selectedCountry.code,
+        countryCode: selectedCountry.dialCode,
         otp: phoneOtp.trim(),
         password,
         confirmPassword,
@@ -624,34 +644,78 @@ export default function JoinNowPage() {
           </div>
 
           <div className="form-group">
-            <label className="form-label" htmlFor="phone-number">Phone Number *</label>
+            <label className="form-label" htmlFor="country-select">Country / Region *</label>
+            <select
+              id="country-select"
+              className="form-control"
+              value={selectedCountryCode}
+              onChange={(e) => {
+                const nextCode = e.target.value;
+                setSelectedCountryCode(nextCode);
+                const nextCountry = SUPPORTED_COUNTRIES.find((c) => c.code === nextCode) || SUPPORTED_COUNTRIES[0];
+                setPhoneOtp('');
+                setOtpRequested(false);
+                setResendCooldown(0);
+                if (phoneNumber) {
+                  setPhoneError(validatePhoneInput(phoneNumber, nextCountry));
+                }
+              }}
+              style={{ marginBottom: '14px' }}
+            >
+              {SUPPORTED_COUNTRIES.map((c) => (
+                <option key={c.code} value={c.code}>
+                  {c.name} ({c.dialCode})
+                </option>
+              ))}
+            </select>
+
+            <label className="form-label" htmlFor="phone-number">Mobile Number *</label>
             <div className="join-phone-otp-row">
-              <input
-                id="phone-number"
-                type="tel"
-                className={`form-control${phoneError ? ' is-invalid' : ''}`}
-                value={phoneNumber}
-                onChange={(e) => {
-                  const nextPhone = e.target.value;
-                  setPhoneNumber(nextPhone);
-                  setPhoneOtp('');
-                  setOtpRequested(false);
-                  setResendCooldown(0);
-                  setPhoneError(getIndianPhoneError(nextPhone));
-                  if (errorMsg) {
-                    setErrorMsg('');
-                  }
-                }}
-                onBlur={() => setPhoneError(getIndianPhoneError(phoneNumber))}
-                placeholder="Enter 10-digit mobile number (e.g. 9876543210)"
-                autoComplete="tel"
-                inputMode="numeric"
-                maxLength={20}
-                disabled={sendingOtp}
-                aria-invalid={Boolean(phoneError)}
-                aria-describedby={phoneError ? 'phone-number-error' : undefined}
-                required
-              />
+              <div style={{ display: 'flex', flex: 1, minWidth: 0, gap: '8px' }}>
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    padding: '0 12px',
+                    backgroundColor: 'var(--color-bg-page, #f3f4f6)',
+                    border: '1px solid var(--color-border, #d1d5db)',
+                    borderRadius: 'var(--radius-sm, 6px)',
+                    fontWeight: 600,
+                    fontSize: '14px',
+                    color: 'var(--color-text, #374151)',
+                    userSelect: 'none'
+                  }}
+                  title={`Dialing code: ${selectedCountry.dialCode}`}
+                >
+                  {selectedCountry.dialCode}
+                </span>
+                <input
+                  id="phone-number"
+                  type="tel"
+                  className={`form-control${phoneError ? ' is-invalid' : ''}`}
+                  value={phoneNumber}
+                  onChange={(e) => {
+                    const nextPhone = e.target.value;
+                    setPhoneNumber(nextPhone);
+                    setPhoneOtp('');
+                    setOtpRequested(false);
+                    setResendCooldown(0);
+                    setPhoneError(validatePhoneInput(nextPhone, selectedCountry));
+                    if (errorMsg) {
+                      setErrorMsg('');
+                    }
+                  }}
+                  onBlur={() => setPhoneError(validatePhoneInput(phoneNumber, selectedCountry))}
+                  placeholder={selectedCountry.placeholder || 'Enter mobile number'}
+                  autoComplete="tel"
+                  inputMode="numeric"
+                  maxLength={15}
+                  disabled={sendingOtp}
+                  aria-invalid={Boolean(phoneError)}
+                  aria-describedby={phoneError ? 'phone-number-error' : undefined}
+                  required
+                />
+              </div>
               <button
                 type="button"
                 className="btn btn-maroon"

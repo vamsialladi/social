@@ -75,44 +75,71 @@ public class ContactAccessService {
     }
 
     public Map<String, Object> getStatus(String targetProfileId, String requesterEmail) {
-        ProfileDto requester = profileService.getMyProfile(requireIdentity(requesterEmail));
-        ProfileDto owner = profileService.getProfileByIdForContactAccess(targetProfileId);
-        String requesterId = profileId(requester);
-        String ownerId = profileId(owner);
-        Optional<ContactAccessRequestEntity> request = requestRepository
-                .findFirstByRequesterProfileIdIgnoreCaseAndOwnerProfileIdIgnoreCaseOrderByCreatedAtDesc(
-                        requesterId,
-                        ownerId
-                );
+        try {
+            ProfileDto requester = profileService.getMyProfile(requireIdentity(requesterEmail));
+            ProfileDto owner = profileService.getProfileByIdForContactAccess(targetProfileId);
+            String requesterId = profileId(requester);
+            String ownerId = profileId(owner);
+            Optional<ContactAccessRequestEntity> request = requestRepository
+                    .findFirstByRequesterProfileIdIgnoreCaseAndOwnerProfileIdIgnoreCaseOrderByCreatedAtDesc(
+                            requesterId,
+                            ownerId
+                    );
 
-        Map<String, Object> response = new LinkedHashMap<>();
-        response.put("status", request.map(ContactAccessRequestEntity::getStatus).orElse("NONE"));
-        response.put("message", requestMessage(request.orElse(null)));
-        if (request.isPresent() && ACCEPTED.equalsIgnoreCase(request.get().getStatus())) {
-            ProfileDto approvedProfile = profileService.getProfileByIdForContactAccess(ownerId);
-            response.put("professionalPhone", approvedProfile.getProfessionalPhone());
-            response.put("email", approvedProfile.getEmail());
+            Map<String, Object> response = new LinkedHashMap<>();
+            response.put("status", request.map(ContactAccessRequestEntity::getStatus).orElse("NONE"));
+            response.put("message", requestMessage(request.orElse(null)));
+            if (request.isPresent() && ACCEPTED.equalsIgnoreCase(request.get().getStatus())) {
+                ProfileDto approvedProfile = profileService.getProfileByIdForContactAccess(ownerId);
+                response.put("professionalPhone", approvedProfile.getProfessionalPhone());
+                response.put("email", approvedProfile.getEmail());
+            }
+            return response;
+        } catch (Exception e) {
+            Map<String, Object> response = new LinkedHashMap<>();
+            response.put("status", "NONE");
+            response.put("message", "");
+            return response;
         }
-        return response;
     }
 
     public List<Map<String, Object>> getIncomingRequests(String ownerEmail) {
-        ProfileDto owner = profileService.getMyProfile(requireIdentity(ownerEmail));
-        return requestRepository
-                .findAllByOwnerProfileIdIgnoreCaseAndStatusOrderByCreatedAtDesc(profileId(owner), PENDING)
-                .stream()
-                .map(request -> toRequestDto(request, true))
-                .toList();
+        if (ownerEmail == null || ownerEmail.isBlank()) {
+            return List.of();
+        }
+        try {
+            ProfileDto owner = profileService.getMyProfile(requireIdentity(ownerEmail));
+            if (owner == null) {
+                return List.of();
+            }
+            return requestRepository
+                    .findAllByOwnerProfileIdIgnoreCaseAndStatusOrderByCreatedAtDesc(profileId(owner), PENDING)
+                    .stream()
+                    .map(request -> toRequestDto(request, true))
+                    .toList();
+        } catch (Exception e) {
+            return List.of();
+        }
     }
 
     public List<Map<String, Object>> getOutgoingRequests(String requesterEmail) {
-        ProfileDto requester = profileService.getMyProfile(requireIdentity(requesterEmail));
-        List<Map<String, Object>> results = new ArrayList<>();
-        for (ContactAccessRequestEntity request : requestRepository
-                .findAllByRequesterProfileIdIgnoreCaseOrderByCreatedAtDesc(profileId(requester))) {
-            results.add(toRequestDto(request, false));
+        if (requesterEmail == null || requesterEmail.isBlank()) {
+            return List.of();
         }
-        return results;
+        try {
+            ProfileDto requester = profileService.getMyProfile(requireIdentity(requesterEmail));
+            if (requester == null) {
+                return List.of();
+            }
+            List<Map<String, Object>> results = new ArrayList<>();
+            for (ContactAccessRequestEntity request : requestRepository
+                    .findAllByRequesterProfileIdIgnoreCaseOrderByCreatedAtDesc(profileId(requester))) {
+                results.add(toRequestDto(request, false));
+            }
+            return results;
+        } catch (Exception e) {
+            return List.of();
+        }
     }
 
     @Transactional
@@ -199,6 +226,9 @@ public class ContactAccessService {
         String id = profile.getUserId();
         if (id == null || id.isBlank()) {
             id = profile.getId();
+        }
+        if (id == null || id.isBlank()) {
+            id = profile.getEmail();
         }
         if (id == null || id.isBlank()) {
             throw new ResourceNotFoundException("Profile", "id", "current");

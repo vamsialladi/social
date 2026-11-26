@@ -1,5 +1,6 @@
 package com.truehunt.social.service;
 
+import com.truehunt.social.exception.ResourceNotFoundException;
 import com.truehunt.social.exception.UnauthorizedException;
 import com.truehunt.social.model.PostEntity;
 import com.truehunt.social.model.ProfileEntity;
@@ -103,6 +104,37 @@ class PostServiceCommentDeletionTest {
         List<Map<String, Object>> remainingReplies =
                 (List<Map<String, Object>>) post.getComments().get(0).get("replies");
         assertEquals(0, remainingReplies.size());
+        verify(postRepository).save(post);
+    }
+
+    @Test
+    void commentOnPostSucceedsWhenUserProfileNotFound() {
+        when(profileService.findCurrentProfile("aabbb@gmail.com"))
+                .thenThrow(new ResourceNotFoundException("Profile", "user", "aabbb@gmail.com"));
+
+        Map<String, Object> result = postService.commentOnPost("42", "hello", "aabbb@gmail.com");
+
+        assertEquals(2, post.getCommentsCount());
+        Map<String, Object> newComment = post.getComments().get(1);
+        assertEquals("hello", newComment.get("text"));
+        assertEquals("aabbb@gmail.com", newComment.get("authorId"));
+        assertEquals("aabbb", newComment.get("authorName"));
+        verify(postRepository).save(post);
+    }
+
+    @Test
+    void replyToCommentSucceedsWhenUserProfileNotFound() {
+        when(profileService.findCurrentProfile("aabbb@gmail.com"))
+                .thenThrow(new ResourceNotFoundException("Profile", "user", "aabbb@gmail.com"));
+
+        Map<String, Object> result = postService.replyToComment("42", commentId, "reply text", "aabbb@gmail.com");
+
+        List<?> replies = (List<?>) post.getComments().get(0).get("replies");
+        assertEquals(1, replies.size());
+        Map<?, ?> newReply = (Map<?, ?>) replies.get(0);
+        assertEquals("reply text", newReply.get("text"));
+        assertEquals("aabbb@gmail.com", newReply.get("authorId"));
+        assertEquals("aabbb", newReply.get("authorName"));
         verify(postRepository).save(post);
     }
 }
