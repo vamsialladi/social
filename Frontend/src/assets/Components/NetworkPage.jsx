@@ -354,7 +354,6 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
     (group) => String(group.id) === selectedGroupId,
   )
   const regularConnectionGroups = connectionGroups.filter((group) => !group.isBanner)
-  const bannerGroups = connectionGroups.filter((group) => group.isBanner)
   const selectedGroupProfileIds = selectedConnectionGroup
     ? Array.from(new Set(selectedConnectionGroup.followerUserIds || []))
     : []
@@ -1755,9 +1754,7 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
                         ? requestSectionProfiles.length
                         : label === 'Groups'
                           ? regularConnectionGroups.length
-                          : label === 'Banner'
-                            ? bannerGroups.length
-                            : ''
+                          : ''
                 )
                 return (
                   <button
@@ -1785,7 +1782,7 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
                   >
                     <Icon size={19} strokeWidth={2.2} aria-hidden="true" />
                     <span>{label}</span>
-                    <small>{displayCount}</small>
+                    {displayCount !== '' && <small>{displayCount}</small>}
                   </button>
                 )
               })}

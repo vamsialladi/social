@@ -1618,6 +1618,7 @@ export default function SocialApp() {
     if (!hash) return
 
     if (navigation !== 'casting') setSelectedModellingRequirement(null)
+    window.scrollTo(0, 0)
     window.dispatchEvent(new CustomEvent('truehunt-social-navigation-changed'))
     const nextUrl = navigation === 'profile' ? ownProfilePath : `/social/${hash}`
     if (window.location.hash !== `/${hash}`) {
