@@ -9,6 +9,7 @@
   import OpportunitiesPage from './OpportunitiesPage.jsx'
   import { EXPERIENCE_OPTIONS, REGISTRATION_CRAFTS, SUB_CRAFTS_BY_PRIMARY_CRAFT } from '../../services/mockData'
   import ProfileBanner from './ProfileBanner.jsx'
+  import PromotionCard from './PromotionCard'
 
   function formatHeightInFeet(heightCm) {
     const centimeters = Number(heightCm)
@@ -4573,7 +4574,7 @@
               </div>
 
               <aside className="artist-sidebar" id="artist-work">
-                <section className="home-promotion-card" aria-label="Sponsored movie industry promotion">
+                <PromotionCard ariaLabel="Sponsored movie industry promotion">
                   <div className="home-promotion-art">
                     <span className="home-promotion-label">PROMOTED</span>
                     <span className="home-promotion-art-title">THE NEXT<br />BIG PICTURE</span>
@@ -4598,7 +4599,7 @@
                       Explore film careers
                     </button>
                   </div>
-                </section>
+                </PromotionCard>
               </aside>
             </div>
           </section>

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import './Notification.css'
 import api from '../../api'
 import ProfileBanner from './ProfileBanner.jsx'
+import PromotionCard from './PromotionCard'
 
 function Notifications({
   profileDetails,
@@ -160,7 +161,7 @@ function Notifications({
           <span aria-hidden="true">›</span>
         </button>
 
-        <section className="home-promotion-card" aria-label="Sponsored movie industry promotion">
+        <PromotionCard ariaLabel="Sponsored movie industry promotion">
           <div className="home-promotion-art">
             <span className="home-promotion-label">PROMOTED</span>
             <span className="home-promotion-art-title">THE NEXT<br />BIG PICTURE</span>
@@ -185,7 +186,7 @@ function Notifications({
               Explore film careers
             </button>
           </div>
-        </section>
+        </PromotionCard>
       </aside>
 
       <section className="notifications-content" aria-labelledby="notifications-heading">

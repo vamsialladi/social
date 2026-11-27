@@ -3,6 +3,7 @@ import './Article.css'
 import api from '../../api'
 import MediaSafetyStatus from '../../components/common/MediaSafetyStatus.jsx'
 import { getMediaKind, useMediaSafety } from '../../hooks/useMediaSafety.js'
+import PromotionCard from './PromotionCard'
 
 function Article({ hidden, onBack, onPublish }) {
   const [title, setTitle] = useState('')
@@ -240,7 +241,7 @@ function Article({ hidden, onBack, onPublish }) {
           </div>
         </footer>
       </form>
-      <section className="home-promotion-card article-promotion-card" aria-label="Sponsored movie industry promotion">
+      <PromotionCard className="home-promotion-card article-promotion-card" ariaLabel="Sponsored movie industry promotion">
         <div className="home-promotion-art">
           <span className="home-promotion-label">PROMOTED</span>
           <span className="home-promotion-art-title">THE NEXT<br />BIG PICTURE</span>
@@ -265,7 +266,7 @@ function Article({ hidden, onBack, onPublish }) {
             Explore film careers
           </button>
         </div>
-      </section>
+      </PromotionCard>
     </main>
   )
 }

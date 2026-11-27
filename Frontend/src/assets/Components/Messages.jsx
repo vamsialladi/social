@@ -16,6 +16,7 @@ import api from '../../api'
 import { websocketService } from '../../services/websocket'
 import MediaSafetyStatus from '../../components/common/MediaSafetyStatus.jsx'
 import { getMediaKind, useMediaSafety } from '../../hooks/useMediaSafety.js'
+import PromotionCard from './PromotionCard'
 
 const categories = ['Opportunities', 'Unread', 'Connections', 'InMail', 'Starred']
 const mailboxOptions = ['Focused', 'Archived', ]
@@ -2513,7 +2514,7 @@ function Messages({
         </div>
 
         <aside className="messages-promotion-column" aria-label="Promotion">
-          <section className="home-promotion-card" aria-label="Promoted film career opportunity">
+          <PromotionCard ariaLabel="Promoted film career opportunity">
             <div className="home-promotion-art">
               <span className="home-promotion-label">PROMOTED</span>
               <span className="home-promotion-art-title">THE NEXT<br />BIG PICTURE</span>
@@ -2524,7 +2525,7 @@ function Messages({
               <p>Northstar Films is meeting new writers, actors, and independent filmmakers for upcoming productions.</p>
               <span className="home-promotion-caption">Make your mark in the movies.</span>
             </div>
-          </section>
+          </PromotionCard>
           <footer className="messages-sidebar-footer" aria-label="Messages information">
             <a href="/" onClick={(event) => event.preventDefault()}>About</a>
             <a href="/" onClick={(event) => event.preventDefault()}>Help Center</a>

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { CalendarDays } from 'lucide-react'
 import '../../App.css'
 import { api } from '../../api'
 import { api as directoryApi } from '../../services/api'
@@ -14,6 +15,8 @@ import ProfilePage, { emptyProfileDetails } from './ProfilePage'
 import ConnectionsPage from './ConnectionsPage'
 import CastingPage from './CastingPage'
 import Settings from './Settings'
+import CalendarPage from './Calendar'
+import PromotionCard from './PromotionCard'
 import { useAuth } from '../../context/AuthContext'
 import { websocketService } from '../../services/websocket'
 import { hasVisitedFilmMaker, markFilmMakerVisited } from '../../services/filmMakerAccess'
@@ -45,6 +48,7 @@ const navigationHashes = {
   profile: 'profile',
   connections: 'connections',
   settings: 'settings',
+  calendar: 'calendar',
   'account-settings': 'account-settings',
   business: 'business',
 }
@@ -1251,7 +1255,7 @@ function Navigation({
           </button>
           <div className={`linkedin-profile-menu${isProfileMenuOpen ? ' is-open' : ''}`} ref={profileMenuRef}>
             <button
-              className={`linkedin-nav-item linkedin-me${['profile', 'settings', 'account-settings'].includes(activeNavigation) ? ' is-active' : ''}`}
+              className={`linkedin-nav-item linkedin-me${['profile', 'settings', 'calendar', 'account-settings'].includes(activeNavigation) ? ' is-active' : ''}`}
               type="button"
               onClick={() => setIsProfileMenuOpen((open) => !open)}
               aria-expanded={isProfileMenuOpen}
@@ -1298,6 +1302,14 @@ function Navigation({
                   }}
                 >
                   Settings
+                </button>
+                <button
+                  className="profile-dropdown-item"
+                  type="button"
+                  role="menuitem"
+                  onClick={() => selectNavigation('calendar')}
+                >
+                  Calendar
                 </button>
                 <button
                   className="profile-dropdown-item"
@@ -2230,6 +2242,13 @@ export default function SocialApp() {
         />
       )}
 
+      {activeNavigation === 'calendar' && (
+        <CalendarPage
+          key={profileStorageKey || 'guest'}
+          storageKey={profileStorageKey ? `${profileStorageKey}:calendar` : null}
+        />
+      )}
+
       {['account-settings', 'business'].includes(activeNavigation) && (
         <section className="navigation-placeholder">
           <h1>
@@ -2252,7 +2271,7 @@ export default function SocialApp() {
               <button className="secondary-button" type="button" onClick={() => setActiveNavigation('profile')}>
                 Return to profile
               </button>
-              <section className="home-promotion-card" aria-label="Sponsored movie industry promotion">
+              <PromotionCard ariaLabel="Sponsored movie industry promotion">
                 <div className="home-promotion-art">
                   <span className="home-promotion-label">PROMOTED</span>
                   <span className="home-promotion-art-title">THE NEXT<br />BIG PICTURE</span>
@@ -2277,7 +2296,7 @@ export default function SocialApp() {
                     Explore film careers
                   </button>
                 </div>
-              </section>
+              </PromotionCard>
             </>
           )}
         </section>
