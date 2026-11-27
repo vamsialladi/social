@@ -9,8 +9,6 @@ import com.truehunt.social.service.MessageService;
 import jakarta.validation.Valid;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -35,23 +33,7 @@ public class ConversationController {
     }
 
     private String resolveCaller(HttpServletRequest request) {
-        String email = authenticatedUserResolver.resolveEmail(request);
-        if (email != null && !email.isBlank()) {
-            return email.trim();
-        }
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth != null && auth.isAuthenticated() && !"anonymousUser".equals(auth.getPrincipal())) {
-            return auth.getName();
-        }
-        String headerEmail = request.getHeader("X-User-Email");
-        if (headerEmail != null && !headerEmail.isBlank()) {
-            return headerEmail.trim();
-        }
-        String headerId = request.getHeader("X-User-Id");
-        if (headerId != null && !headerId.isBlank()) {
-            return headerId.trim();
-        }
-        return authenticatedUserResolver.requireEmail(request);
+        return authenticatedUserResolver.requireJwtEmail(request);
     }
 
     @GetMapping

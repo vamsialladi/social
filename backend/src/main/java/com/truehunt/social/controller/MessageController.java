@@ -48,7 +48,7 @@ public class MessageController {
             @RequestBody ChatMessageDto message,
             HttpServletRequest request
     ) {
-        Principal callerPrincipal = () -> authenticatedUserResolver.requireEmail(request);
+        Principal callerPrincipal = () -> authenticatedUserResolver.requireJwtEmail(request);
         ChatMessageDto result = messageService.processAndSendMessage(message, callerPrincipal);
         return ResponseEntity.ok(ApiResponse.success(result));
     }
@@ -62,7 +62,7 @@ public class MessageController {
             @PathVariable Long conversationId,
             HttpServletRequest request
     ) {
-        String caller = authenticatedUserResolver.requireEmail(request);
+        String caller = authenticatedUserResolver.requireJwtEmail(request);
         List<Map<String, Object>> messages = messageService.getMessagesForConversation(conversationId, caller);
         return ResponseEntity.ok(ApiResponse.success(messages));
     }

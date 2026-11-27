@@ -45,4 +45,18 @@ public class AuthenticatedUserResolver {
         }
         return email;
     }
+
+    public String requireJwtEmail(HttpServletRequest request) {
+        String authorization = request.getHeader("Authorization");
+        if (authorization != null && authorization.startsWith("Bearer ")) {
+            String token = authorization.substring(7);
+            if (tokenProvider.validateToken(token)) {
+                String email = tokenProvider.getEmailFromToken(token);
+                if (email != null && !email.isBlank()) {
+                    return email.trim();
+                }
+            }
+        }
+        throw new UnauthorizedException("A valid sign-in is required for messaging.");
+    }
 }

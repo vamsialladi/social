@@ -70,6 +70,18 @@ async function fetchJson(endpoint, options = {}) {
 }
 
 export const api = {
+  // Calendar
+  getCalendarEntries: () => fetchJson("/calendar/entries"),
+  saveCalendarEntry: (entry) =>
+    fetchJson("/calendar/entries", { method: "POST", body: entry }),
+  updateCalendarTask: (entryId, completed) =>
+    fetchJson(`/calendar/entries/${encodeURIComponent(entryId)}`, {
+      method: "PATCH",
+      body: { completed },
+    }),
+  deleteCalendarEntry: (entryId) =>
+    fetchJson(`/calendar/entries/${encodeURIComponent(entryId)}`, { method: "DELETE" }),
+
   // Profiles
   getProfile: () => fetchJson("/profiles/me"),
   getProfileById: (id) => fetchJson(`/profiles/${encodeURIComponent(id)}`),

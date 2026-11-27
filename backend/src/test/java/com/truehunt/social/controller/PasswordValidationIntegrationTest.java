@@ -122,6 +122,7 @@ class PasswordValidationIntegrationTest {
     @Test
     void registrationHashesPasswordWithBcryptNeverExposesHashAndSupportsLoginRateLimiting() throws Exception {
         String email = "pw.valid." + System.nanoTime() + "@truehunt.in";
+        String phoneNumber = uniqueIndianPhoneNumber();
         String strongPassword = "Cinema@2026";
 
         MvcResult regResult = mockMvc.perform(post("/api/auth/register")
@@ -130,12 +131,13 @@ class PasswordValidationIntegrationTest {
                                 {
                                   "fullName": "Priya Nair",
                                   "email": "%s",
+                                  "phoneNumber": "%s",
                                   "password": "%s",
                                   "confirmPassword": "%s",
                                   "role": "TALENT",
                                   "craft": "Director"
                                 }
-                                """.formatted(email, strongPassword, strongPassword)))
+                                """.formatted(email, phoneNumber, strongPassword, strongPassword)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.token").isNotEmpty())
@@ -195,6 +197,7 @@ class PasswordValidationIntegrationTest {
     @Test
     void changePasswordVerifiesCurrentPasswordValidatesNewPasswordAndConfirmMatch() throws Exception {
         String email = "pw.change." + System.nanoTime() + "@truehunt.in";
+        String phoneNumber = uniqueIndianPhoneNumber();
         String initialPassword = "Cinema@2026";
         String nextPassword = "Studio#2027";
 
@@ -204,12 +207,13 @@ class PasswordValidationIntegrationTest {
                                 {
                                   "fullName": "Arjun Mehta",
                                   "email": "%s",
+                                  "phoneNumber": "%s",
                                   "password": "%s",
                                   "confirmPassword": "%s",
                                   "role": "TALENT",
                                   "craft": "Acting"
                                 }
-                                """.formatted(email, initialPassword, initialPassword)))
+                                """.formatted(email, phoneNumber, initialPassword, initialPassword)))
                 .andExpect(status().isOk())
                 .andReturn();
         String userId = objectMapper.readTree(regRes.getResponse().getContentAsString())
@@ -276,9 +280,14 @@ class PasswordValidationIntegrationTest {
         assertTrue(passwordEncoder.matches(nextPassword, updated.getPasswordHash()));
     }
 
+    private String uniqueIndianPhoneNumber() {
+        return "9" + String.format("%09d", Math.floorMod(System.nanoTime(), 1_000_000_000L));
+    }
+
     @Test
     void forgotAndResetPasswordSupportsValidTokenRejectsExpiredAndReusedTokens() throws Exception {
         String email = "pw.reset." + System.nanoTime() + "@truehunt.in";
+        String phoneNumber = uniqueIndianPhoneNumber();
         String originalPassword = "Cinema@2026";
         String resetPassword = "Director$2028";
 
@@ -288,12 +297,13 @@ class PasswordValidationIntegrationTest {
                                 {
                                   "fullName": "Meera Iyer",
                                   "email": "%s",
+                                  "phoneNumber": "%s",
                                   "password": "%s",
                                   "confirmPassword": "%s",
                                   "role": "TALENT",
                                   "craft": "Editing"
                                 }
-                                """.formatted(email, originalPassword, originalPassword)))
+                                """.formatted(email, phoneNumber, originalPassword, originalPassword)))
                 .andExpect(status().isOk());
 
         // 1. Request reset for existing account -> does NOT expose token in HTTP response

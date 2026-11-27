@@ -1,7 +1,6 @@
 package com.truehunt.social.controller;
 
 import com.truehunt.social.dto.SendMessageRequest;
-import com.truehunt.social.exception.UnauthorizedException;
 import com.truehunt.social.security.AuthenticatedUserResolver;
 import com.truehunt.social.service.ConversationService;
 import com.truehunt.social.service.MessageService;
@@ -41,9 +40,7 @@ class ConversationControllerIdentityTest {
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken("viewer@example.com", "token", List.of())
         );
-        when(userResolver.resolveEmail(request)).thenReturn(null);
-        when(userResolver.requireEmail(request))
-                .thenThrow(new UnauthorizedException("A valid sign-in is required."));
+        when(userResolver.requireJwtEmail(request)).thenReturn("viewer@example.com");
         when(conversationService.editMessage("12", "34", "Updated message", "viewer@example.com"))
                 .thenReturn(Map.of("id", "12"));
 
@@ -66,9 +63,7 @@ class ConversationControllerIdentityTest {
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken("viewer@example.com", "token", List.of())
         );
-        when(userResolver.resolveEmail(request)).thenReturn(null);
-        when(userResolver.requireEmail(request))
-                .thenThrow(new UnauthorizedException("A valid sign-in is required."));
+        when(userResolver.requireJwtEmail(request)).thenReturn("viewer@example.com");
         when(conversationService.clearMessages("12", "viewer@example.com"))
                 .thenReturn(Map.of("id", "12"));
 

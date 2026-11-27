@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { CalendarDays, Check, ChevronLeft, ChevronRight, Plus, Trash2 } from 'lucide-react'
+import api from '../../api'
 import './Calendar.css'
 
 const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -49,6 +50,51 @@ export default function CalendarPage({ storageKey }) {
   const [time, setTime] = useState('')
   const [details, setDetails] = useState('')
   const [storageError, setStorageError] = useState('')
+  const [syncError, setSyncError] = useState('')
+
+  useEffect(() => {
+    if (!storageKey) return undefined
+
+    let isCurrent = true
+    async function syncCalendarEntries() {
+      try {
+        const remoteEntries = await api.getCalendarEntries()
+        const remoteById = new Map(
+          remoteEntries.map((entry) => [String(entry.id), entry]),
+        )
+        const localEntries = readEntries(storageKey)
+
+        for (const entry of localEntries) {
+          if (!remoteById.has(String(entry.id))) {
+            const savedEntry = await api.saveCalendarEntry(entry)
+            remoteById.set(String(savedEntry.id), savedEntry)
+          }
+        }
+
+        if (!isCurrent) return
+        const latestLocalEntries = readEntries(storageKey)
+        const mergedById = new Map(remoteById)
+        latestLocalEntries.forEach((entry) => {
+          if (!mergedById.has(String(entry.id))) {
+            mergedById.set(String(entry.id), entry)
+          }
+        })
+        const mergedEntries = [...mergedById.values()]
+        setEntries(mergedEntries)
+        window.localStorage.setItem(storageKey, JSON.stringify(mergedEntries))
+        setSyncError('')
+      } catch (error) {
+        if (!isCurrent) return
+        console.error('Could not sync calendar entries:', error)
+        setSyncError('Calendar reminders could not sync. Your entries remain saved on this device.')
+      }
+    }
+
+    syncCalendarEntries()
+    return () => {
+      isCurrent = false
+    }
+  }, [storageKey])
 
   function saveEntries(nextEntries) {
     setEntries(nextEntries)
@@ -99,7 +145,7 @@ export default function CalendarPage({ storageKey }) {
     const trimmedTitle = title.trim()
     if (!trimmedTitle) return
 
-    saveEntries([{
+    const newEntry = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
       title: trimmedTitle,
       type,
@@ -107,20 +153,50 @@ export default function CalendarPage({ storageKey }) {
       time,
       details: details.trim(),
       completed: false,
-    }, ...entries])
+    }
+    saveEntries([newEntry, ...entries])
+    if (storageKey) {
+      api.saveCalendarEntry(newEntry)
+        .then(() => setSyncError(''))
+        .catch((error) => {
+          console.error('Could not save calendar entry to the reminder service:', error)
+          setSyncError('This entry is saved on this device, but its reminder could not sync.')
+        })
+    }
     setTitle('')
     setTime('')
     setDetails('')
   }
 
-  function toggleTask(entryId) {
+  async function toggleTask(entryId) {
+    const selectedEntry = entries.find((entry) => entry.id === entryId)
+    if (storageKey && selectedEntry) {
+      try {
+        await api.updateCalendarTask(entryId, !selectedEntry.completed)
+      } catch (error) {
+        console.error('Could not update calendar task:', error)
+        setSyncError('The task status could not sync. Please try again.')
+        return
+      }
+    }
     saveEntries(entries.map((entry) => (
       entry.id === entryId ? { ...entry, completed: !entry.completed } : entry
     )))
+    setSyncError('')
   }
 
-  function removeEntry(entryId) {
+  async function removeEntry(entryId) {
+    if (storageKey) {
+      try {
+        await api.deleteCalendarEntry(entryId)
+      } catch (error) {
+        console.error('Could not delete calendar entry from the reminder service:', error)
+        setSyncError('The entry could not be deleted from reminders. Please try again.')
+        return
+      }
+    }
     saveEntries(entries.filter((entry) => entry.id !== entryId))
+    setSyncError('')
   }
 
   return (
@@ -236,6 +312,7 @@ export default function CalendarPage({ storageKey }) {
           </form>
 
           {storageError && <p className="calendar-storage-error" role="alert">{storageError}</p>}
+          {syncError && <p className="calendar-storage-error" role="alert">{syncError}</p>}
 
           <div className="calendar-entry-list">
             <h3>{selectedEntries.length ? `Your plans (${selectedEntries.length})` : 'Nothing planned yet'}</h3>

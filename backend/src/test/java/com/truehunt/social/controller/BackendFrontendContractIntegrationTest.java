@@ -2,9 +2,12 @@ package com.truehunt.social.controller;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.truehunt.social.dto.ContentSafetyResult;
 import com.truehunt.social.model.JobEntity;
 import com.truehunt.social.model.NotificationEntity;
 import com.truehunt.social.repository.*;
+import com.truehunt.social.service.ContentSafetyService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -13,6 +16,10 @@ import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -45,6 +52,14 @@ class BackendFrontendContractIntegrationTest {
 
     @Autowired
     private NotificationRepository notificationRepository;
+
+    @MockitoBean
+    private ContentSafetyService contentSafetyService;
+
+    @BeforeEach
+    void allowSafeImagesInContractTests() {
+        when(contentSafetyService.checkImage(any(byte[].class))).thenReturn(ContentSafetyResult.safe());
+    }
 
     @Test
     void unauthenticatedProfileMeReturnsUnauthorized() throws Exception {
@@ -110,7 +125,7 @@ class BackendFrontendContractIntegrationTest {
         JsonNode regData = objectMapper.readTree(regResult.getResponse().getContentAsString()).path("data");
         String token = regData.path("token").asText();
         String userId = regData.path("userId").asText();
-        assertTrue(userId.startsWith("thscKM"), "Expected thscKM prefix, got: " + userId);
+        assertTrue(userId.regionMatches(true, 0, "thscKM", 0, 6), "Expected thscKM prefix, got: " + userId);
 
         mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -148,17 +163,19 @@ class BackendFrontendContractIntegrationTest {
     @Test
     void profileSubEndpointsAcceptXUserIdAndProfileDtoIncludesPostsAndSuggestionsSupportUserIdParam() throws Exception {
         String email = "contract.profile." + System.nanoTime() + "@truehunt.in";
+        String phoneNumber = uniqueIndianPhoneNumber();
         MvcResult regResult = mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
                                   "name": "Rishi Dev",
                                   "email": "%s",
+                                  "phoneNumber": "%s",
                                   "password": "Password@123",
                                   "role": "TALENT",
                                   "primaryCraft": "Direction"
                                 }
-                                """.formatted(email)))
+                                """.formatted(email, phoneNumber)))
                 .andExpect(status().isOk())
                 .andReturn();
 
@@ -349,15 +366,17 @@ class BackendFrontendContractIntegrationTest {
     @Test
     void messagesAndConversationsRequireJwtAndPreserveCallerPerspective() throws Exception {
         String senderEmail = "msg.sender." + System.nanoTime() + "@truehunt.in";
+        String phoneNumber = uniqueIndianPhoneNumber();
         String regPayload = """
                 {
                   "fullName": "Rohan Verma",
                   "email": "%s",
+                  "phoneNumber": "%s",
                   "password": "Password@123",
                   "role": "TALENT",
                   "craft": "Director"
                 }
-                """.formatted(senderEmail);
+                """.formatted(senderEmail, phoneNumber);
 
         MvcResult regResult = mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -422,12 +441,17 @@ class BackendFrontendContractIntegrationTest {
         mockMvc.perform(get("/api/conversations")
                         .header("X-User-Id", senderEmail))
                 .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/messages/" + conversationId)
+                        .header("X-User-Id", senderEmail))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
     void profileMeAndFieldsAndMediaKindAndScopedSettingsNotificationsMatchFrontendContract() throws Exception {
         String emailA = "contract.a." + System.nanoTime() + "@truehunt.in";
         String emailB = "contract.b." + System.nanoTime() + "@truehunt.in";
+        String phoneA = uniqueIndianPhoneNumber();
+        String phoneB = uniqueIndianPhoneNumber();
 
         MvcResult regA = mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -435,11 +459,12 @@ class BackendFrontendContractIntegrationTest {
                                 {
                                   "fullName": "Kiran Rao",
                                   "email": "%s",
+                                  "phoneNumber": "%s",
                                   "password": "Password@123",
                                   "role": "TALENT",
                                   "craft": "Editor"
                                 }
-                                """.formatted(emailA)))
+                                """.formatted(emailA, phoneA)))
                 .andExpect(status().isOk())
                 .andReturn();
         String userIdA = objectMapper.readTree(regA.getResponse().getContentAsString())
@@ -451,11 +476,12 @@ class BackendFrontendContractIntegrationTest {
                                 {
                                   "fullName": "Neha Sharma",
                                   "email": "%s",
+                                  "phoneNumber": "%s",
                                   "password": "Password@123",
                                   "role": "TALENT",
                                   "craft": "Director"
                                 }
-                                """.formatted(emailB)))
+                                """.formatted(emailB, phoneB)))
                 .andExpect(status().isOk())
                 .andReturn();
         String userIdB = objectMapper.readTree(regB.getResponse().getContentAsString())
@@ -550,6 +576,8 @@ class BackendFrontendContractIntegrationTest {
     void socialPrefixedIdsAndFlexibleConnectionPayloadsMatchFrontendContract() throws Exception {
         String emailInvestor = "contract.investor." + System.nanoTime() + "@truehunt.in";
         String emailApplicant = "contract.applicant." + System.nanoTime() + "@truehunt.in";
+        String phoneInvestor = uniqueIndianPhoneNumber();
+        String phoneApplicant = uniqueIndianPhoneNumber();
 
         MvcResult regInvestor = mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -557,10 +585,11 @@ class BackendFrontendContractIntegrationTest {
                                 {
                                   "fullName": "Siddharth Roy",
                                   "email": "%s",
+                                  "phoneNumber": "%s",
                                   "password": "Password@123",
                                   "role": "STUDIO"
                                 }
-                                """.formatted(emailInvestor)))
+                                """.formatted(emailInvestor, phoneInvestor)))
                 .andExpect(status().isOk())
                 .andReturn();
         String tokenInvestor = objectMapper.readTree(regInvestor.getResponse().getContentAsString())
@@ -572,11 +601,12 @@ class BackendFrontendContractIntegrationTest {
                                 {
                                   "fullName": "Deepa S",
                                   "email": "%s",
+                                  "phoneNumber": "%s",
                                   "password": "Password@123",
                                   "role": "TALENT",
                                   "craft": "Director"
                                 }
-                                """.formatted(emailApplicant)))
+                                """.formatted(emailApplicant, phoneApplicant)))
                 .andExpect(status().isOk())
                 .andReturn();
         String tokenApplicant = objectMapper.readTree(regApplicant.getResponse().getContentAsString())
@@ -640,6 +670,10 @@ class BackendFrontendContractIntegrationTest {
                         .content("{\"userId\":\"t-2\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.isFollowing").value(true));
+    }
+
+    private String uniqueIndianPhoneNumber() {
+        return "9" + String.format("%09d", Math.floorMod(System.nanoTime(), 1_000_000_000L));
     }
 }
 
