@@ -347,6 +347,39 @@ export const api = {
     fetchJson(`/connections/profiles/${encodeURIComponent(profileId)}/mutual`),
   getConnectionGroups: () => fetchJson("/connections/groups"),
   getConnectionBanners: () => fetchJson("/connections/groups/banners"),
+  getOrganizationPages: () =>
+    fetchJson("/connections/groups/organization-pages", { cache: "no-store" }),
+  createOrganizationPage: (page) =>
+    fetchJson("/connections/groups/organization-pages", {
+      method: "POST",
+      body: page,
+    }),
+  updateOrganizationPage: (pageId, page) =>
+    fetchJson(`/connections/groups/organization-pages/${encodeURIComponent(pageId)}`, {
+      method: "PUT",
+      body: page,
+    }),
+  deleteOrganizationPage: (pageId) =>
+    fetchJson(`/connections/groups/organization-pages/${encodeURIComponent(pageId)}`, {
+      method: "DELETE",
+    }),
+  getOrganizationPageSubscriptionRequests: () =>
+    fetchJson("/connections/groups/organization-pages/subscription-requests", {
+      cache: "no-store",
+    }),
+  respondToOrganizationPageSubscriptionRequest: (requestId, decision) =>
+    fetchJson(
+      `/connections/groups/organization-pages/subscription-requests/${encodeURIComponent(requestId)}/respond`,
+      { method: "POST", body: { decision } },
+    ),
+  subscribeToOrganizationPage: (pageId) =>
+    fetchJson(`/connections/groups/organization-pages/${encodeURIComponent(pageId)}/subscribe`, {
+      method: "POST",
+    }),
+  unsubscribeFromOrganizationPage: (pageId) =>
+    fetchJson(`/connections/groups/organization-pages/${encodeURIComponent(pageId)}/subscribe`, {
+      method: "DELETE",
+    }),
   createConnectionGroup: (name, memberProfileIds, imageUrl = "") =>
     fetchJson("/connections/groups", {
       method: "POST",
@@ -377,7 +410,12 @@ export const api = {
       method: "DELETE",
     }),
   getConnectionGroupPosts: (id) =>
-    fetchJson(`/connections/groups/${encodeURIComponent(id)}/posts`),
+    fetchJson(`/connections/groups/${encodeURIComponent(id)}/posts`, { cache: "no-store" }),
+  recordConnectionGroupPostActivity: (groupId, postId, activity) =>
+    fetchJson(
+      `/connections/groups/${encodeURIComponent(groupId)}/posts/${encodeURIComponent(postId)}/activities`,
+      { method: "POST", body: activity },
+    ),
   createConnectionGroupPost: (id, post) =>
     fetchJson(`/connections/groups/${encodeURIComponent(id)}/posts`, {
       method: "POST",

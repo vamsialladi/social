@@ -3,7 +3,7 @@
   --network-muted: #74717b;
   --network-line: #e6e4e8;
   --home-blue: #0a66c2;
-  width: min(100%, 1120px);
+  width: min(100%, 1440px);
   min-height: calc(100vh - 86px);
   margin: 0 auto;
   color: var(--network-ink);
@@ -13,9 +13,9 @@
 
 .network-layout {
   display: grid;
-  grid-template-columns: minmax(230px, 288px) minmax(0, 1fr);
+  grid-template-columns: minmax(210px, 250px) minmax(0, 1fr);
   align-items: start;
-  gap: 18px;
+  gap: 14px;
 }
 
 .network-sidebar,
@@ -1709,7 +1709,7 @@
 
 .network-profile-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
 

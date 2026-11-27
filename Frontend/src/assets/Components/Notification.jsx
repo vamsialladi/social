@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import './Notification.css'
 import api from '../../api'
 import ProfileBanner from './ProfileBanner.jsx'
@@ -14,8 +14,10 @@ function Notifications({
 }) {
   const [notifications, setNotifications] = useState([])
   const [contactRequests, setContactRequests] = useState([])
+  const [subscriptionRequests, setSubscriptionRequests] = useState([])
   const [requestError, setRequestError] = useState('')
   const [respondingToRequestId, setRespondingToRequestId] = useState('')
+  const processedSubscriptionDecisionIdsRef = useRef(new Set())
   const name = profileDetails.name.trim() || 'Your name'
   const languages = [
     ...profileDetails.languages.filter((language) => language !== 'Other'),
@@ -28,14 +30,27 @@ function Notifications({
 
     let isCurrent = true
     async function loadNotifications() {
-      const [notificationsResult, requestsResult] = await Promise.allSettled([
+      const [notificationsResult, requestsResult, subscriptionRequestsResult] = await Promise.allSettled([
         api.getNotifications(),
         api.getIncomingContactAccessRequests(),
+        api.getOrganizationPageSubscriptionRequests(),
       ])
       if (!isCurrent) return
 
       if (notificationsResult.status === 'fulfilled' && Array.isArray(notificationsResult.value)) {
         setNotifications(notificationsResult.value)
+        const newDecision = notificationsResult.value.find((notification) => (
+          ['connection_page_subscription_accepted', 'connection_page_subscription_rejected']
+            .includes(notification.type)
+          && notification.id
+          && !processedSubscriptionDecisionIdsRef.current.has(String(notification.id))
+        ))
+        if (newDecision) {
+          processedSubscriptionDecisionIdsRef.current.add(String(newDecision.id))
+          window.dispatchEvent(new CustomEvent('truehunt-organization-page-subscription-changed', {
+            detail: { refresh: true },
+          }))
+        }
       } else if (notificationsResult.status === 'rejected') {
         console.warn('Backend notifications load error:', notificationsResult.reason)
       }
@@ -45,6 +60,13 @@ function Notifications({
       } else if (requestsResult.status === 'rejected') {
         console.warn('Contact access requests load error:', requestsResult.reason)
         setRequestError('Could not load contact requests. Please try again later.')
+      }
+
+      if (subscriptionRequestsResult.status === 'fulfilled' && Array.isArray(subscriptionRequestsResult.value)) {
+        setSubscriptionRequests(subscriptionRequestsResult.value)
+      } else if (subscriptionRequestsResult.status === 'rejected') {
+        console.warn('Organization page subscription requests load error:', subscriptionRequestsResult.reason)
+        setRequestError('Could not load page subscription requests. Please try again later.')
       }
     }
     loadNotifications()
@@ -77,6 +99,26 @@ function Notifications({
     } catch (error) {
       console.error(`Could not ${decision} contact access request:`, error)
       setRequestError(error.message || 'Could not update this request. Please try again.')
+    } finally {
+      setRespondingToRequestId('')
+    }
+  }
+
+  async function respondToSubscriptionRequest(requestId, decision) {
+    if (respondingToRequestId) return
+    setRespondingToRequestId(requestId)
+    setRequestError('')
+    try {
+      const response = await api.respondToOrganizationPageSubscriptionRequest(requestId, decision)
+      if (response?.page) {
+        window.dispatchEvent(new CustomEvent('truehunt-organization-page-subscription-changed', {
+          detail: { page: response.page },
+        }))
+      }
+      setSubscriptionRequests((current) => current.filter((request) => String(request.id) !== String(requestId)))
+    } catch (error) {
+      console.error(`Could not ${decision.toLowerCase()} page subscription request:`, error)
+      setRequestError(error.message || 'Could not update this subscription request. Please try again.')
     } finally {
       setRespondingToRequestId('')
     }
@@ -192,8 +234,42 @@ function Notifications({
       <section className="notifications-content" aria-labelledby="notifications-heading">
         <h2 id="notifications-heading">Notifications</h2>
         {requestError && <p className="notifications-request-error" role="alert">{requestError}</p>}
-        {notifications.length > 0 || contactRequests.length > 0 ? (
+        {notifications.length > 0 || contactRequests.length > 0 || subscriptionRequests.length > 0 ? (
           <div className="notifications-list">
+            {subscriptionRequests.map((request) => (
+              <article
+                className="notification-card contact-access-notification"
+                key={`subscription-${request.id}`}
+              >
+                <div>
+                  <div className="notification-card-heading">
+                    <strong>{request.pageName}</strong>
+                    {request.createdAt && <small>{new Date(request.createdAt).toLocaleDateString()}</small>}
+                  </div>
+                  <p className="notification-message">
+                    {request.requesterName} requested to subscribe to this page.
+                  </p>
+                </div>
+                <div className="contact-access-actions">
+                  <button
+                    className="contact-access-accept"
+                    type="button"
+                    onClick={() => respondToSubscriptionRequest(request.id, 'ACCEPT')}
+                    disabled={Boolean(respondingToRequestId)}
+                  >
+                    {String(respondingToRequestId) === String(request.id) ? 'Saving…' : 'Accept'}
+                  </button>
+                  <button
+                    className="contact-access-reject"
+                    type="button"
+                    onClick={() => respondToSubscriptionRequest(request.id, 'REJECT')}
+                    disabled={Boolean(respondingToRequestId)}
+                  >
+                    Reject
+                  </button>
+                </div>
+              </article>
+            ))}
             {contactRequests.map((request) => (
               <article className="notification-card contact-access-notification" key={`contact-${request.id}`}>
                 <p className="notification-message">{request.message}</p>
@@ -217,7 +293,15 @@ function Notifications({
                 </div>
               </article>
             ))}
-            {notifications.map((item) => (
+            {notifications
+              .filter((item) => !(
+                item.type === 'connection_page_subscription_request'
+                && subscriptionRequests.some((request) => (
+                  String(item.message || '').includes(request.requesterName)
+                  && String(item.message || '').includes(request.pageName)
+                ))
+              ))
+              .map((item) => (
               <article
                 className={`notification-card${item.type === 'endorsement_request' && item.senderProfileId ? ' is-actionable' : ''}`}
                 key={`notification-${item.id}`}

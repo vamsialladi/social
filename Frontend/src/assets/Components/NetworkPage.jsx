@@ -3,6 +3,7 @@ import api from '../../api'
 import MediaSafetyStatus from '../../components/common/MediaSafetyStatus.jsx'
 import { useMediaSafety } from '../../hooks/useMediaSafety.js'
 import ProfileBanner from './ProfileBanner.jsx'
+import BannerPageSetup from './BannerPageSetup'
 import {
   ArrowLeft,
   Check,
@@ -675,23 +676,6 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
     } catch (error) {
       console.error('Could not create connection group:', error)
       setGroupError(error.message || 'Could not create this group. Please try again.')
-    } finally {
-      setIsSavingGroup(false)
-    }
-  }
-
-  async function handleCreateBanner() {
-    if (isSavingGroup || loadingConnectionGroups) return
-
-    setIsSavingGroup(true)
-    setGroupError('')
-    try {
-      const createdBanner = await api.createConnectionBanner()
-      setConnectionGroups((current) => [createdBanner, ...current])
-      setSelectedGroupId(String(createdBanner.id))
-    } catch (error) {
-      console.error('Could not create banner group:', error)
-      setGroupError(error.message || 'Could not create your banner. Please try again.')
     } finally {
       setIsSavingGroup(false)
     }
@@ -2425,93 +2409,13 @@ function NetworkPage({ onMessage, onProfileSelect, currentUserIdentifiers = [], 
                 )}
               </section>
             ) : (
-              <section className="network-suggestions network-groups-section" aria-labelledby="network-banners-title">
-                <header className="network-section-heading">
-                  <div>
-                    <span className="network-section-eyebrow">YOUR NETWORK</span>
-                    <h2 id="network-banners-title">Banners</h2>
-                    <p>Share photos and videos with your followers. Only you can add media to your banner.</p>
-                  </div>
-                  <button
-                    className="network-group-create-button"
-                    type="button"
-                    disabled={isSavingGroup || loadingConnectionGroups}
-                    onClick={() => {
-                      const ownBanner = bannerGroups.find((group) => group.isOwner)
-                      if (ownBanner) {
-                        setSelectedGroupId(String(ownBanner.id))
-                      } else {
-                        void handleCreateBanner()
-                      }
-                    }}
-                  >
-                    {loadingConnectionGroups
-                      ? 'Loading…'
-                      : isSavingGroup
-                      ? 'Creating…'
-                      : bannerGroups.some((group) => group.isOwner) ? 'Open your banner' : 'Add your banner'}
-                  </button>
-                </header>
-                {groupError && <p className="network-connection-error" role="alert">{groupError}</p>}
-                {loadingConnectionGroups ? (
-                  <p role="status">Loading banners…</p>
-                ) : groupLoadError ? (
-                  <p className="network-connection-error" role="alert">{groupLoadError}</p>
-                ) : bannerGroups.length ? (
-                  <div className="network-group-list">
-                    {bannerGroups.map((group) => {
-                      const creator = findProfileByIdentity(group.ownerId)
-                      const creatorName = group.isOwner ? 'Your banner' : `${getProfileName(creator) || 'Member'}’s banner`
-                      return (
-                        <article className="network-group-card" key={group.id}>
-                          <div className="network-group-card-heading">
-                            <button
-                              className="network-group-title-button"
-                              type="button"
-                              aria-label={`Open ${creatorName}`}
-                              onClick={() => setSelectedGroupId(String(group.id))}
-                            >
-                              {renderGroupPhoto()}
-                              <span className="network-group-title-details">
-                                <strong>{creatorName}</strong>
-                                <span className="network-group-member-count">
-                                  {group.followerCount || 0} {(group.followerCount || 0) === 1 ? 'follower' : 'followers'}
-                                </span>
-                              </span>
-                            </button>
-                            {group.isOwner ? (
-                              <button
-                                className="network-group-followers-button"
-                                type="button"
-                                onClick={() => setViewingGroupFollowersId(String(group.id))}
-                              >
-                                Followers ({group.followerCount || 0})
-                              </button>
-                            ) : (
-                              <button
-                                className={`network-group-follow-button${group.isFollowing ? ' is-following' : ''}`}
-                                type="button"
-                                disabled={Boolean(updatingGroupFollowId)}
-                                aria-pressed={Boolean(group.isFollowing)}
-                                onClick={() => void toggleGroupFollow(group)}
-                              >
-                                {updatingGroupFollowId === String(group.id)
-                                  ? 'Updating…'
-                                  : group.isFollowing ? 'Following' : 'Follow'}
-                              </button>
-                            )}
-                          </div>
-                        </article>
-                      )
-                    })}
-                  </div>
-                ) : (
-                  <div className="network-connections-empty">
-                    <div className="network-catch-up-icon"><Image size={24} aria-hidden="true" /></div>
-                    <h3>No banners yet</h3>
-                    <p>Create your banner to share photos and videos with people who follow you.</p>
-                  </div>
-                )}
+              <section className="network-suggestions network-groups-section" aria-label="Organization page setup">
+                <BannerPageSetup
+                  key={currentUserIdentifiers.find(Boolean) || 'guest'}
+                  storageKey={currentUserIdentifiers.find(Boolean)
+                    ? `truehunt-network-page:${encodeURIComponent(String(currentUserIdentifiers.find(Boolean)).trim().toLowerCase())}`
+                    : null}
+                />
               </section>
             )
           ) : activeSection === 'connections' || activeSection === 'following' || activeSection === 'requests' ? (

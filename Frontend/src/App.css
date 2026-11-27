@@ -195,14 +195,10 @@
   box-sizing: border-box;
   width: calc(100% + 2 * clamp(20px, 4vw, 64px));
   height: 58px;
-  margin: -48px calc(-1 * clamp(20px, 4vw, 64px)) 28px;
+  margin: -48px calc(-1 * clamp(20px, 4vw, 64px)) 12px;
   border-bottom: 1px solid #e2e0e3;
   background: #fff;
   color: #5d5b60;
-}
-
-.cinemans-page.is-home .linkedin-navbar {
-  margin-bottom: 12px;
 }
 
 .linkedin-navbar-inner {
@@ -828,11 +824,7 @@
   .linkedin-navbar {
     width: auto;
     height: 58px;
-    margin: -32px -14px 20px;
-  }
-
-  .cinemans-page.is-home .linkedin-navbar {
-    margin-bottom: 10px;
+    margin: -32px -14px 10px;
   }
 
   .linkedin-navbar-inner {

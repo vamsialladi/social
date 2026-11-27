@@ -2015,7 +2015,7 @@ export default function SocialApp() {
   }, [user?.email, profileDetails.email])
 
   return (
-    <main className={`cinemans-page is-preview${activeNavigation === 'home' ? ' is-home' : ''}${activeNavigation === 'messaging' ? ' is-messaging' : ''}${theme === 'dark' ? ' is-dark' : ''}`}>
+    <main className={`cinemans-page is-preview${activeNavigation === 'home' ? ' is-home' : ''}${activeNavigation === 'messaging' ? ' is-messaging' : ''}${activeNavigation === 'network' ? ' is-network' : ''}${theme === 'dark' && activeNavigation !== 'profile' ? ' is-dark' : ''}`}>
       <Navigation
         activeNavigation={activeNavigation}
         setActiveNavigation={setActiveNavigation}

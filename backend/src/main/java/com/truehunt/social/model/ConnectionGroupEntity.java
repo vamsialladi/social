@@ -28,15 +28,34 @@ public class ConnectionGroupEntity {
     @Column(name = "owner_id", nullable = false)
     private String ownerId;
 
-    @Column(nullable = false, length = 80)
+    @Column(nullable = false, length = 100)
     private String name;
 
     @Column(name = "group_type", length = 20)
     private String groupType = "GROUP";
 
+    @Column(name = "owner_name", length = 120)
+    private String ownerName;
+
+    @Column(name = "public_url", length = 63)
+    private String publicUrl;
+
+    @Column(length = 255)
+    private String website;
+
+    @Column(length = 100)
+    private String industry;
+
+    @Column(length = 120)
+    private String tagline;
+
     @Lob
     @Column(name = "image_url", columnDefinition = "TEXT")
     private String imageUrl;
+
+    @Lob
+    @Column(name = "banner_url", columnDefinition = "TEXT")
+    private String bannerUrl;
 
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "connection_group_members", joinColumns = @JoinColumn(name = "group_id"))
@@ -48,6 +67,12 @@ public class ConnectionGroupEntity {
     @CollectionTable(name = "connection_group_followers", joinColumns = @JoinColumn(name = "group_id"))
     @Column(name = "follower_user_id", nullable = false)
     private List<String> followerUserIds = new ArrayList<>();
+
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "connection_group_subscribers", joinColumns = @JoinColumn(name = "group_id"))
+    @Column(name = "subscriber_user_id", nullable = false)
+    @OrderColumn(name = "subscriber_order")
+    private List<String> subscriberUserIds = new ArrayList<>();
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
@@ -68,12 +93,52 @@ public class ConnectionGroupEntity {
         this.ownerId = ownerId;
     }
 
+    public String getOwnerName() {
+        return ownerName;
+    }
+
+    public void setOwnerName(String ownerName) {
+        this.ownerName = ownerName;
+    }
+
     public String getName() {
         return name;
     }
 
     public void setName(String name) {
         this.name = name;
+    }
+
+    public String getPublicUrl() {
+        return publicUrl;
+    }
+
+    public void setPublicUrl(String publicUrl) {
+        this.publicUrl = publicUrl;
+    }
+
+    public String getWebsite() {
+        return website;
+    }
+
+    public void setWebsite(String website) {
+        this.website = website;
+    }
+
+    public String getIndustry() {
+        return industry;
+    }
+
+    public void setIndustry(String industry) {
+        this.industry = industry;
+    }
+
+    public String getTagline() {
+        return tagline;
+    }
+
+    public void setTagline(String tagline) {
+        this.tagline = tagline;
     }
 
     public String getGroupType() {
@@ -92,6 +157,14 @@ public class ConnectionGroupEntity {
         this.imageUrl = imageUrl;
     }
 
+    public String getBannerUrl() {
+        return bannerUrl;
+    }
+
+    public void setBannerUrl(String bannerUrl) {
+        this.bannerUrl = bannerUrl;
+    }
+
     public List<String> getMemberProfileIds() {
         return memberProfileIds;
     }
@@ -106,6 +179,14 @@ public class ConnectionGroupEntity {
 
     public void setFollowerUserIds(List<String> followerUserIds) {
         this.followerUserIds = followerUserIds == null ? new ArrayList<>() : new ArrayList<>(followerUserIds);
+    }
+
+    public List<String> getSubscriberUserIds() {
+        return subscriberUserIds;
+    }
+
+    public void setSubscriberUserIds(List<String> subscriberUserIds) {
+        this.subscriberUserIds = subscriberUserIds == null ? new ArrayList<>() : new ArrayList<>(subscriberUserIds);
     }
 
     public LocalDateTime getCreatedAt() {
