@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowLeft, ChevronDown, ChevronRight, FileText, Image, MessageCircle, MoreVertical, Pencil, Plus, Search, Shield, ThumbsUp, Trash2, Upload, UsersRound, Video, X } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { ArrowLeft, ChevronDown, ChevronRight, FileText, Image, MessageCircle, Pencil, Plus, Search, Shield, ThumbsUp, Trash2, Upload, UsersRound, Video, X } from 'lucide-react'
 import { api } from '../../api.js'
 import MediaSafetyStatus from '../../components/common/MediaSafetyStatus.jsx'
 import { useMediaSafety } from '../../hooks/useMediaSafety.js'
@@ -55,11 +55,13 @@ function mapOrganizationPage(page) {
     banner: page.bannerUrl || '',
     isCreated: true,
     isOwner: Boolean(page.isOwner),
+    isAdmin: Boolean(page.isAdmin),
     isFollowing: Boolean(page.isFollowing),
     isSubscribed: Boolean(page.isSubscribed),
     isSubscriptionPending: Boolean(page.isSubscriptionPending),
     followerCount: page.followerCount || 0,
     subscriberCount: page.subscriberCount || 0,
+    followerUserIds: Array.isArray(page.followerUserIds) ? page.followerUserIds : [],
     subscriberUserIds: Array.isArray(page.subscriberUserIds) ? page.subscriberUserIds : [],
     subscriberNames: Array.isArray(page.subscriberNames) ? page.subscriberNames : [],
   }
@@ -72,14 +74,27 @@ function getSubscriberNamesPreview(page) {
   return names.length > 3 ? `${preview} +${names.length - 3} more` : preview
 }
 
+const PAGE_EVENT_MARKER = '[TRUEHUNT_PAGE_EVENT]\n'
+
 function mapOrganizationPost(post) {
   const mediaType = String(post.mediaType || '')
   const createdAt = String(post.createdAt || '')
   const parsedDate = new Date(createdAt)
+  const rawContent = String(post.content || '')
+  const isMarkedEvent = rawContent.startsWith(PAGE_EVENT_MARKER)
+  const content = isMarkedEvent ? rawContent.slice(PAGE_EVENT_MARKER.length) : rawContent
+  const contentLines = content.split(/\r?\n/)
+  const isLegacyEvent = /^Event:\s*/i.test(contentLines[0] || '')
+    && /^(Online|In person)\s*[·-]/i.test(contentLines[1] || '')
+  const isEvent = isMarkedEvent || isLegacyEvent
   return {
     id: String(post.id),
-    title: '',
-    text: post.content || '',
+    authorId: String(post.authorId || ''),
+    canEdit: Boolean(post.canEdit),
+    title: isEvent ? (contentLines[0] || '').replace(/^Event:\s*/i, '').trim() : '',
+    isEvent,
+    text: isEvent ? contentLines.slice(1).join('\n').trim() : content,
+    mediaType,
     media: post.mediaUrl
       ? { type: mediaType.startsWith('video/') ? 'video' : 'photo', source: post.mediaUrl }
       : null,
@@ -87,7 +102,16 @@ function mapOrganizationPost(post) {
     createdAtIso: Number.isNaN(parsedDate.getTime()) ? '' : parsedDate.toISOString(),
     reactions: Array.isArray(post.reactions) ? post.reactions : [],
     comments: Array.isArray(post.comments)
-      ? post.comments.map((comment) => ({ ...comment, text: comment.text || comment.content || '' }))
+      ? post.comments.map((comment) => ({
+        ...comment,
+        text: comment.text || comment.content || '',
+        replies: Array.isArray(comment.replies)
+          ? comment.replies.map((reply) => ({
+            ...reply,
+            text: reply.text || reply.content || '',
+          }))
+          : [],
+      }))
       : [],
     impressions: post.impressions ?? post.impressionCount ?? 0,
     reposts: post.reposts ?? post.repostCount ?? 0,
@@ -122,9 +146,19 @@ function getDailyPostMetric(post, metric, dayKey) {
     : 0
 }
 
+function getPostActivityCount(posts, metric) {
+  return posts.reduce((total, post) => {
+    const activity = post[metric]
+    const count = Array.isArray(activity) ? activity.length : Number(activity || 0)
+    return total + (Number.isFinite(count) ? count : 0)
+  }, 0)
+}
+
 function PublicOrganizationPageView({ page, onBack, onPageUpdate }) {
   const [posts, setPosts] = useState([])
   const [commentDrafts, setCommentDrafts] = useState({})
+  const [replyDrafts, setReplyDrafts] = useState({})
+  const [replyingToCommentId, setReplyingToCommentId] = useState('')
   const [activePostId, setActivePostId] = useState('')
   const [isLoadingPosts, setIsLoadingPosts] = useState(true)
   const [isUpdating, setIsUpdating] = useState(false)
@@ -132,6 +166,9 @@ function PublicOrganizationPageView({ page, onBack, onPageUpdate }) {
 
   useEffect(() => {
     let isCurrent = true
+    void api.recordOrganizationPageVisit(page.id).catch((visitError) => {
+      console.error('Could not record organization banner visit:', visitError)
+    })
     api.getConnectionGroupPosts(page.id)
       .then((feed) => {
         const loadedPosts = (feed?.posts || []).map(mapOrganizationPost)
@@ -146,7 +183,7 @@ function PublicOrganizationPageView({ page, onBack, onPageUpdate }) {
       })
       .catch((loadError) => {
         console.error('Could not load public organization page posts:', loadError)
-        if (isCurrent) setError(loadError.message || 'Could not load page posts. Please try again.')
+        if (isCurrent) setError(loadError.message || 'Could not load banner posts. Please try again.')
       })
       .finally(() => {
         if (isCurrent) setIsLoadingPosts(false)
@@ -157,12 +194,16 @@ function PublicOrganizationPageView({ page, onBack, onPageUpdate }) {
     }
   }, [page.id])
 
-  async function submitPostActivity(postId, type, content) {
+  async function submitPostActivity(postId, type, content, parentActivityId) {
     if (activePostId) return false
     setActivePostId(postId)
     setError('')
     try {
-      const updatedPost = await api.recordConnectionGroupPostActivity(page.id, postId, { type, content })
+      const updatedPost = await api.recordConnectionGroupPostActivity(page.id, postId, {
+        type,
+        content,
+        parentActivityId,
+      })
       setPosts((currentPosts) => currentPosts.map((post) => (
         post.id === postId ? mapOrganizationPost(updatedPost) : post
       )))
@@ -176,12 +217,39 @@ function PublicOrganizationPageView({ page, onBack, onPageUpdate }) {
     }
   }
 
+  async function deletePostComment(postId, commentId) {
+    if (activePostId) return
+    setActivePostId(postId)
+    setError('')
+    try {
+      const updatedPost = await api.deleteConnectionGroupPostActivity(page.id, postId, commentId)
+      setPosts((currentPosts) => currentPosts.map((post) => (
+        post.id === postId ? mapOrganizationPost(updatedPost) : post
+      )))
+    } catch (deleteError) {
+      console.error('Could not delete organization page post comment:', deleteError)
+      setError(deleteError.message || 'Could not delete this comment. Please try again.')
+    } finally {
+      setActivePostId('')
+    }
+  }
+
   async function addPostComment(event, postId) {
     event.preventDefault()
     const text = (commentDrafts[postId] || '').trim()
     if (!text) return
     if (await submitPostActivity(postId, 'COMMENT', text)) {
       setCommentDrafts((drafts) => ({ ...drafts, [postId]: '' }))
+    }
+  }
+
+  async function addPostCommentReply(event, postId, commentId, commentKey) {
+    event.preventDefault()
+    const text = (replyDrafts[commentKey] || '').trim()
+    if (!text) return
+    if (await submitPostActivity(postId, 'COMMENT_REPLY', text, commentId)) {
+      setReplyDrafts((drafts) => ({ ...drafts, [commentKey]: '' }))
+      setReplyingToCommentId('')
     }
   }
 
@@ -220,7 +288,7 @@ function PublicOrganizationPageView({ page, onBack, onPageUpdate }) {
   }
 
   return (
-    <section className="network-page-public-view" aria-label={`${page.name} public page`}>
+    <section className="network-page-public-view" aria-label={`${page.name} public banner`}>
       <button className="network-connections-back" type="button" onClick={onBack}>
         <ArrowLeft size={16} aria-hidden="true" /> Back to banners
       </button>
@@ -258,10 +326,10 @@ function PublicOrganizationPageView({ page, onBack, onPageUpdate }) {
         </div>
       </header>
       <section className="network-page-public-posts" aria-labelledby="network-page-public-posts-title">
-        <h2 id="network-page-public-posts-title">Page posts</h2>
+        <h2 id="network-page-public-posts-title">Banner posts</h2>
         {error && <p className="network-connection-error" role="alert">{error}</p>}
         {isLoadingPosts ? (
-          <p role="status">Loading page posts…</p>
+          <p role="status">Loading banner posts…</p>
         ) : posts.length ? (
           <div className="network-page-posts-list">
             {posts.map((post) => (
@@ -277,9 +345,11 @@ function PublicOrganizationPageView({ page, onBack, onPageUpdate }) {
                     <time dateTime={post.createdAtIso}>{post.createdAt}</time>
                   </div>
                 </header>
+                {post.isEvent && <span className="network-page-event-badge">Event</span>}
+                {post.title && <h2>{post.title}</h2>}
                 {post.text && <p>{post.text}</p>}
                 {post.media?.type === 'video' && <video src={post.media.source} controls />}
-                {post.media?.type === 'photo' && <img src={post.media.source} alt="Page post attachment" />}
+                {post.media?.type === 'photo' && <img src={post.media.source} alt="Banner post attachment" />}
                 <div className="network-page-member-engagement-summary">
                   <span>{post.reactions.length} reactions</span>
                   <span>{post.comments.length} comments</span>
@@ -304,18 +374,94 @@ function PublicOrganizationPageView({ page, onBack, onPageUpdate }) {
                     {post.viewerReposted ? 'Reposted' : 'Repost'}
                   </button>
                 </div>
-                {post.comments.map((comment) => (
-                  <p className="network-page-member-comment" key={comment.id}>
-                    {comment.authorName ? `${comment.authorName}: ` : ''}{comment.text}
-                  </p>
-                ))}
+                {post.comments.map((comment) => {
+                  const commentKey = `${post.id}:${comment.id}`
+                  const isReplying = replyingToCommentId === commentKey
+                  return (
+                    <div className="network-page-member-comment" key={comment.id}>
+                      <div className="network-page-member-comment-heading">
+                        <strong>{comment.authorName || 'Member'}</strong>
+                        {comment.createdAt && <time>{comment.createdAt}</time>}
+                      </div>
+                      <p>{comment.text}</p>
+                      <div className="network-page-member-comment-actions">
+                        <button
+                          type="button"
+                          disabled={activePostId === post.id}
+                          aria-expanded={isReplying}
+                          onClick={() => setReplyingToCommentId((current) => (
+                            current === commentKey ? '' : commentKey
+                          ))}
+                        >
+                          <MessageCircle size={13} aria-hidden="true" /> Reply
+                        </button>
+                        {comment.canDelete && (
+                          <button
+                            type="button"
+                            disabled={activePostId === post.id}
+                            onClick={() => void deletePostComment(post.id, comment.id)}
+                          >
+                            <Trash2 size={13} aria-hidden="true" /> Delete
+                          </button>
+                        )}
+                      </div>
+                      {comment.replies.map((reply) => (
+                        <div className="network-page-member-reply" key={reply.id}>
+                          <div className="network-page-member-comment-heading">
+                            <strong>{reply.authorName || 'Member'}</strong>
+                            {reply.createdAt && <time>{reply.createdAt}</time>}
+                          </div>
+                          <p>{reply.text}</p>
+                          {reply.canDelete && (
+                            <button
+                              className="network-page-member-delete-reply"
+                              type="button"
+                              disabled={activePostId === post.id}
+                              onClick={() => void deletePostComment(post.id, reply.id)}
+                            >
+                              <Trash2 size={13} aria-hidden="true" /> Delete
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                      {isReplying && (
+                        <form
+                          className="network-page-member-comment-form network-page-member-reply-form"
+                          onSubmit={(event) => addPostCommentReply(
+                            event,
+                            post.id,
+                            comment.id,
+                            commentKey,
+                          )}
+                        >
+                          <input
+                            value={replyDrafts[commentKey] || ''}
+                            onChange={(event) => setReplyDrafts((drafts) => ({
+                              ...drafts,
+                              [commentKey]: event.target.value,
+                            }))}
+                            placeholder={`Reply to ${comment.authorName || 'comment'}...`}
+                            aria-label={`Reply to ${comment.authorName || 'comment'}`}
+                            maxLength={1000}
+                          />
+                          <button
+                            type="submit"
+                            disabled={activePostId === post.id || !(replyDrafts[commentKey] || '').trim()}
+                          >
+                            Reply
+                          </button>
+                        </form>
+                      )}
+                    </div>
+                  )
+                })}
                 <form className="network-page-member-comment-form" onSubmit={(event) => addPostComment(event, post.id)}>
                   <input
                     id={`comment-${post.id}`}
                     value={commentDrafts[post.id] || ''}
                     onChange={(event) => setCommentDrafts((drafts) => ({ ...drafts, [post.id]: event.target.value }))}
                     placeholder="Write a comment..."
-                    aria-label={`Comment on ${page.name} post`}
+                    aria-label={`Comment on ${page.name} banner post`}
                     maxLength={1000}
                   />
                   <button type="submit" disabled={activePostId === post.id || !(commentDrafts[post.id] || '').trim()}>
@@ -333,14 +479,23 @@ function PublicOrganizationPageView({ page, onBack, onPageUpdate }) {
   )
 }
 
-function PagePostsView({ page, posts, setPosts, postsError }) {
+function PagePostsView({ page, posts, setPosts, postsError, canPublish = true }) {
   const [composerMode, setComposerMode] = useState('')
   const [postText, setPostText] = useState('')
   const [articleTitle, setArticleTitle] = useState('')
   const [selectedMedia, setSelectedMedia] = useState(null)
   const [mediaError, setMediaError] = useState('')
   const [isPublishing, setIsPublishing] = useState(false)
+  const [editingPostId, setEditingPostId] = useState('')
+  const [editingPostText, setEditingPostText] = useState('')
+  const [editingPostFile, setEditingPostFile] = useState(null)
+  const [editingPostPreviewUrl, setEditingPostPreviewUrl] = useState('')
+  const [removeExistingPostMedia, setRemoveExistingPostMedia] = useState(false)
+  const [savingPostId, setSavingPostId] = useState('')
+  const [deletingPostId, setDeletingPostId] = useState('')
+  const [postActionError, setPostActionError] = useState('')
   const mediaSafety = useMediaSafety(selectedMedia?.file || null)
+  const editingMediaSafety = useMediaSafety(editingPostFile)
   const adultContentScore = mediaSafety.predictions
     .filter((prediction) => ['Porn', 'Hentai'].includes(prediction.className))
     .reduce((highest, prediction) => Math.max(
@@ -350,6 +505,10 @@ function PagePostsView({ page, posts, setPosts, postsError }) {
     ), 0)
   const videoInputRef = useRef(null)
   const photoInputRef = useRef(null)
+
+  useEffect(() => () => {
+    if (editingPostPreviewUrl) URL.revokeObjectURL(editingPostPreviewUrl)
+  }, [editingPostPreviewUrl])
 
   function openComposer(mode = 'post') {
     setComposerMode(mode)
@@ -393,7 +552,7 @@ function PagePostsView({ page, posts, setPosts, postsError }) {
     event.preventDefault()
     if ((!postText.trim() && !articleTitle.trim() && !selectedMedia) || isPublishing) return
     if (!page.id) {
-      setMediaError('This page is not connected to the server yet. Refresh and try again.')
+      setMediaError('This banner is not connected to the server yet. Refresh and try again.')
       return
     }
 
@@ -404,7 +563,7 @@ function PagePostsView({ page, posts, setPosts, postsError }) {
       let mediaType = ''
       if (selectedMedia?.file) {
         const upload = await api.uploadMedia(selectedMedia.file, 'connection-group-post')
-        if (!upload?.url) throw new Error('The page post upload did not return a media URL.')
+        if (!upload?.url) throw new Error('The banner post upload did not return a media URL.')
         mediaUrl = upload.url
         mediaType = selectedMedia.file.type
       }
@@ -420,9 +579,95 @@ function PagePostsView({ page, posts, setPosts, postsError }) {
     }
   }
 
+  function startEditingPost(post) {
+    setEditingPostId(post.id)
+    setEditingPostText(post.text || '')
+    setEditingPostFile(null)
+    setEditingPostPreviewUrl('')
+    setRemoveExistingPostMedia(false)
+    setPostActionError('')
+  }
+
+  function cancelEditingPost() {
+    setEditingPostId('')
+    setEditingPostText('')
+    setEditingPostFile(null)
+    setEditingPostPreviewUrl('')
+    setRemoveExistingPostMedia(false)
+    setPostActionError('')
+  }
+
+  function handleEditingPostMediaChange(event) {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    if (file.size > 10 * 1024 * 1024) {
+      setPostActionError('Choose a file smaller than 10 MB.')
+      return
+    }
+
+    setEditingPostFile(file)
+    setEditingPostPreviewUrl(URL.createObjectURL(file))
+    setRemoveExistingPostMedia(false)
+    setPostActionError('')
+  }
+
+  async function savePostEdit(event, post) {
+    event.preventDefault()
+    if (savingPostId || editingMediaSafety.isBlocked) return
+
+    setSavingPostId(post.id)
+    setPostActionError('')
+    try {
+      let mediaUrl = removeExistingPostMedia ? '' : post.media?.source || ''
+      let mediaType = removeExistingPostMedia ? '' : post.mediaType || ''
+      if (editingPostFile) {
+        const upload = await api.uploadMedia(editingPostFile, 'connection-group-post')
+        if (!upload?.url) throw new Error('The post attachment upload did not return a media URL.')
+        mediaUrl = upload.url
+        mediaType = editingPostFile.type
+      }
+
+      const content = post.isEvent
+        ? `${PAGE_EVENT_MARKER}Event: ${post.title}\n${editingPostText.trim()}`
+        : editingPostText.trim()
+      const updatedPost = await api.updateConnectionGroupPost(page.id, post.id, {
+        content,
+        mediaUrl,
+        mediaType,
+      })
+      setPosts((currentPosts) => currentPosts.map((item) => (
+        item.id === post.id ? mapOrganizationPost(updatedPost) : item
+      )))
+      cancelEditingPost()
+    } catch (error) {
+      console.error('Could not update organization page post:', error)
+      setPostActionError(error.message || 'Could not update this post. Please try again.')
+    } finally {
+      setSavingPostId('')
+    }
+  }
+
+  async function deletePost(post) {
+    if (deletingPostId || !window.confirm('Delete this post and its attachment? This cannot be undone.')) return
+
+    setDeletingPostId(post.id)
+    setPostActionError('')
+    try {
+      await api.deleteConnectionGroupPost(page.id, post.id)
+      setPosts((currentPosts) => currentPosts.filter((item) => item.id !== post.id))
+      if (editingPostId === post.id) cancelEditingPost()
+    } catch (error) {
+      console.error('Could not delete organization page post:', error)
+      setPostActionError(error.message || 'Could not delete this post. Please try again.')
+    } finally {
+      setDeletingPostId('')
+    }
+  }
+
   return (
     <div className="network-page-posts-view">
-      <section className="network-page-posts-composer" aria-label="Create a page post">
+      {canPublish && <section className="network-page-posts-composer" aria-label="Create a banner post">
         <div className="network-page-posts-composer-top">
           <div className="network-page-posts-avatar">
             {page.logo
@@ -521,8 +766,9 @@ function PagePostsView({ page, posts, setPosts, postsError }) {
             </div>
           </form>
         )}
-      </section>
+      </section>}
       {postsError && <p className="network-page-posts-error" role="alert">{postsError}</p>}
+      {postActionError && <p className="network-page-posts-error" role="alert">{postActionError}</p>}
 
       {posts.length ? (
         <div className="network-page-posts-list">
@@ -538,11 +784,90 @@ function PagePostsView({ page, posts, setPosts, postsError }) {
                   <strong>{page.name}</strong>
                   <time dateTime={post.createdAtIso}>{post.createdAt}</time>
                 </div>
+                {post.canEdit && (
+                  <div className="network-page-post-actions">
+                    <button
+                      type="button"
+                      aria-label={`Edit post from ${page.name}`}
+                      disabled={Boolean(savingPostId || deletingPostId)}
+                      onClick={() => startEditingPost(post)}
+                    >
+                      <Pencil size={14} aria-hidden="true" /> Edit
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Delete post from ${page.name}`}
+                      disabled={Boolean(savingPostId || deletingPostId)}
+                      onClick={() => void deletePost(post)}
+                    >
+                      <Trash2 size={14} aria-hidden="true" />
+                      {deletingPostId === post.id ? 'Deleting…' : 'Delete'}
+                    </button>
+                  </div>
+                )}
               </header>
-              {post.title && <h2>{post.title}</h2>}
-              {post.text && <p>{post.text}</p>}
-              {post.media?.type === 'video' && <video src={post.media.source} controls />}
-              {post.media?.type === 'photo' && <img src={post.media.source} alt="Post attachment" />}
+              {editingPostId === post.id ? (
+                <form className="network-page-post-edit-form" onSubmit={(event) => void savePostEdit(event, post)}>
+                  <label className="network-page-posts-sr-only" htmlFor={`edit-page-post-${post.id}`}>
+                    Edit post text
+                  </label>
+                  <textarea
+                    id={`edit-page-post-${post.id}`}
+                    value={editingPostText}
+                    onChange={(event) => setEditingPostText(event.target.value)}
+                    maxLength={10000}
+                    rows={4}
+                  />
+                  {(editingPostFile || (post.media && !removeExistingPostMedia)) && (
+                    <div className="network-page-posts-media-preview">
+                      {(editingPostFile
+                        ? String(editingPostFile.type).startsWith('video/')
+                        : post.media?.type === 'video')
+                        ? <video src={editingPostPreviewUrl || post.media?.source} controls />
+                        : <img src={editingPostPreviewUrl || post.media?.source} alt="Post attachment preview" />}
+                      {editingPostFile && (
+                        <MediaSafetyStatus
+                          safety={editingMediaSafety}
+                          blockedMessage={`This ${editingMediaSafety.kind} has a high adult-content score and cannot be posted.`}
+                          safeMessage="Content moderation passed."
+                        />
+                      )}
+                    </div>
+                  )}
+                  <div className="network-page-post-edit-options">
+                    <label className="network-page-post-edit-upload">
+                      Replace attachment
+                      <input type="file" accept="image/*,video/*" onChange={handleEditingPostMediaChange} />
+                    </label>
+                    {post.media && !editingPostFile && (
+                      <button
+                        type="button"
+                        onClick={() => setRemoveExistingPostMedia((current) => !current)}
+                      >
+                        {removeExistingPostMedia ? 'Keep attachment' : 'Remove attachment'}
+                      </button>
+                    )}
+                  </div>
+                  <div className="network-page-posts-form-actions">
+                    <button type="button" onClick={cancelEditingPost}>Cancel</button>
+                    <button
+                      type="submit"
+                      disabled={Boolean(savingPostId)
+                        || editingMediaSafety.isBlocked
+                        || (!editingPostText.trim() && !editingPostFile && (removeExistingPostMedia || !post.media))}
+                    >
+                      {savingPostId === post.id ? 'Saving…' : 'Save changes'}
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <>
+                  {post.title && <h2>{post.title}</h2>}
+                  {post.text && <p>{post.text}</p>}
+                  {post.media?.type === 'video' && <video src={post.media.source} controls />}
+                  {post.media?.type === 'photo' && <img src={post.media.source} alt="Post attachment" />}
+                </>
+              )}
               <div className="network-page-post-engagement">
                 <span>{post.reactions?.length || 0} reactions</span>
                 <span>{post.comments?.length || 0} comments</span>
@@ -554,8 +879,7 @@ function PagePostsView({ page, posts, setPosts, postsError }) {
         <section className="network-page-posts-empty">
           <div className="network-page-posts-empty-art" aria-hidden="true">
             <div className="network-page-posts-window">
-              <span />
-              <span />
+]              <span />
               <span />
             </div>
             <div className="network-page-posts-person">
@@ -564,8 +888,8 @@ function PagePostsView({ page, posts, setPosts, postsError }) {
             </div>
             <div className="network-page-posts-desk" />
           </div>
-          <h2>Your page doesn’t have any posts yet</h2>
-          <p>Pages that post 2x a week grow 5x faster</p>
+          <h2>Your banner doesn’t have any posts yet</h2>
+          <p>Banners that post 2x a week grow 5x faster</p>
           <button type="button" onClick={() => openComposer()}>
             <Plus size={18} aria-hidden="true" /> Start a post
           </button>
@@ -621,7 +945,7 @@ function OrganizationPageEdit({ page, onSave, onCancel }) {
   return (
     <section className="network-page-edit" aria-labelledby="network-page-edit-title">
       <header className="network-page-edit-heading">
-        <h2 id="network-page-edit-title">Page info</h2>
+        <h2 id="network-page-edit-title">Banner info</h2>
         <p>* indicates required</p>
       </header>
 
@@ -642,8 +966,8 @@ function OrganizationPageEdit({ page, onSave, onCancel }) {
 
           <div className="network-page-edit-banner-field">
             <span>Banner</span>
-            <div className="network-page-edit-banner" aria-label={draft.banner ? 'Custom page banner' : 'Default page banner'}>
-              {draft.banner && <img src={draft.banner} alt="Custom page banner" />}
+            <div className="network-page-edit-banner" aria-label={draft.banner ? 'Custom banner' : 'Default banner'}>
+              {draft.banner && <img src={draft.banner} alt="Custom banner" />}
             </div>
             {draft.banner ? (
               <button
@@ -683,7 +1007,7 @@ function OrganizationPageEdit({ page, onSave, onCancel }) {
         </label>
 
         <label className="network-page-setup-field">
-          <span>LinkedIn public URL <strong>*</strong> <span className="network-page-edit-info" title="Your organization page's public address">ⓘ</span></span>
+          <span>LinkedIn public URL <strong>*</strong> <span className="network-page-edit-info" title="Your organization's public banner address">ⓘ</span></span>
           <div className="network-page-url-input">
             <span>linkedin.com/company</span>
             <input
@@ -724,14 +1048,82 @@ function OrganizationPageEdit({ page, onSave, onCancel }) {
 
 // ─── Manage Admins View ───────────────────────────────────────────────────────
 function ManageAdminsView({ page, onBack }) {
-  const [activeTab, setActiveTab] = useState('page')
   const [bannerDismissed, setBannerDismissed] = useState(false)
+  const [admins, setAdmins] = useState([])
+  const [connections, setConnections] = useState([])
+  const [selectedConnectionIds, setSelectedConnectionIds] = useState([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [isPickerOpen, setIsPickerOpen] = useState(false)
+  const [isAddingAdmins, setIsAddingAdmins] = useState(false)
+  const [processingAdminId, setProcessingAdminId] = useState('')
+  const [error, setError] = useState('')
 
-  const tabs = [
-    { key: 'page', label: 'Page admins', count: 1 },
-    { key: 'paid', label: 'Paid media admins', count: 0 },
-    { key: 'integrations', label: 'Integrations', count: 0 },
-  ]
+  const assignedAdminIds = new Set(admins.map((admin) => String(admin.id || '').toLowerCase()))
+  const availableConnections = connections.filter((profile) => {
+    const profileId = String(
+      profile.userId || profile.publicUserId || profile.id || profile.profileId || '',
+    )
+    return profileId && !assignedAdminIds.has(profileId.toLowerCase())
+  })
+
+  useEffect(() => {
+    let isCurrent = true
+    Promise.all([
+      api.getOrganizationPageAdmins(page.id),
+      api.getConnectedProfiles(),
+    ])
+      .then(([adminData, connectionData]) => {
+        if (!isCurrent) return
+        setAdmins(Array.isArray(adminData?.admins) ? adminData.admins : [])
+        setConnections(Array.isArray(connectionData) ? connectionData : [])
+      })
+      .catch((loadError) => {
+        console.error('Could not load organization page admins:', loadError)
+        if (isCurrent) setError(loadError.message || 'Could not load banner admins.')
+      })
+      .finally(() => {
+        if (isCurrent) setIsLoading(false)
+      })
+
+    return () => {
+      isCurrent = false
+    }
+  }, [page.id])
+
+  async function addSelectedAdmins() {
+    if (isAddingAdmins || !selectedConnectionIds.length) return
+    setIsAddingAdmins(true)
+    setError('')
+    try {
+      for (const profileId of selectedConnectionIds) {
+        const result = await api.addOrganizationPageAdmin(page.id, profileId)
+        if (Array.isArray(result?.admins)) setAdmins(result.admins)
+      }
+      setSelectedConnectionIds([])
+      setIsPickerOpen(false)
+    } catch (addError) {
+      console.error('Could not add organization page admin:', addError)
+      setError(addError.message || 'Could not add the selected banner admins.')
+    } finally {
+      setIsAddingAdmins(false)
+    }
+  }
+
+  async function removeAdmin(admin) {
+    if (processingAdminId || !window.confirm(`Remove ${admin.name || 'this person'} from banner admins?`)) return
+
+    setProcessingAdminId(String(admin.id))
+    setError('')
+    try {
+      const result = await api.removeOrganizationPageAdmin(page.id, admin.id)
+      if (Array.isArray(result?.admins)) setAdmins(result.admins)
+    } catch (removeError) {
+      console.error('Could not remove organization page admin:', removeError)
+      setError(removeError.message || 'Could not remove this banner admin.')
+    } finally {
+      setProcessingAdminId('')
+    }
+  }
 
   return (
     <div className="bps-manage-admins">
@@ -748,14 +1140,8 @@ function ManageAdminsView({ page, onBack }) {
             <Shield size={28} />
           </span>
           <div>
-            <strong>Managing admins just got better!</strong>
-            <p>
-              You can now assign various roles, and add admins who aren&apos;t 1st degree
-              connections.{' '}
-              <a href="#learn-more" onClick={(e) => e.preventDefault()}>
-                Learn more
-              </a>
-            </p>
+            <strong>Manage banner access</strong>
+            <p>Choose connections who can manage posts and view your creator dashboard and analytics.</p>
           </div>
           <button
             type="button"
@@ -768,33 +1154,86 @@ function ManageAdminsView({ page, onBack }) {
         </div>
       )}
 
-      <div className="bps-admins-tabs">
-        {tabs.map((tab) => (
-          <button
-            key={tab.key}
-            type="button"
-            className={`bps-admins-tab${activeTab === tab.key ? ' is-active' : ''}`}
-            onClick={() => setActiveTab(tab.key)}
-          >
-            {tab.label} ({tab.count})
-          </button>
-        ))}
-      </div>
-
-      {activeTab === 'page' && (
-        <div className="bps-admins-body">
+      <div className="bps-admins-body">
           <div className="bps-admins-info-row">
             <p>
-              All page admins have access to admin view, with different permissions based on their
-              role.{' '}
-              <a href="#learn-more" onClick={(e) => e.preventDefault()}>
-                Learn more
-              </a>
+              Added connections can create, edit, and delete banner posts, and view your creator dashboard and analytics.
             </p>
-            <button type="button" className="bps-add-admin-btn">
+            <button
+              type="button"
+              className="bps-add-admin-btn"
+              onClick={() => {
+                setIsPickerOpen((open) => !open)
+                setError('')
+              }}
+            >
               <Plus size={14} aria-hidden="true" /> Add admin
             </button>
           </div>
+
+          {error && <p className="bps-admins-error" role="alert">{error}</p>}
+
+          {isPickerOpen && (
+            <section className="bps-admin-picker" aria-label="Select connections to add as banner admins">
+              <h3>Add connections as banner admins</h3>
+              {isLoading ? (
+                <p role="status">Loading your connections…</p>
+              ) : availableConnections.length ? (
+                <ul>
+                  {availableConnections.map((profile) => {
+                    const profileId = String(
+                      profile.userId || profile.publicUserId || profile.id || profile.profileId || '',
+                    )
+                    const avatar = profile.profileImageUrl || profile.avatar || ''
+                    const checked = selectedConnectionIds.includes(profileId)
+                    return (
+                      <li key={profileId}>
+                        <label>
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(event) => {
+                              setSelectedConnectionIds((current) => event.target.checked
+                                ? [...current, profileId]
+                                : current.filter((id) => id !== profileId))
+                            }}
+                          />
+                          {avatar
+                            ? <img src={avatar} alt="" className="bps-admins-avatar" />
+                            : <span className="bps-admins-avatar-placeholder" aria-hidden="true"><i /><i /><i /></span>}
+                          <span>
+                            <strong>{profile.name || profile.fullName || 'Connection'}</strong>
+                            <small>{profile.role || profile.headline || ''}</small>
+                          </span>
+                        </label>
+                      </li>
+                    )
+                  })}
+                </ul>
+              ) : (
+                <p>No unassigned connections are available.</p>
+              )}
+              <div className="bps-admin-picker-actions">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsPickerOpen(false)
+                    setSelectedConnectionIds([])
+                  }}
+                  disabled={isAddingAdmins}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void addSelectedAdmins()}
+                  disabled={isAddingAdmins || !selectedConnectionIds.length}
+                >
+                  {isAddingAdmins ? 'Adding…' : `Add selected (${selectedConnectionIds.length})`}
+                </button>
+              </div>
+            </section>
+          )}
 
           <table className="bps-admins-table">
             <thead>
@@ -810,77 +1249,233 @@ function ManageAdminsView({ page, onBack }) {
               </tr>
             </thead>
             <tbody>
-              <tr>
-                <td className="bps-admins-profile">
-                  {page.logo ? (
-                    <img src={page.logo} alt="" className="bps-admins-avatar" />
-                  ) : (
-                    <span className="bps-admins-avatar-placeholder" aria-hidden="true">
-                      <i /><i /><i />
-                    </span>
-                  )}
-                  <div className="bps-admins-profile-info">
-                    <strong>{page.name || 'You'} · You</strong>
-                    <span>{page.tagline || 'Full Stack Developer | Java Developer'}</span>
-                  </div>
-                </td>
-                <td>
-                  <span className="bps-role-badge">Super admin</span>
-                </td>
-                <td className="bps-admins-actions">
-                  <button type="button" aria-label="Edit admin role">
-                    <Pencil size={16} />
-                  </button>
-                  <button type="button" aria-label="Remove admin">
-                    <Trash2 size={16} />
-                  </button>
-                </td>
-              </tr>
+              {isLoading ? (
+                <tr><td colSpan="3">Loading banner admins…</td></tr>
+              ) : admins.map((admin) => (
+                <tr key={admin.id}>
+                  <td className="bps-admins-profile">
+                    {admin.avatar || admin.profileImageUrl ? (
+                      <img src={admin.avatar || admin.profileImageUrl} alt="" className="bps-admins-avatar" />
+                    ) : (
+                      <span className="bps-admins-avatar-placeholder" aria-hidden="true">
+                        <i /><i /><i />
+                      </span>
+                    )}
+                    <div className="bps-admins-profile-info">
+                      <strong>{admin.isOwner ? `${admin.name || 'You'} · You` : admin.name}</strong>
+                      <span>{admin.isOwner ? 'Banner owner' : admin.role}</span>
+                    </div>
+                  </td>
+                  <td><span className="bps-role-badge">{admin.role}</span></td>
+                  <td className="bps-admins-actions">
+                    {!admin.isOwner && (
+                      <button
+                        type="button"
+                        aria-label={`Remove ${admin.name} as banner admin`}
+                        title="Remove banner access"
+                        disabled={Boolean(processingAdminId)}
+                        onClick={() => void removeAdmin(admin)}
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
-        </div>
-      )}
-
-      {activeTab !== 'page' && (
-        <div className="bps-admins-empty">
-          <p>No {tabs.find((t) => t.key === activeTab)?.label.toLowerCase()} yet.</p>
-        </div>
-      )}
+      </div>
     </div>
   )
 }
 
 // ─── Blocked Members View ───────────────────────────────────────────────────
-function BlockedMembersView({ onBack }) {
+function BlockedMembersView({ page, onBack }) {
+  const [blockedResult, setBlockedResult] = useState(null)
+  const [error, setError] = useState('')
+  const [processingProfileId, setProcessingProfileId] = useState('')
+
+  useEffect(() => {
+    let isCurrent = true
+    api.getOrganizationPageBlockedMembers(page.id)
+      .then((result) => {
+        const blockedUserIds = Array.isArray(result?.blockedUserIds) ? result.blockedUserIds : []
+        return Promise.allSettled(blockedUserIds.map((profileId) => api.getProfileById(profileId)))
+          .then((profileResults) => {
+            if (!isCurrent) return
+            let failedProfiles = false
+            const profiles = profileResults.map((profileResult, index) => {
+              const profileId = blockedUserIds[index]
+              if (profileResult.status !== 'fulfilled' || !profileResult.value) {
+                failedProfiles = true
+                return { id: profileId, name: 'TrueHunt Member', role: '', image: '' }
+              }
+              const profile = profileResult.value
+              return {
+                id: profileId,
+                name: profile.name || profile.fullName || 'TrueHunt Member',
+                role: profile.headline || profile.role || profile.primaryCraft || '',
+                image: profile.profileImageUrl || profile.avatar || '',
+              }
+            })
+            setBlockedResult({ pageId: page.id, profiles })
+            if (failedProfiles) setError('Some blocked profile details could not be loaded.')
+          })
+      })
+      .catch((loadError) => {
+        console.error('Could not load blocked organization page followers:', loadError)
+        if (isCurrent) setError(loadError.message || 'Could not load blocked followers.')
+      })
+    return () => { isCurrent = false }
+  }, [page.id])
+
+  async function unblockProfile(profile) {
+    if (processingProfileId) return
+    setProcessingProfileId(profile.id)
+    setError('')
+    try {
+      await api.unblockOrganizationPageMember(page.id, profile.id)
+      setBlockedResult((current) => current?.pageId === page.id
+        ? { ...current, profiles: current.profiles.filter((item) => item.id !== profile.id) }
+        : current)
+    } catch (unblockError) {
+      console.error('Could not unblock organization page follower:', unblockError)
+      setError(unblockError.message || 'Could not unblock this follower.')
+    } finally {
+      setProcessingProfileId('')
+    }
+  }
+
+  const profiles = blockedResult?.pageId === page.id ? blockedResult.profiles : []
+  const isLoading = blockedResult?.pageId !== page.id && !error
+
   return (
     <div className="bps-blocked-view">
       <div className="bps-settings-subheader">
         <button type="button" className="bps-back-btn" onClick={onBack} aria-label="Back to settings">
           <ArrowLeft size={18} aria-hidden="true" />
         </button>
-        <h2>Blocked members and pages</h2>
+        <h2>Manage blocked followers and subscribers</h2>
       </div>
-      <div className="bps-blocked-empty">
-        <div className="bps-blocked-illustration" aria-hidden="true">
-          <span className="bps-blocked-person">●</span>
-          <span className="bps-blocked-office">
-            <i /><i /><i />
-          </span>
-          <span className="bps-blocked-paper" />
+      {error && <p className="bps-blocked-error" role="alert">{error}</p>}
+      {isLoading ? (
+        <p className="bps-blocked-loading" role="status">Loading blocked followers…</p>
+      ) : profiles.length ? (
+        <ul className="bps-blocked-list">
+          {profiles.map((profile) => (
+            <li key={profile.id}>
+              {profile.image
+                ? <img src={profile.image} alt="" />
+                : <span className="bps-blocked-avatar-placeholder" aria-hidden="true">
+                  {profile.name.slice(0, 1).toUpperCase()}
+                </span>}
+              <span className="bps-blocked-profile-copy">
+                <strong>{profile.name}</strong>
+                {profile.role && <small>{profile.role}</small>}
+              </span>
+              <button
+                type="button"
+                disabled={Boolean(processingProfileId)}
+                onClick={() => void unblockProfile(profile)}
+              >
+                {processingProfileId === profile.id ? 'Unblocking…' : 'Unblock'}
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : !error ? (
+        <div className="bps-blocked-empty">
+          <h3>No blocked people yet</h3>
+          <p>Followers and subscribers you block from the member preview will appear here.</p>
         </div>
-        <h3>No blocked members or<br />pages</h3>
-        <p>
-          To block a member or page, go to their<br />
-          profile and select Block from More. <a href="#learn-more" onClick={(event) => event.preventDefault()}>Learn<br />more about blocking</a>
-        </p>
-      </div>
+      ) : null}
     </div>
   )
 }
 
-// ─── Following Pages View ──────────────────────────────────────────────────
-function FollowingView({ onClose }) {
-  const [activeTab, setActiveTab] = useState('following')
+// ─── Page Followers View ───────────────────────────────────────────────────
+function FollowingView({ page, onClose, onPageUpdate }) {
+  const [search, setSearch] = useState('')
+  const [profileState, setProfileState] = useState({ key: '', profiles: [], error: '' })
+  const [removingProfileId, setRemovingProfileId] = useState('')
+  const [removeError, setRemoveError] = useState('')
+  const [removeNotice, setRemoveNotice] = useState('')
+  const followerIds = useMemo(
+    () => [...new Set((page.followerUserIds || []).filter(Boolean).map(String))],
+    [page.followerUserIds],
+  )
+  const followersKey = JSON.stringify([page.id, followerIds])
+
+  useEffect(() => {
+    let isCurrent = true
+    if (!followerIds.length) return () => { isCurrent = false }
+
+    Promise.allSettled(followerIds.map((profileId) => api.getProfileById(profileId)))
+      .then((results) => {
+        if (!isCurrent) return
+        const profiles = []
+        let failedProfiles = 0
+        results.forEach((result, index) => {
+          if (result.status !== 'fulfilled' || !result.value) {
+            failedProfiles += 1
+            return
+          }
+          const profile = result.value
+          profiles.push({
+            id: followerIds[index],
+            name: profile.name || profile.fullName || 'TrueHunt Member',
+            role: profile.headline || profile.role || profile.primaryCraft || '',
+            image: profile.profileImageUrl || profile.avatar || '',
+          })
+        })
+        setProfileState({
+          key: followersKey,
+          profiles,
+          error: failedProfiles ? 'Some follower profiles could not be loaded.' : '',
+        })
+      })
+      .catch((error) => {
+        console.error('Could not load page follower profiles:', error)
+        if (isCurrent) {
+          setProfileState({
+            key: followersKey,
+            profiles: [],
+            error: 'Could not load follower profiles. Please try again.',
+          })
+        }
+      })
+
+    return () => { isCurrent = false }
+  }, [followerIds, followersKey])
+
+  async function removeFollower(profile) {
+    if (removingProfileId || !window.confirm(
+      `Remove ${profile.name} as a follower? They can follow the banner again later.`,
+    )) return
+
+    setRemovingProfileId(profile.id)
+    setRemoveError('')
+    setRemoveNotice('')
+    try {
+      const updatedPage = await api.removeOrganizationPageFollower(page.id, profile.id)
+      onPageUpdate(updatedPage)
+      setProfileState((current) => ({
+        ...current,
+        profiles: current.profiles.filter((follower) => follower.id !== profile.id),
+      }))
+      setRemoveNotice(`${profile.name} was removed as a follower.`)
+    } catch (error) {
+      console.error('Could not remove organization page follower:', error)
+      setRemoveError(error.message || 'Could not remove this follower. Please try again.')
+    } finally {
+      setRemovingProfileId('')
+    }
+  }
+
+  const profilesLoaded = !followerIds.length || profileState.key === followersKey
+  const visibleProfiles = (profileState.key === followersKey ? profileState.profiles : []).filter((profile) => (
+    `${profile.name} ${profile.role}`.toLowerCase().includes(search.trim().toLowerCase())
+  ))
 
   return (
     <div className="bps-following-overlay" role="presentation" onMouseDown={(event) => {
@@ -888,48 +1483,63 @@ function FollowingView({ onClose }) {
     }}>
       <section className="bps-following-modal" role="dialog" aria-modal="true" aria-labelledby="bps-following-title">
         <header className="bps-following-header">
-          <h2 id="bps-following-title">Find pages to follow</h2>
+          <h2 id="bps-following-title">Manage following</h2>
           <button type="button" onClick={onClose} aria-label="Close">
             <X size={20} />
           </button>
         </header>
         <div className="bps-following-search">
-          <input type="search" aria-label="Add pages to follow" placeholder="Add pages to follow" />
+          <input
+            type="search"
+            aria-label="Search followers"
+            placeholder="Search followers"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
         </div>
-        <div className="bps-following-tabs" role="tablist" aria-label="Following pages">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === 'following'}
-            className={activeTab === 'following' ? 'is-active' : ''}
-            onClick={() => setActiveTab('following')}
-          >
-            Following (0)
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === 'recommended'}
-            className={activeTab === 'recommended' ? 'is-active' : ''}
-            onClick={() => setActiveTab('recommended')}
-          >
-            Recommended
+        <div className="bps-following-tabs" role="tablist" aria-label="Banner followers">
+          <button type="button" role="tab" aria-selected="true" className="is-active">
+            Followers ({page.followerCount || 0})
           </button>
         </div>
-        <div className="bps-following-empty">
-          <div className="bps-following-illustration" aria-hidden="true">
-            <span className="bps-following-person" />
-            <span className="bps-following-desk" />
-            <span className="bps-following-monitor" />
-            <span className="bps-following-plant">♧</span>
-          </div>
-          <h3>You&apos;re not following any<br />pages</h3>
-          <p>
-            Follow pages to see their posts in your feed.<br />
-            Browse recommendations or search for<br />
-            organizations in your industry to get started.
-          </p>
-          <a href="#learn-more" onClick={(event) => event.preventDefault()}>Learn more</a>
+        <div className="bps-following-profile-list">
+          {!profilesLoaded ? (
+            <p className="bps-following-list-message" role="status">Loading follower profiles…</p>
+          ) : visibleProfiles.length ? (
+            <ul>
+              {visibleProfiles.map((profile) => (
+                <li key={profile.id}>
+                  {profile.image
+                    ? <img src={profile.image} alt="" />
+                    : <span className="bps-following-avatar" aria-hidden="true">
+                      {profile.name.slice(0, 1).toUpperCase()}
+                    </span>}
+                  <span className="bps-following-profile-copy">
+                    <strong>{profile.name}</strong>
+                    {profile.role && <small>{profile.role}</small>}
+                  </span>
+                  <button
+                    type="button"
+                    className="bps-following-remove"
+                    disabled={Boolean(removingProfileId)}
+                    aria-label={`Remove ${profile.name} as a follower`}
+                    onClick={() => void removeFollower(profile)}
+                  >
+                    {removingProfileId === profile.id ? 'Removing…' : 'Remove'}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="bps-following-list-message">
+              {followerIds.length ? 'No followers match your search.' : 'No one is following this banner yet.'}
+            </p>
+          )}
+          {profileState.error && profileState.key === followersKey && (
+            <p className="bps-following-message-error" role="alert">{profileState.error}</p>
+          )}
+          {removeError && <p className="bps-following-message-error" role="alert">{removeError}</p>}
+          {removeNotice && <p className="bps-following-message-success" role="status">{removeNotice}</p>}
         </div>
         <footer className="bps-following-footer">
           <button type="button" onClick={onClose}>Done</button>
@@ -939,17 +1549,210 @@ function FollowingView({ onClose }) {
   )
 }
 
+function getDefaultPageEventForm() {
+  const start = new Date(Date.now() + 60 * 60 * 1000)
+  const end = new Date(start.getTime() + 60 * 60 * 1000)
+  const timeKey = (date) => `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+
+  return {
+    type: 'online',
+    name: '',
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+    startDate: getLocalDateKey(start),
+    startTime: timeKey(start),
+    hasEnd: true,
+    endDate: getLocalDateKey(end),
+    endTime: timeKey(end),
+    description: '',
+    speakerIds: [],
+  }
+}
+
 // ─── Events Admin View ─────────────────────────────────────────────────────
-function EventsAdminView() {
+function EventsAdminView({ page, events, onEventCreated, onDeleteEvent, onViewPost }) {
   const [query, setQuery] = useState('')
-  const [sort, setSort] = useState('Last modified')
+  const [sort, setSort] = useState('Newest first')
+  const [isCreateOpen, setIsCreateOpen] = useState(false)
+  const [formStep, setFormStep] = useState(1)
+  const [eventForm, setEventForm] = useState(getDefaultPageEventForm)
+  const [eventImageFile, setEventImageFile] = useState(null)
+  const [eventImagePreview, setEventImagePreview] = useState('')
+  const [eventError, setEventError] = useState('')
+  const [eventDeleteError, setEventDeleteError] = useState('')
+  const [deletingEventId, setDeletingEventId] = useState('')
+  const [isPublishing, setIsPublishing] = useState(false)
+  const [connections, setConnections] = useState([])
+  const [areConnectionsLoading, setAreConnectionsLoading] = useState(false)
+  const [connectionsError, setConnectionsError] = useState('')
+  const [speakerSearch, setSpeakerSearch] = useState('')
+  const eventImageSafety = useMediaSafety(eventImageFile)
+
+  useEffect(() => () => {
+    if (eventImagePreview) URL.revokeObjectURL(eventImagePreview)
+  }, [eventImagePreview])
+
+  useEffect(() => {
+    let isCurrent = true
+    api.getConnectedProfiles()
+      .then((profiles) => {
+        if (isCurrent) setConnections(Array.isArray(profiles) ? profiles : [])
+      })
+      .catch((error) => {
+        console.error('Could not load connections for event speakers:', error)
+        if (isCurrent) setConnectionsError(error.message || 'Could not load connections.')
+      })
+      .finally(() => {
+        if (isCurrent) setAreConnectionsLoading(false)
+      })
+
+    return () => { isCurrent = false }
+  }, [page.id])
+
+  function closeEventCreator() {
+    if (isPublishing) return
+    setIsCreateOpen(false)
+    setFormStep(1)
+    setEventForm(getDefaultPageEventForm())
+    setEventImageFile(null)
+    setEventImagePreview('')
+    setEventError('')
+    setSpeakerSearch('')
+  }
+
+  function updateEventField(field, value) {
+    setEventForm((current) => ({ ...current, [field]: value }))
+  }
+
+  function selectEventImage(event) {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      setEventError('Choose an image for the event cover.')
+      return
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setEventError('Choose an image smaller than 10 MB.')
+      return
+    }
+    setEventImageFile(file)
+    setEventImagePreview(URL.createObjectURL(file))
+    setEventError('')
+  }
+
+  function continueToEventReview(event) {
+    event.preventDefault()
+    const startsAt = new Date(`${eventForm.startDate}T${eventForm.startTime}`)
+    const endsAt = eventForm.hasEnd
+      ? new Date(`${eventForm.endDate}T${eventForm.endTime}`)
+      : null
+    if (Number.isNaN(startsAt.getTime()) || (endsAt && endsAt <= startsAt)) {
+      setEventError('The event end date and time must be after its start.')
+      return
+    }
+    if (eventImageSafety.isBlocked) {
+      setEventError('This event image cannot be uploaded.')
+      return
+    }
+    setEventError('')
+    setFormStep(2)
+  }
+
+  async function publishPageEvent() {
+    if (isPublishing) return
+    if (!page.id) {
+      setEventError('This banner is not connected to the server yet. Refresh and try again.')
+      return
+    }
+
+    setIsPublishing(true)
+    setEventError('')
+    try {
+      let mediaUrl = ''
+      let mediaType = ''
+      if (eventImageFile) {
+        const upload = await api.uploadMedia(eventImageFile, 'connection-group-post')
+        if (!upload?.url) throw new Error('The event cover upload did not return a media URL.')
+        mediaUrl = upload.url
+        mediaType = eventImageFile.type
+      }
+
+      const selectedSpeakers = eventForm.speakerIds
+        .map((id) => connections.find((profile) => String(
+          profile.userId || profile.publicUserId || profile.id || profile.profileId || '',
+        ) === id))
+        .filter(Boolean)
+        .map((profile) => profile.name || profile.fullName || 'Connection')
+      const eventDetails = [
+        `Event: ${eventForm.name.trim()}`,
+        `Type: ${eventForm.type === 'online' ? 'Online' : 'In person'}`,
+        `Starts: ${eventForm.startDate} at ${eventForm.startTime} (${eventForm.timezone})`,
+        eventForm.hasEnd
+          ? `Ends: ${eventForm.endDate} at ${eventForm.endTime} (${eventForm.timezone})`
+          : '',
+        eventForm.description.trim() ? `\n${eventForm.description.trim()}` : '',
+        selectedSpeakers.length ? `\nSpeakers: ${selectedSpeakers.join(', ')}` : '',
+      ].filter(Boolean).join('\n')
+      const post = await api.createConnectionGroupPost(page.id, {
+        content: `${PAGE_EVENT_MARKER}${eventDetails}`,
+        mediaUrl,
+        mediaType,
+      })
+      closeEventCreator()
+      onEventCreated(post)
+    } catch (error) {
+      console.error('Could not publish page event:', error)
+      setEventError(error.message || 'Could not publish this event. Please try again.')
+    } finally {
+      setIsPublishing(false)
+    }
+  }
+
+  async function deletePageEvent(event) {
+    if (deletingEventId || !window.confirm(`Delete "${event.title}"? This will also remove it from Banner posts.`)) return
+
+    setDeletingEventId(event.id)
+    setEventDeleteError('')
+    try {
+      await onDeleteEvent(event.id)
+    } catch (error) {
+      console.error('Could not delete page event:', error)
+      setEventDeleteError(error.message || 'Could not delete this event. Please try again.')
+    } finally {
+      setDeletingEventId('')
+    }
+  }
+
+  const speakerProfiles = connections.filter((profile) => {
+    const searchText = `${profile.name || profile.fullName || ''} ${profile.role || profile.headline || ''}`
+    return searchText.toLowerCase().includes(speakerSearch.trim().toLowerCase())
+  })
+  const localTimezone = eventForm.timezone
+  const timezoneOptions = [...new Set([
+    localTimezone,
+    'UTC',
+    'America/Los_Angeles',
+    'America/New_York',
+    'Europe/London',
+    'Asia/Kolkata',
+  ])]
+  const matchingEvents = events.filter((event) => (
+    `${event.title || ''} ${event.text || ''}`.toLowerCase().includes(query.trim().toLowerCase())
+  ))
+  const visibleEvents = [...matchingEvents].sort((first, second) => {
+    const firstCreated = Date.parse(first.createdAtIso || '')
+    const secondCreated = Date.parse(second.createdAtIso || '')
+    const comparison = (Number.isNaN(firstCreated) ? 0 : firstCreated)
+      - (Number.isNaN(secondCreated) ? 0 : secondCreated)
+    return sort === 'Oldest first' ? comparison : -comparison
+  })
 
   return (
     <div className="bps-events-admin">
       <header className="bps-events-header">
         <div>
           <h2>Events Admin</h2>
-          <span>0 events</span>
+          <span>{events.length} {events.length === 1 ? 'event' : 'events'}</span>
         </div>
         <label className="bps-events-search">
           <Search size={16} aria-hidden="true" />
@@ -971,7 +1774,6 @@ function EventsAdminView() {
             onChange={(event) => setSort(event.target.value)}
             aria-label="Sort events"
           >
-            <option>Last modified</option>
             <option>Newest first</option>
             <option>Oldest first</option>
           </select>
@@ -979,17 +1781,278 @@ function EventsAdminView() {
         </label>
       </div>
 
-      <div className="bps-events-empty">
-        <div className="bps-events-illustration" aria-hidden="true">
-          <span className="bps-events-person" />
-          <span className="bps-events-desk" />
-          <span className="bps-events-monitor" />
-          <span className="bps-events-plant">♧</span>
+      {eventDeleteError && <p className="bps-event-error" role="alert">{eventDeleteError}</p>}
+      {visibleEvents.length ? (
+        <div className="bps-events-list">
+          {visibleEvents.map((event) => (
+            <article className="bps-event-card" key={event.id}>
+              {event.media?.type === 'photo' && <img src={event.media.source} alt="" />}
+              <div className="bps-event-card-content">
+                <span>Banner event</span>
+                <h3>{event.title}</h3>
+                <time dateTime={event.createdAtIso}>{event.createdAt}</time>
+                {event.text && <p>{event.text}</p>}
+                <div className="bps-event-card-actions">
+                  <button type="button" onClick={() => onViewPost(event.id)}>View in Banner posts</button>
+                  {event.canEdit && (
+                    <button
+                      type="button"
+                      className="bps-event-delete-button"
+                      disabled={Boolean(deletingEventId)}
+                      onClick={() => void deletePageEvent(event)}
+                    >
+                      <Trash2 size={14} aria-hidden="true" />
+                      {deletingEventId === event.id ? 'Deleting…' : 'Delete event'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </article>
+          ))}
         </div>
-        <h3>No events yet</h3>
-        <p>Create an event to get started.</p>
-        <button type="button" onClick={() => setQuery('')}>Create event</button>
-      </div>
+      ) : events.length ? (
+        <div className="bps-events-empty">
+          <p>No events match your search.</p>
+        </div>
+      ) : (
+        <div className="bps-events-empty">
+          <div className="bps-events-illustration" aria-hidden="true">
+          </div>
+          <h3>No events yet</h3>
+          <p>Create an event to get started.</p>
+          <button type="button" onClick={() => setIsCreateOpen(true)}>Create event</button>
+        </div>
+      )}
+      {isCreateOpen && (
+        <div
+          className="bps-event-create-overlay"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) closeEventCreator()
+          }}
+        >
+          <section
+            className="bps-event-create-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="bps-event-create-title"
+          >
+            <header className="bps-event-create-header">
+              <h2 id="bps-event-create-title">{formStep === 1 ? 'Create an event' : 'Review your event'}</h2>
+              <button type="button" aria-label="Close event creator" onClick={closeEventCreator}>
+                <X size={20} aria-hidden="true" />
+              </button>
+            </header>
+
+            {formStep === 1 ? (
+              <form className="bps-event-create-form" onSubmit={continueToEventReview}>
+                <label className="bps-event-cover-upload">
+                  {eventImagePreview
+                    ? <img src={eventImagePreview} alt="Event cover preview" />
+                    : <span>Upload an event cover image</span>}
+                  <small>Minimum width 480 pixels, 16:9 recommended</small>
+                  <input type="file" accept="image/*" onChange={selectEventImage} />
+                </label>
+
+                <fieldset className="bps-event-type">
+                  <legend>Event type</legend>
+                  {[
+                    { value: 'online', label: 'Online' },
+                    { value: 'in_person', label: 'In person' },
+                  ].map((type) => (
+                    <label key={type.value}>
+                      <input
+                        type="radio"
+                        name="page-event-type"
+                        value={type.value}
+                        checked={eventForm.type === type.value}
+                        onChange={() => updateEventField('type', type.value)}
+                      />
+                      {type.label}
+                    </label>
+                  ))}
+                </fieldset>
+
+                <label className="bps-event-field">
+                  Event name*
+                  <input
+                    type="text"
+                    required
+                    maxLength={75}
+                    value={eventForm.name}
+                    onChange={(event) => updateEventField('name', event.target.value)}
+                    placeholder="Enter event name"
+                  />
+                </label>
+
+                <label className="bps-event-field">
+                  Timezone*
+                  <select
+                    required
+                    value={eventForm.timezone}
+                    onChange={(event) => updateEventField('timezone', event.target.value)}
+                  >
+                    {timezoneOptions.map((timezone) => (
+                      <option key={timezone} value={timezone}>
+                        {timezone === localTimezone ? `Local time (${timezone})` : timezone}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <div className="bps-event-datetime">
+                  <label className="bps-event-field">
+                    Start date*
+                    <input
+                      type="date"
+                      required
+                      value={eventForm.startDate}
+                      onChange={(event) => updateEventField('startDate', event.target.value)}
+                    />
+                  </label>
+                  <label className="bps-event-field">
+                    Start time*
+                    <input
+                      type="time"
+                      required
+                      value={eventForm.startTime}
+                      onChange={(event) => updateEventField('startTime', event.target.value)}
+                    />
+                  </label>
+                </div>
+
+                <label className="bps-event-end-toggle">
+                  <input
+                    type="checkbox"
+                    checked={eventForm.hasEnd}
+                    onChange={(event) => updateEventField('hasEnd', event.target.checked)}
+                  />
+                  Add end date and time
+                </label>
+
+                {eventForm.hasEnd && (
+                  <div className="bps-event-datetime">
+                    <label className="bps-event-field">
+                      End date*
+                      <input
+                        type="date"
+                        required
+                        value={eventForm.endDate}
+                        onChange={(event) => updateEventField('endDate', event.target.value)}
+                      />
+                    </label>
+                    <label className="bps-event-field">
+                      End time*
+                      <input
+                        type="time"
+                        required
+                        value={eventForm.endTime}
+                        onChange={(event) => updateEventField('endTime', event.target.value)}
+                      />
+                    </label>
+                  </div>
+                )}
+
+                <label className="bps-event-field">
+                  Description
+                  <textarea
+                    maxLength={5000}
+                    value={eventForm.description}
+                    onChange={(event) => updateEventField('description', event.target.value)}
+                    placeholder="Ex: topics, schedule, etc."
+                    rows={4}
+                  />
+                </label>
+
+                <div className="bps-event-speakers">
+                  <label className="bps-event-field" htmlFor="bps-event-speaker-search">Speakers</label>
+                  <input
+                    id="bps-event-speaker-search"
+                    type="search"
+                    value={speakerSearch}
+                    onChange={(event) => setSpeakerSearch(event.target.value)}
+                    placeholder="Search connections"
+                  />
+                  <p>Add connections to speak at the event. Speakers can join the event early and will be shown in the event&apos;s details.</p>
+                  {areConnectionsLoading ? (
+                    <p role="status">Loading connections…</p>
+                  ) : connectionsError ? (
+                    <p className="bps-event-error" role="alert">{connectionsError}</p>
+                  ) : speakerProfiles.length ? (
+                    <ul>
+                      {speakerProfiles.map((profile) => {
+                        const profileId = String(
+                          profile.userId || profile.publicUserId || profile.id || profile.profileId || '',
+                        )
+                        if (!profileId) return null
+                        const checked = eventForm.speakerIds.includes(profileId)
+                        return (
+                          <li key={profileId}>
+                            <label>
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={(event) => updateEventField(
+                                  'speakerIds',
+                                  event.target.checked
+                                    ? [...eventForm.speakerIds, profileId]
+                                    : eventForm.speakerIds.filter((id) => id !== profileId),
+                                )}
+                              />
+                              <span>{profile.name || profile.fullName || 'Connection'}</span>
+                            </label>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  ) : (
+                    <p>No matching connections found.</p>
+                  )}
+                </div>
+
+                {eventImageFile && (
+                  <MediaSafetyStatus
+                    safety={eventImageSafety}
+                    blockedMessage="This event cover has a high adult-content score and cannot be uploaded."
+                    safeMessage="Event cover passed content moderation."
+                  />
+                )}
+                {eventError && <p className="bps-event-error" role="alert">{eventError}</p>}
+                <footer className="bps-event-create-actions">
+                  <button type="button" onClick={closeEventCreator}>Cancel</button>
+                  <button type="submit" disabled={eventImageSafety.isBlocked}>Next</button>
+                </footer>
+              </form>
+            ) : (
+              <div className="bps-event-review">
+                {eventImagePreview && <img src={eventImagePreview} alt="Event cover preview" />}
+                <h3>{eventForm.name}</h3>
+                <p>Type: {eventForm.type === 'online' ? 'Online' : 'In person'}</p>
+                <p>Starts {eventForm.startDate} at {eventForm.startTime} ({eventForm.timezone})</p>
+                {eventForm.hasEnd && (
+                  <p>Ends {eventForm.endDate} at {eventForm.endTime} ({eventForm.timezone})</p>
+                )}
+                {eventForm.description && <p>{eventForm.description}</p>}
+                {eventForm.speakerIds.length > 0 && (
+                  <p>Speakers: {eventForm.speakerIds.map((id) => {
+                    const profile = connections.find((connection) => String(
+                      connection.userId || connection.publicUserId || connection.id || connection.profileId || '',
+                    ) === id)
+                    return profile?.name || profile?.fullName || 'Connection'
+                  }).join(', ')}</p>
+                )}
+                {eventError && <p className="bps-event-error" role="alert">{eventError}</p>}
+                <footer className="bps-event-create-actions">
+                  <button type="button" disabled={isPublishing} onClick={() => setFormStep(1)}>Back</button>
+                  <button type="button" disabled={isPublishing} onClick={() => void publishPageEvent()}>
+                    {isPublishing ? 'Publishing…' : 'Post event'}
+                  </button>
+                </footer>
+              </div>
+            )}
+          </section>
+        </div>
+      )}
     </div>
   )
 }
@@ -998,6 +2061,132 @@ function PageMemberFeedView({ page, posts, setPosts }) {
   const [commentDrafts, setCommentDrafts] = useState({})
   const [isFollowing, setIsFollowing] = useState(false)
   const [isSubscribed, setIsSubscribed] = useState(false)
+  const [audienceResult, setAudienceResult] = useState(null)
+  const [blockedMembersResult, setBlockedMembersResult] = useState(null)
+  const [blockingProfileId, setBlockingProfileId] = useState('')
+  const [blockingError, setBlockingError] = useState('')
+  const [blockingNotice, setBlockingNotice] = useState('')
+  const followerIds = useMemo(
+    () => [...new Set((page.followerUserIds || []).filter(Boolean).map(String))],
+    [page.followerUserIds],
+  )
+  const subscriberIds = useMemo(
+    () => [...new Set((page.subscriberUserIds || []).filter(Boolean).map(String))],
+    [page.subscriberUserIds],
+  )
+  const profileIds = useMemo(
+    () => [...new Set([...followerIds, ...subscriberIds])],
+    [followerIds, subscriberIds],
+  )
+  const audienceKey = useMemo(
+    () => JSON.stringify([page.id, followerIds, subscriberIds]),
+    [page.id, followerIds, subscriberIds],
+  )
+
+  useEffect(() => {
+    let isCurrent = true
+
+    if (!profileIds.length) return () => { isCurrent = false }
+    Promise.allSettled(profileIds.map((profileId) => api.getProfileById(profileId)))
+      .then((results) => {
+        if (!isCurrent) return
+
+        const profilesById = new Map()
+        let failedProfiles = 0
+        results.forEach((result, index) => {
+          if (result.status !== 'fulfilled' || !result.value) {
+            failedProfiles += 1
+            return
+          }
+          const profile = result.value
+          profilesById.set(profileIds[index], {
+            id: profileIds[index],
+            name: profile.name || profile.fullName || 'TrueHunt Member',
+            role: profile.headline || profile.role || profile.primaryCraft || '',
+            image: profile.profileImageUrl || profile.avatar || '',
+          })
+        })
+
+        setAudienceResult({
+          key: audienceKey,
+          profiles: {
+            followers: followerIds.map((id) => profilesById.get(id)).filter(Boolean),
+            subscribers: subscriberIds.map((id) => profilesById.get(id)).filter(Boolean),
+          },
+          error: failedProfiles ? 'Some follower or subscriber profiles could not be loaded.' : '',
+        })
+      })
+      .catch((error) => {
+        console.error('Could not load page follower and subscriber profiles:', error)
+        if (isCurrent) {
+          setAudienceResult({
+            key: audienceKey,
+            profiles: { followers: [], subscribers: [] },
+            error: 'Could not load follower and subscriber profiles.',
+          })
+        }
+      })
+
+    return () => { isCurrent = false }
+  }, [audienceKey, followerIds, profileIds, subscriberIds])
+
+  const hasCurrentAudienceResult = audienceResult?.key === audienceKey
+  const audienceProfiles = hasCurrentAudienceResult
+    ? audienceResult.profiles
+    : { followers: [], subscribers: [] }
+  const isLoadingAudience = profileIds.length > 0 && !hasCurrentAudienceResult
+  const audienceError = hasCurrentAudienceResult ? audienceResult.error : ''
+  const hasCurrentBlockedResult = blockedMembersResult?.pageId === page.id
+  const blockedUserIds = hasCurrentBlockedResult ? blockedMembersResult.blockedUserIds : []
+
+  useEffect(() => {
+    let isCurrent = true
+    api.getOrganizationPageBlockedMembers(page.id)
+      .then((result) => {
+        if (isCurrent) {
+          setBlockedMembersResult({
+            pageId: page.id,
+            blockedUserIds: Array.isArray(result?.blockedUserIds) ? result.blockedUserIds : [],
+          })
+        }
+      })
+      .catch((error) => {
+        console.error('Could not load blocked page followers:', error)
+        if (isCurrent) {
+          setBlockedMembersResult({
+            pageId: page.id,
+            blockedUserIds: [],
+            error: error.message || 'Could not load blocked follower status.',
+          })
+        }
+      })
+    return () => { isCurrent = false }
+  }, [page.id])
+
+  async function blockAudienceProfile(profile) {
+    if (blockingProfileId || !hasCurrentBlockedResult || blockedMembersResult.error) return
+    const confirmed = window.confirm(
+      `${profile.name} will no longer see this banner or its posts. Their follow/subscription will remain. Block this person?`,
+    )
+    if (!confirmed) return
+
+    setBlockingProfileId(profile.id)
+    setBlockingError('')
+    setBlockingNotice('')
+    try {
+      const result = await api.blockOrganizationPageMember(page.id, profile.id)
+      setBlockedMembersResult({
+        pageId: page.id,
+        blockedUserIds: Array.isArray(result?.blockedUserIds) ? result.blockedUserIds : [...blockedUserIds, profile.id],
+      })
+      setBlockingNotice(`${profile.name} is blocked from viewing this banner.`)
+    } catch (error) {
+      console.error('Could not block organization page follower:', error)
+      setBlockingError(error.message || 'Could not block this follower. Please try again.')
+    } finally {
+      setBlockingProfileId('')
+    }
+  }
 
   function toggleReaction(post) {
     setPosts((currentPosts) => currentPosts.map((currentPost) => {
@@ -1046,7 +2235,7 @@ function PageMemberFeedView({ page, posts, setPosts }) {
           <div>
             <h2>{page.name}</h2>
             {page.tagline && <p>{page.tagline}</p>}
-            <small>{isFollowing ? '1 follower' : '0 followers'}</small>
+            <small>{page.followerCount} followers · {page.subscriberCount} subscribers</small>
           </div>
         </div>
         <div className="network-page-member-page-actions">
@@ -1068,7 +2257,61 @@ function PageMemberFeedView({ page, posts, setPosts }) {
           </button>
         </div>
       </header>
-      {posts.length ? posts.map((post) => {
+      <div className="network-page-member-audience">
+        {[
+          { key: 'followers', title: 'Followers', count: page.followerCount },
+          { key: 'subscribers', title: 'Subscribers', count: page.subscriberCount },
+        ].map((section) => (
+          <section className="network-page-member-audience-section" key={section.key}>
+            <h3>{section.title} <span>{section.count}</span></h3>
+            {isLoadingAudience ? (
+              <p className="network-page-member-audience-empty">Loading profiles…</p>
+            ) : audienceProfiles[section.key].length ? (
+              <ul>
+                {audienceProfiles[section.key].map((profile) => {
+                  const isBlocked = blockedUserIds.some((id) => (
+                    String(id).toLowerCase() === profile.id.toLowerCase()
+                  ))
+                  return (
+                  <li key={profile.id}>
+                    {profile.image
+                      ? <img src={profile.image} alt="" />
+                      : <span className="network-page-member-audience-avatar" aria-hidden="true">
+                        {profile.name.slice(0, 1).toUpperCase()}
+                      </span>}
+                    <span className="network-page-member-audience-profile-copy">
+                      <strong>{profile.name}</strong>
+                      {profile.role && <small>{profile.role}</small>}
+                    </span>
+                    <button
+                      className="network-page-member-audience-block"
+                      type="button"
+                      disabled={!hasCurrentBlockedResult || Boolean(blockedMembersResult.error)
+                        || Boolean(blockingProfileId) || isBlocked}
+                      aria-label={isBlocked ? `${profile.name} is blocked` : `Block ${profile.name}`}
+                      onClick={() => void blockAudienceProfile(profile)}
+                    >
+                      {blockingProfileId === profile.id ? 'Blocking…' : isBlocked ? 'Blocked' : 'Block'}
+                    </button>
+                  </li>
+                  )
+                })}
+              </ul>
+            ) : (
+              <p className="network-page-member-audience-empty">
+                {section.count ? 'Profile details are unavailable.' : `No ${section.title.toLowerCase()} yet.`}
+              </p>
+            )}
+          </section>
+        ))}
+      </div>
+      {audienceError && <p className="network-page-member-audience-error" role="status">{audienceError}</p>}
+      {blockingError && <p className="network-page-member-audience-error" role="alert">{blockingError}</p>}
+      {blockedMembersResult?.error && (
+        <p className="network-page-member-audience-error" role="alert">{blockedMembersResult.error}</p>
+      )}
+      {blockingNotice && <p className="network-page-member-audience-notice" role="status">{blockingNotice}</p>}
+      {posts.map((post) => {
         const reactions = post.reactions || []
         const comments = post.comments || []
         const isLiked = reactions.some((reaction) => reaction.id === 'page-visitor')
@@ -1085,6 +2328,7 @@ function PageMemberFeedView({ page, posts, setPosts }) {
                 <time dateTime={post.createdAtIso}>{post.createdAt}</time>
               </div>
             </header>
+            {post.isEvent && <span className="network-page-event-badge">Event</span>}
             {post.title && <h2>{post.title}</h2>}
             {post.text && <p>{post.text}</p>}
             {post.media?.type === 'video' && <video src={post.media.source} controls />}
@@ -1113,15 +2357,13 @@ function PageMemberFeedView({ page, posts, setPosts }) {
                 value={commentDrafts[post.id] || ''}
                 onChange={(event) => setCommentDrafts((drafts) => ({ ...drafts, [post.id]: event.target.value }))}
                 placeholder="Write a comment..."
-                aria-label={`Comment on ${post.title || 'page post'}`}
+                aria-label={`Comment on ${post.title || 'banner post'}`}
               />
               <button type="submit" disabled={!(commentDrafts[post.id] || '').trim()}>Post</button>
             </form>
           </article>
         )
-      }) : (
-        <div className="network-page-member-feed-empty">There are no posts to show yet.</div>
-      )}
+      })}
     </div>
   )
 }
@@ -1189,7 +2431,7 @@ function PageAnalyticsView({ posts }) {
     { label: 'Reposts', value: totals.reposts },
   ]
 
-  const tabs = ['Content', 'Visitors', 'Followers', 'Page appearances']
+  const tabs = ['Content', 'Visitors', 'Followers']
   return (
     <div className="bps-analytics">
       <section className="bps-analytics-heading">
@@ -1210,7 +2452,7 @@ function PageAnalyticsView({ posts }) {
 
       <section className="bps-analytics-highlights">
         <h3>Highlights</h3>
-        <p>Engagement from your page posts · Last 5 weeks</p>
+        <p>Engagement from your banner posts · Last 5 weeks</p>
         <div className="bps-analytics-stats">
           {highlightStats.map((stat) => (
             <article key={stat.label}>
@@ -1275,32 +2517,27 @@ function PageAnalyticsView({ posts }) {
 }
 
 // ─── Settings View ────────────────────────────────────────────────────────────
-function SettingsView({ onNavigate }) {
+function SettingsView({ page, onNavigate }) {
   const settingsItems = [
     {
       key: 'manage-admins',
       title: 'Manage admins',
-      description: 'Control who manages your page',
+      description: 'Control who manages your banner',
     },
     {
       key: 'blocked',
-      title: 'Manage blocked members and pages',
-      description: 'See all the blocked members and pages',
+      title: 'Manage blocked followers and subscribers',
+      description: 'See and unblock people who cannot view this banner',
     },
     {
       key: 'following',
       title: 'Manage following',
-      description: 'See all the pages your page follows',
-    },
-    {
-      key: 'inbox',
-      title: 'Inbox settings',
-      description: 'Choose whether members can message the page and select conversation topics',
+      description: 'View people following your banner and remove their follow access',
     },
     {
       key: 'deactivate',
-      title: 'Deactivate page',
-      description: 'Take your page down',
+      title: 'Deactivate banner',
+      description: 'Take your banner down',
     },
   ]
 
@@ -1308,7 +2545,7 @@ function SettingsView({ onNavigate }) {
     <div className="bps-settings">
       <h2 className="bps-settings-title">Settings</h2>
       <ul className="bps-settings-list">
-        {settingsItems.map((item) => (
+        {settingsItems.filter((item) => item.key !== 'following' || page.isOwner).map((item) => (
           <li key={item.key}>
             <button
               type="button"
@@ -1342,15 +2579,15 @@ function DeactivatePageView({ onBack, onConfirm }) {
         <button type="button" className="bps-back-btn" onClick={onBack} aria-label="Back to settings">
           <ArrowLeft size={18} aria-hidden="true" />
         </button>
-        <h2 id="bps-deactivate-title">Deactivate page</h2>
+        <h2 id="bps-deactivate-title">Deactivate banner</h2>
       </header>
       <div className="bps-deactivate-content">
-        <h3>Are you sure you want to deactivate this page?</h3>
-        <p>Deactivating will take your organization page down and delete its saved page information, including its banner and logo.</p>
+        <h3>Are you sure you want to deactivate this banner?</h3>
+        <p>Deactivating will take your organization banner down and delete its saved information, including its cover and logo.</p>
         {error && <p className="bps-deactivate-error" role="alert">{error}</p>}
         <div className="bps-deactivate-actions">
           <button type="button" onClick={onBack}>Cancel</button>
-          <button type="button" onClick={deactivatePage}>Deactivate page</button>
+          <button type="button" onClick={deactivatePage}>Deactivate banner</button>
         </div>
       </div>
     </section>
@@ -1358,20 +2595,28 @@ function DeactivatePageView({ onBack, onConfirm }) {
 }
 
 // ─── Organization Page Dashboard ──────────────────────────────────────────────
-function OrganizationPageDashboard({ page, onEditPage, onDeactivatePage }) {
+function OrganizationPageDashboard({ page, onEditPage, onDeactivatePage, onBack, onPageUpdate }) {
   const [activeItem, setActiveItem] = useState('Dashboard')
   const [settingsPage, setSettingsPage] = useState(null)
   const [pagePosts, setPagePosts] = useState([])
   const [pagePostsErrorState, setPagePostsErrorState] = useState({ pageId: null, message: '' })
+  const [pageAnalyticsState, setPageAnalyticsState] = useState({
+    pageId: null,
+    newFollowers: null,
+    bannerVisitors: null,
+    error: '',
+  })
   const [dismissedTips, setDismissedTips] = useState([])
-  const [isOfferHidden, setIsOfferHidden] = useState(false)
   const [isCreateMenuOpen, setIsCreateMenuOpen] = useState(false)
   const [isViewingAsMember, setIsViewingAsMember] = useState(false)
+  const hasWebsiteAndDescription = Boolean(
+    String(page.website || '').trim() && String(page.tagline || '').trim(),
+  )
 
-  const menuItems = ['Dashboard', 'Page posts', 'Analytics', 'Feed', 'Activity', 'Inbox']
+  const menuItems = ['Dashboard', 'Banner posts', 'Analytics']
   const tips = [
-    { id: 'website', title: 'Add website URL', detail: 'Add a URL to drive more page visitors to your website.' },
-    { id: 'description', title: 'Add description', detail: 'Add a quick description to get your page discovered in search results.' },
+    { id: 'website', title: 'Add website URL', detail: 'Add a URL to drive more banner visitors to your website.' },
+    { id: 'description', title: 'Add description', detail: 'Add a quick description to get your banner discovered in search results.' },
   ]
 
   useEffect(() => {
@@ -1390,7 +2635,7 @@ function OrganizationPageDashboard({ page, onEditPage, onDeactivatePage }) {
         if (isCurrent) {
           setPagePostsErrorState({
             pageId: page.id,
-            message: error.message || 'Could not load page posts. Please try again.',
+            message: error.message || 'Could not load banner posts. Please try again.',
           })
         }
       })
@@ -1401,7 +2646,7 @@ function OrganizationPageDashboard({ page, onEditPage, onDeactivatePage }) {
   }, [page.id])
 
   useEffect(() => {
-    if (!page.id || activeItem !== 'Analytics') return undefined
+    if (!page.id || !['Dashboard', 'Analytics'].includes(activeItem)) return undefined
 
     let isCurrent = true
     const refreshAnalyticsPosts = () => {
@@ -1414,7 +2659,34 @@ function OrganizationPageDashboard({ page, onEditPage, onDeactivatePage }) {
           if (isCurrent) {
             setPagePostsErrorState({
               pageId: page.id,
-              message: error.message || 'Could not refresh page analytics. Please try again.',
+              message: error.message || 'Could not refresh banner analytics. Please try again.',
+            })
+          }
+        })
+      api.getOrganizationPageAnalytics(page.id)
+        .then((analytics) => {
+          const newFollowers = Number(analytics?.newFollowers)
+          const bannerVisitors = Number(analytics?.bannerVisitors)
+          if (!Number.isFinite(newFollowers) || !Number.isFinite(bannerVisitors)) {
+            throw new Error('Banner analytics returned invalid counts.')
+          }
+          if (isCurrent) {
+            setPageAnalyticsState({
+              pageId: page.id,
+              newFollowers,
+              bannerVisitors,
+              error: '',
+            })
+          }
+        })
+        .catch((error) => {
+          console.error('Could not refresh banner audience analytics:', error)
+          if (isCurrent) {
+            setPageAnalyticsState({
+              pageId: page.id,
+              newFollowers: null,
+              bannerVisitors: null,
+              error: error.message || 'Could not load banner audience analytics.',
             })
           }
         })
@@ -1429,11 +2701,23 @@ function OrganizationPageDashboard({ page, onEditPage, onDeactivatePage }) {
   }, [activeItem, page.id])
 
   const pagePostsError = pagePostsErrorState.pageId === page.id ? pagePostsErrorState.message : ''
+  const pageAnalytics = pageAnalyticsState.pageId === page.id ? pageAnalyticsState : null
+
+  function handleEventCreated(post) {
+    setPagePosts((currentPosts) => [mapOrganizationPost(post), ...currentPosts])
+    setPagePostsErrorState({ pageId: page.id, message: '' })
+  }
+
+  async function handleEventDeleted(eventId) {
+    await api.deleteConnectionGroupPost(page.id, eventId)
+    setPagePosts((currentPosts) => currentPosts.filter((post) => post.id !== eventId))
+    setPagePostsErrorState({ pageId: page.id, message: '' })
+  }
 
   return (
     <section
       className={`network-page-dashboard${isViewingAsMember ? ' is-member-preview' : ''}`}
-      aria-label={isViewingAsMember ? `${page.name} public page preview` : `${page.name} page dashboard`}
+      aria-label={isViewingAsMember ? `${page.name} public banner preview` : `${page.name} banner dashboard`}
     >
       {!isViewingAsMember && <aside className="network-page-dashboard-sidebar">
         <div
@@ -1449,11 +2733,20 @@ function OrganizationPageDashboard({ page, onEditPage, onDeactivatePage }) {
               : <span className="network-page-preview-logo-placeholder" aria-hidden="true"><i /><i /><i /></span>}
           </div>
           <strong>{page.name}</strong>
+          {page.isAdmin && !page.isOwner && (
+            <button
+              className="network-page-dashboard-member-view"
+              type="button"
+              onClick={onBack}
+            >
+              Back to banners
+            </button>
+          )}
           <small>{page.subscriberCount} subscribers</small>
           {getSubscriberNamesPreview(page) && (
             <small>Members: {getSubscriberNamesPreview(page)}</small>
           )}
-          <div className="network-page-dashboard-create-wrap">
+          {(page.isOwner || page.isAdmin) && <div className="network-page-dashboard-create-wrap">
             <button
               className="network-page-dashboard-create"
               type="button"
@@ -1464,12 +2757,12 @@ function OrganizationPageDashboard({ page, onEditPage, onDeactivatePage }) {
             </button>
             {isCreateMenuOpen && (
               <div className="network-page-dashboard-create-menu">
-                {['Post', 'Event'].map((item) => (
+                {(page.isOwner ? ['Post', 'Event'] : ['Post']).map((item) => (
                   <button
                     key={item}
                     type="button"
                     onClick={() => {
-                      setActiveItem(item === 'Post' ? 'Page posts' : item)
+                      setActiveItem(item === 'Post' ? 'Banner posts' : item)
                       setIsCreateMenuOpen(false)
                       setIsViewingAsMember(false)
                     }}
@@ -1479,18 +2772,18 @@ function OrganizationPageDashboard({ page, onEditPage, onDeactivatePage }) {
                 ))}
               </div>
             )}
-          </div>
-          <button
+          </div>}
+          {page.isOwner && <button
             className="network-page-dashboard-member-view"
             type="button"
             aria-pressed={isViewingAsMember}
             onClick={() => setIsViewingAsMember((viewing) => !viewing)}
           >
-            {isViewingAsMember ? 'Exit member view' : 'View as member'}
-          </button>
+            {isViewingAsMember ? 'Exit ' : 'follower/subscriber view'}
+          </button>}
         </div>
 
-        <nav className="network-page-dashboard-nav" aria-label="Organization page">
+        <nav className="network-page-dashboard-nav" aria-label="Banner navigation">
           {menuItems.map((item) => (
             <button
               className={activeItem === item ? 'is-active' : ''}
@@ -1501,51 +2794,59 @@ function OrganizationPageDashboard({ page, onEditPage, onDeactivatePage }) {
               {item}
             </button>
           ))}
-          <button className="network-page-dashboard-edit" type="button" onClick={onEditPage}>
-            Edit page
-          </button>
-          <div className="network-page-dashboard-nav-divider" />
-          {['Events'].map((item) => (
-            <button
-              className={activeItem === item ? 'is-active' : ''}
-              type="button"
-              key={item}
-              onClick={() => { setActiveItem(item); setSettingsPage(null); setIsViewingAsMember(false) }}
-            >
-              {item}
-            </button>
-          ))}
-          <div className="network-page-dashboard-nav-divider" />
-          {['Settings', 'Chat with support'].map((item) => (
-            <button
-              className={activeItem === item ? 'is-active' : ''}
-              type="button"
-              key={item}
-              onClick={() => {
-                setActiveItem(item)
-                setIsViewingAsMember(false)
-                if (item === 'Settings') setSettingsPage('settings')
-              }}
-            >
-              {item}
-            </button>
-          ))}
+          {page.isOwner && (
+            <>
+              <button className="network-page-dashboard-edit" type="button" onClick={onEditPage}>
+                Edit banner
+              </button>
+              <div className="network-page-dashboard-nav-divider" />
+              {['Events'].map((item) => (
+                <button
+                  className={activeItem === item ? 'is-active' : ''}
+                  type="button"
+                  key={item}
+                  onClick={() => { setActiveItem(item); setSettingsPage(null); setIsViewingAsMember(false) }}
+                >
+                  {item}
+                </button>
+              ))}
+              <div className="network-page-dashboard-nav-divider" />
+              {['Settings', 'Chat with support'].map((item) => (
+                <button
+                  className={activeItem === item ? 'is-active' : ''}
+                  type="button"
+                  key={item}
+                  onClick={() => {
+                    setActiveItem(item)
+                    setIsViewingAsMember(false)
+                    if (item === 'Settings') setSettingsPage('settings')
+                  }}
+                >
+                  {item}
+                </button>
+              ))}
+            </>
+          )}
         </nav>
       </aside>}
 
       <div className="network-page-dashboard-content">
         {isViewingAsMember ? (
           <div className="network-page-member-preview">
-            <button type="button" onClick={() => setIsViewingAsMember(false)}>Exit member view</button>
+            <button type="button" onClick={() => setIsViewingAsMember(false)}>Exit</button>
             <PageMemberFeedView page={page} posts={pagePosts} setPosts={setPagePosts} />
           </div>
         ) : activeItem === 'Settings' ? (
           settingsPage === 'manage-admins' ? (
             <ManageAdminsView page={page} onBack={() => setSettingsPage('settings')} />
           ) : settingsPage === 'blocked' ? (
-            <BlockedMembersView onBack={() => setSettingsPage('settings')} />
+            <BlockedMembersView page={page} onBack={() => setSettingsPage('settings')} />
           ) : settingsPage === 'following' ? (
-            <FollowingView onClose={() => setSettingsPage('settings')} />
+            <FollowingView
+              page={page}
+              onClose={() => setSettingsPage('settings')}
+              onPageUpdate={onPageUpdate}
+            />
           ) : settingsPage === 'deactivate' ? (
             <DeactivatePageView
               onBack={() => setSettingsPage('settings')}
@@ -1553,24 +2854,38 @@ function OrganizationPageDashboard({ page, onEditPage, onDeactivatePage }) {
             />
           ) : (
             <SettingsView
+              page={page}
               onNavigate={(key) => setSettingsPage(key)}
             />
           )
         ) : activeItem === 'Events' ? (
-          <EventsAdminView />
+          <EventsAdminView
+            page={page}
+            events={pagePosts.filter((post) => post.isEvent)}
+            onEventCreated={handleEventCreated}
+            onDeleteEvent={handleEventDeleted}
+            onViewPost={() => setActiveItem('Banner posts')}
+          />
         ) : activeItem === 'Analytics' ? (
           <>
             {pagePostsError && <p className="network-connection-error" role="alert">{pagePostsError}</p>}
             <PageAnalyticsView posts={pagePosts} />
           </>
-        ) : activeItem === 'Page posts' ? (
-          <PagePostsView page={page} posts={pagePosts} setPosts={setPagePosts} postsError={pagePostsError} />
+        ) : activeItem === 'Banner posts' ? (
+          <PagePostsView
+            page={page}
+            posts={pagePosts}
+            setPosts={setPagePosts}
+            postsError={pagePostsError}
+            canPublish={page.isOwner || page.isAdmin}
+          />
         ) : (
           <>
+        {page.isOwner && !hasWebsiteAndDescription && (
         <section className="network-page-dashboard-panel network-page-growth-panel">
           <header>
             <h2>Grow your followers 4x faster</h2>
-            <button type="button" aria-label="Growth tips information" title="Suggestions to help grow your page">
+            <button type="button" aria-label="Growth tips information" title="Suggestions to help grow your banner">
               ⓘ
             </button>
           </header>
@@ -1590,62 +2905,97 @@ function OrganizationPageDashboard({ page, onEditPage, onDeactivatePage }) {
             </div>
           ))}
         </section>
+        )}
 
         <section className="network-page-dashboard-panel network-page-performance-panel">
           <h2>Track performance</h2>
-          <p>Grow your page 3x faster by leveraging insights and analytics</p>
+          <p>Grow your banner 3x faster by leveraging insights and analytics</p>
+          {pageAnalytics?.error && (
+            <p className="network-connection-error" role="alert">{pageAnalytics.error}</p>
+          )}
           <div className="network-page-metrics">
-            {['Page appearances', 'New followers', 'Post impressions', 'Page visitors'].map((metric) => (
-              <article key={metric}>
-                <strong>0</strong>
-                <a href="#network-page-analytics" onClick={(event) => {
-                  event.preventDefault()
-                  setActiveItem('Analytics')
-                }}>{metric}</a>
-                <small>N/A</small>
-              </article>
-            ))}
+            <article>
+              <strong>{pageAnalytics?.newFollowers ?? '—'}</strong>
+              <a href="#network-page-analytics" onClick={(event) => {
+                event.preventDefault()
+                setActiveItem('Analytics')
+              }}>New followers</a>
+              <small>Last 5 weeks</small>
+            </article>
+            <article>
+              <strong>{getPostActivityCount(pagePosts, 'impressions')}</strong>
+              <a href="#network-page-analytics" onClick={(event) => {
+                event.preventDefault()
+                setActiveItem('Analytics')
+              }}>Post impressions</a>
+              <small>{getPostActivityCount(pagePosts, 'reactions')} likes</small>
+            </article>
+            <article>
+              <strong>{pageAnalytics?.bannerVisitors ?? '—'}</strong>
+              <a href="#network-page-analytics" onClick={(event) => {
+                event.preventDefault()
+                setActiveItem('Analytics')
+              }}>Banner visitors</a>
+              <small>Unique visitors · Last 5 weeks</small>
+            </article>
           </div>
         </section>
 
-        {!isOfferHidden && (
-          <section className="network-page-dashboard-panel network-page-premium-panel">
-            <div>
-              <h2>Try the new Premium AI tools</h2>
-              <p>Reactivate Premium and get a discount for 2 months</p>
-              <button type="button" onClick={() => setIsOfferHidden(true)}>Claim offer now</button>
-            </div>
-            <div className="network-page-premium-art" aria-hidden="true">
-              <span />
-              <span />
-              <span />
-            </div>
-            <button
-              className="network-page-premium-menu"
-              type="button"
-              aria-label="Dismiss Premium offer"
-              onClick={() => setIsOfferHidden(true)}
-            >
-              <MoreVertical size={17} aria-hidden="true" />
-            </button>
-          </section>
-        )}
-
         <section className="network-page-dashboard-panel network-page-recent-posts">
           <h2>Manage recent posts</h2>
-          <p>Manage your page’s content and amplify your reach with boosting. <button type="button" onClick={() => setActiveItem('Page posts')}>Learn more</button></p>
-          <div className="network-page-posts-empty-art" aria-hidden="true">
-            <div className="network-page-posts-window">
-              <span />
-              <span />
-              <span />
+          <p>Manage your banner’s content and amplify your reach with boosting. <button type="button" onClick={() => setActiveItem('Banner posts')}>Learn more</button></p>
+          {pagePostsError && <p className="network-connection-error" role="alert">{pagePostsError}</p>}
+          {pagePosts.length ? (
+            <div className="network-page-recent-posts-row" aria-label="Recent banner posts">
+              {pagePosts.slice(0, 6).map((post) => (
+                <article className="network-page-recent-post-card" key={post.id}>
+                  <button
+                    type="button"
+                    onClick={() => setActiveItem('Banner posts')}
+                    aria-label={`Manage ${post.isEvent ? 'event' : 'post'}: ${(post.title || post.text || '').slice(0, 80) || 'Published post'}`}
+                  >
+                    {post.media?.source ? (
+                      post.media.type === 'video' ? (
+                        <video src={post.media.source} muted playsInline preload="metadata" />
+                      ) : (
+                        <img src={post.media.source} alt="" />
+                      )
+                    ) : (
+                      <div className="network-page-recent-post-card-placeholder" aria-hidden="true">
+                        <FileText size={28} />
+                      </div>
+                    )}
+                    <div className="network-page-recent-post-card-content">
+                      <div className="network-page-recent-post-card-meta">
+                        <span>{post.isEvent ? 'Event' : 'Post'}</span>
+                        <time>{post.createdAt}</time>
+                      </div>
+                      {post.title && <h3>{post.title}</h3>}
+                      <p>{post.text || 'No caption for this post.'}</p>
+                      <div className="network-page-recent-post-card-engagement">
+                        <span><ThumbsUp size={13} aria-hidden="true" /> {post.reactions.length}</span>
+                        <span><MessageCircle size={13} aria-hidden="true" /> {post.comments.length}</span>
+                      </div>
+                      <span className="network-page-recent-post-card-manage">Manage post <ChevronRight size={14} aria-hidden="true" /></span>
+                    </div>
+                  </button>
+                </article>
+              ))}
             </div>
-            <div className="network-page-posts-person">
-              <i />
-              <b />
+          ) : !pagePostsError ? (
+            <div className="network-page-posts-empty-art" aria-hidden="true">
+              <div className="network-page-posts-window">
+                <span />
+                <span />
+                <span />
+              </div>
+              <div className="network-page-posts-person">
+                <i />
+                <b />
+              </div>
+              <div className="network-page-posts-desk" />
             </div>
-            <div className="network-page-posts-desk" />
-          </div>
+          ) : null}
         </section>
           </>
         )}
@@ -1657,6 +3007,7 @@ function OrganizationPageDashboard({ page, onEditPage, onDeactivatePage }) {
 export default function BannerPageSetup({ storageKey }) {
   const [page, setPage] = useState(() => readPageDraft(storageKey))
   const [organizationPages, setOrganizationPages] = useState([])
+  const [selectedAdminPageId, setSelectedAdminPageId] = useState('')
   const [selectedPublicPage, setSelectedPublicPage] = useState(null)
   const [isEditingPage, setIsEditingPage] = useState(false)
   const [isCreatePageFormOpen, setIsCreatePageFormOpen] = useState(false)
@@ -1675,6 +3026,8 @@ export default function BannerPageSetup({ storageKey }) {
     && page.industry.trim()
     && isAuthorized,
   )
+  const hasOwnedPage = Boolean(page.isOwner || organizationPages.some((item) => item.isOwner))
+  const managedPages = organizationPages.filter((item) => item.isAdmin && !item.isOwner)
   const cachePageLocally = useCallback((updatedPage) => {
     if (!storageKey) return
     try {
@@ -1695,6 +3048,7 @@ export default function BannerPageSetup({ storageKey }) {
         if (!Array.isArray(publicPages)) publicPages = []
 
         let ownedPage = publicPages.find((item) => item.isOwner)
+          || publicPages.find((item) => item.isAdmin)
         const legacyPage = storageKey ? readPageDraft(storageKey) : emptyPage
         if (!ownedPage && legacyPage.isCreated && storageKey) {
           try {
@@ -1711,6 +3065,7 @@ export default function BannerPageSetup({ storageKey }) {
           } catch (migrationError) {
             publicPages = await api.getOrganizationPages()
             ownedPage = publicPages.find((item) => item.isOwner)
+              || publicPages.find((item) => item.isAdmin)
             if (!ownedPage) throw migrationError
           }
         }
@@ -1721,7 +3076,7 @@ export default function BannerPageSetup({ storageKey }) {
         if (ownedPage) {
           const mappedOwnedPage = mapOrganizationPage(ownedPage)
           setPage(mappedOwnedPage)
-          if (storageKey) {
+          if (storageKey && mappedOwnedPage.isOwner) {
             try {
               window.localStorage.setItem(storageKey, JSON.stringify(mappedOwnedPage))
             } catch (cacheError) {
@@ -1777,9 +3132,10 @@ export default function BannerPageSetup({ storageKey }) {
         const refreshedPages = (await api.getOrganizationPages()).map(mapOrganizationPage)
         setOrganizationPages(refreshedPages)
         const ownedPage = refreshedPages.find((currentPage) => currentPage.isOwner)
+          || refreshedPages.find((currentPage) => currentPage.isAdmin)
         if (ownedPage) {
           setPage(ownedPage)
-          cachePageLocally(ownedPage)
+          if (ownedPage.isOwner) cachePageLocally(ownedPage)
         }
         setSelectedPublicPage((currentPage) => (
           refreshedPages.find((pageItem) => String(pageItem.id) === String(currentPage?.id))
@@ -1824,6 +3180,17 @@ export default function BannerPageSetup({ storageKey }) {
     }
   }
 
+  function handleManagedPageUpdate(pageData) {
+    const updatedPage = mapOrganizationPage(pageData)
+    setPage((currentPage) => (
+      String(currentPage.id) === String(updatedPage.id) ? updatedPage : currentPage
+    ))
+    setOrganizationPages((currentPages) => currentPages.map((currentPage) => (
+      String(currentPage.id) === String(updatedPage.id) ? updatedPage : currentPage
+    )))
+    if (updatedPage.isOwner) cachePageLocally(updatedPage)
+  }
+
   function updateField(field, value) {
     setPage((currentPage) => ({ ...currentPage, [field]: value }))
     setSaveMessage('')
@@ -1857,7 +3224,7 @@ export default function BannerPageSetup({ storageKey }) {
   async function handleSubmit(event) {
     event.preventDefault()
     if (!storageKey || isSavingPage) {
-      if (!storageKey) setSaveMessage('Sign in to save this page setup to your account.')
+      if (!storageKey) setSaveMessage('Sign in to save this banner setup to your account.')
       return
     }
 
@@ -1871,7 +3238,7 @@ export default function BannerPageSetup({ storageKey }) {
       setIsCreatePageFormOpen(false)
     } catch (error) {
       console.error('Could not save the organization page setup:', error)
-      setSaveMessage(error.message || 'Could not save this page setup. Please try again.')
+      setSaveMessage(error.message || 'Could not save this banner setup. Please try again.')
     } finally {
       setIsSavingPage(false)
     }
@@ -1882,7 +3249,7 @@ export default function BannerPageSetup({ storageKey }) {
   }
 
   async function savePageChanges(updatedPage) {
-    if (!storageKey) return 'Sign in to save changes to this page.'
+    if (!storageKey) return 'Sign in to save changes to this banner.'
     if (!page.id) return 'This page is not saved to the server yet. Refresh and try again.'
 
     try {
@@ -1904,7 +3271,7 @@ export default function BannerPageSetup({ storageKey }) {
   }
 
   async function deactivatePage() {
-    if (!storageKey) return 'Sign in to deactivate this page.'
+    if (!storageKey) return 'Sign in to deactivate this banner.'
     if (!page.id) return 'This page is not saved to the server yet. Refresh and try again.'
 
     try {
@@ -1924,7 +3291,7 @@ export default function BannerPageSetup({ storageKey }) {
       return ''
     } catch (error) {
       console.error('Could not deactivate the organization page:', error)
-      return error.message || 'Could not deactivate this page. Please try again.'
+      return error.message || 'Could not deactivate this banner. Please try again.'
     }
   }
 
@@ -1954,16 +3321,24 @@ export default function BannerPageSetup({ storageKey }) {
   }
 
   if (page.isCreated && isDashboardOpen) {
+    const dashboardPage = organizationPages.find(
+      (item) => String(item.id) === selectedAdminPageId,
+    ) || page
     return (
       <OrganizationPageDashboard
-        page={page}
+        page={dashboardPage}
         onEditPage={handleEditPage}
+        onPageUpdate={handleManagedPageUpdate}
         onDeactivatePage={deactivatePage}
+        onBack={() => {
+          setSelectedAdminPageId('')
+          setIsDashboardOpen(false)
+        }}
       />
     )
   }
 
-  if (page.isCreated || !isCreatePageFormOpen) {
+  if (hasOwnedPage || !isCreatePageFormOpen) {
     return (
       <section className="network-page-banner-hub" aria-labelledby="network-page-banner-title">
         <header className="network-section-heading">
@@ -1972,19 +3347,23 @@ export default function BannerPageSetup({ storageKey }) {
             <h2 id="network-page-banner-title">Banners</h2>
             <p>Create an organization banner to share posts with your network.</p>
           </div>
-          {!page.isCreated && (
+          {!hasOwnedPage && (
             <button
               className="network-group-create-button"
               type="button"
               disabled={isLoadingPages}
-              onClick={() => setIsCreatePageFormOpen(true)}
+              onClick={() => {
+                setPage({ ...emptyPage })
+                setIsAuthorized(false)
+                setIsCreatePageFormOpen(true)
+              }}
             >
               Create your banner
             </button>
           )}
         </header>
         {pageLoadError && <p className="network-connection-error" role="alert">{pageLoadError}</p>}
-        {page.isCreated ? (
+        {hasOwnedPage ? (
           <article className="network-page-banner-card">
             <div className="network-page-banner-card-identity">
               <span className="network-page-banner-card-logo" aria-hidden="true">
@@ -1994,7 +3373,7 @@ export default function BannerPageSetup({ storageKey }) {
               </span>
               <div>
                 <strong>{page.name}</strong>
-                <span>Created by you</span>
+                <span>{page.isOwner ? 'Created by you' : 'Admin access'}</span>
                 <small>
                   {page.subscriberCount} {page.subscriberCount === 1 ? 'subscriber' : 'subscribers'}
                 </small>
@@ -2003,9 +3382,9 @@ export default function BannerPageSetup({ storageKey }) {
                 )}
               </div>
             </div>
-            <button type="button" onClick={() => setIsDashboardOpen(true)}>Manage page</button>
+            <button type="button" onClick={() => setIsDashboardOpen(true)}>Manage banner</button>
           </article>
-        ) : !isLoadingPages && !isCreatePageFormOpen ? (
+        ) : !isLoadingPages && !isCreatePageFormOpen && managedPages.length === 0 ? (
           <div className="network-page-banner-empty">
             <span className="network-page-banner-card-logo" aria-hidden="true"><UsersRound size={28} /></span>
             <h3>No banners yet</h3>
@@ -2014,11 +3393,42 @@ export default function BannerPageSetup({ storageKey }) {
         ) : isLoadingPages ? (
           <p role="status">Loading banners…</p>
         ) : null}
-        {organizationPages.some((publicPage) => !publicPage.isOwner) && (
-          <section className="network-page-public-list" aria-labelledby="network-page-public-list-title">
-            <h3 id="network-page-public-list-title">Pages from your network</h3>
+        {managedPages.length > 0 && (
+          <section className="network-page-public-list" aria-labelledby="network-page-admin-list-title">
+            <h3 id="network-page-admin-list-title">Banners you can view as an admin</h3>
             <div className="network-page-public-list-items">
-              {organizationPages.filter((publicPage) => !publicPage.isOwner).map((publicPage) => (
+              {managedPages.map((managedPage) => (
+                <article className="network-page-banner-card" key={managedPage.id}>
+                  <div className="network-page-banner-card-identity">
+                    <span className="network-page-banner-card-logo" aria-hidden="true">
+                      {managedPage.logo
+                        ? <img src={managedPage.logo} alt="" />
+                        : <UsersRound size={28} />}
+                    </span>
+                    <div>
+                      <strong>{managedPage.name}</strong>
+                      <span>Admin access · {managedPage.ownerName || 'Banner owner'}</span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedAdminPageId(String(managedPage.id))
+                      setIsDashboardOpen(true)
+                    }}
+                  >
+                    View dashboard
+                  </button>
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
+        {organizationPages.some((publicPage) => !publicPage.isOwner && !publicPage.isAdmin) && (
+          <section className="network-page-public-list" aria-labelledby="network-page-public-list-title">
+            <h3 id="network-page-public-list-title">Banners from your network</h3>
+            <div className="network-page-public-list-items">
+              {organizationPages.filter((publicPage) => !publicPage.isOwner && !publicPage.isAdmin).map((publicPage) => (
                 <article className="network-page-banner-card" key={publicPage.id}>
                   <button
                     className="network-page-banner-card-open"
@@ -2073,8 +3483,8 @@ export default function BannerPageSetup({ storageKey }) {
     <section className="network-page-setup" aria-labelledby="network-page-setup-title">
       <header className="network-page-setup-heading">
         <div>
-          <span className="network-section-eyebrow">ORGANIZATION PAGE</span>
-          <h2 id="network-page-setup-title">Create a page</h2>
+          <span className="network-section-eyebrow">ORGANIZATION BANNER</span>
+          <h2 id="network-page-setup-title">Create a banner</h2>
           <p>Introduce your organization to people across your network.</p>
         </div>
         <button type="button" onClick={() => setIsCreatePageFormOpen(false)}>Cancel</button>
@@ -2114,7 +3524,7 @@ export default function BannerPageSetup({ storageKey }) {
               target="_blank"
               rel="noreferrer"
             >
-              Learn more about the Page Public URL
+              Learn more about the Banner Public URL
             </a>
           </label>
 
@@ -2181,7 +3591,7 @@ export default function BannerPageSetup({ storageKey }) {
               required
             />
             <span>
-              I verify that I am an authorized representative of this organization and have the right to act on its behalf in the creation and management of this page.
+              I verify that I am an authorized representative of this organization and have the right to act on its behalf in the creation and management of this banner.
             </span>
           </label>
 
@@ -2189,19 +3599,19 @@ export default function BannerPageSetup({ storageKey }) {
             className="network-page-setup-link"
             rel="noreferrer"
           >
-            Read the cinema Pages Terms
+            Read the Banner Terms
           </a>
 
           {saveMessage && (
             <p className="network-page-setup-status" role="status">{saveMessage}</p>
           )}
           <button className="network-page-create-button" type="submit" disabled={!canCreatePage}>
-            Create page
+            Create banner
           </button>
         </form>
 
-        <aside className="network-page-preview-panel" aria-label="Organization page preview">
-          <h3>Page preview <span aria-hidden="true">ⓘ</span></h3>
+        <aside className="network-page-preview-panel" aria-label="Organization banner preview">
+          <h3>Banner preview <span aria-hidden="true">ⓘ</span></h3>
           <article className="network-page-preview-card">
             <div className="network-page-preview-logo">
               {page.logo

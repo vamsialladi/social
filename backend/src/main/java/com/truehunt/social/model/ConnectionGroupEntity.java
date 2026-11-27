@@ -74,6 +74,18 @@ public class ConnectionGroupEntity {
     @OrderColumn(name = "subscriber_order")
     private List<String> subscriberUserIds = new ArrayList<>();
 
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "organization_page_admins", joinColumns = @JoinColumn(name = "page_id"))
+    @Column(name = "admin_user_id", nullable = false)
+    @OrderColumn(name = "admin_order")
+    private List<String> pageAdminUserIds = new ArrayList<>();
+
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "organization_page_blocked_members", joinColumns = @JoinColumn(name = "page_id"))
+    @Column(name = "blocked_user_id", nullable = false)
+    @OrderColumn(name = "blocked_order")
+    private List<String> pageBlockedUserIds = new ArrayList<>();
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 
@@ -187,6 +199,22 @@ public class ConnectionGroupEntity {
 
     public void setSubscriberUserIds(List<String> subscriberUserIds) {
         this.subscriberUserIds = subscriberUserIds == null ? new ArrayList<>() : new ArrayList<>(subscriberUserIds);
+    }
+
+    public List<String> getPageAdminUserIds() {
+        return pageAdminUserIds;
+    }
+
+    public void setPageAdminUserIds(List<String> pageAdminUserIds) {
+        this.pageAdminUserIds = pageAdminUserIds == null ? new ArrayList<>() : new ArrayList<>(pageAdminUserIds);
+    }
+
+    public List<String> getPageBlockedUserIds() {
+        return pageBlockedUserIds;
+    }
+
+    public void setPageBlockedUserIds(List<String> pageBlockedUserIds) {
+        this.pageBlockedUserIds = pageBlockedUserIds == null ? new ArrayList<>() : new ArrayList<>(pageBlockedUserIds);
     }
 
     public LocalDateTime getCreatedAt() {

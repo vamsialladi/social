@@ -60,7 +60,10 @@ public class MediaService {
         if ("connection-group-photo".equalsIgnoreCase(category)) {
             validateImageFile(file, MAX_GROUP_PHOTO_SIZE_BYTES, "10 MB", GROUP_PHOTO_CONTENT_TYPES);
         } else if (isImageFile(file)) {
-            moderateImage(file);
+            // Page-post images are checked by the existing client-side NSFWJS upload flow.
+            if (!"connection-group-post".equalsIgnoreCase(category)) {
+                moderateImage(file);
+            }
         }
 
         try {

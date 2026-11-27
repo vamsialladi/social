@@ -363,6 +363,50 @@ export const api = {
     fetchJson(`/connections/groups/organization-pages/${encodeURIComponent(pageId)}`, {
       method: "DELETE",
     }),
+  getOrganizationPageAdmins: (pageId) =>
+    fetchJson(`/connections/groups/organization-pages/${encodeURIComponent(pageId)}/admins`, {
+      cache: "no-store",
+    }),
+  addOrganizationPageAdmin: (pageId, profileId) =>
+    fetchJson(`/connections/groups/organization-pages/${encodeURIComponent(pageId)}/admins`, {
+      method: "POST",
+      body: { profileId },
+    }),
+  removeOrganizationPageAdmin: (pageId, adminId) =>
+    fetchJson(
+      `/connections/groups/organization-pages/${encodeURIComponent(pageId)}/admins/${encodeURIComponent(adminId)}`,
+      { method: "DELETE" },
+    ),
+  getOrganizationPageBlockedMembers: (pageId) =>
+    fetchJson(
+      `/connections/groups/organization-pages/${encodeURIComponent(pageId)}/blocked-members`,
+      { cache: "no-store" },
+    ),
+  blockOrganizationPageMember: (pageId, profileId) =>
+    fetchJson(
+      `/connections/groups/organization-pages/${encodeURIComponent(pageId)}/blocked-members`,
+      { method: "POST", body: { profileId } },
+    ),
+  unblockOrganizationPageMember: (pageId, profileId) =>
+    fetchJson(
+      `/connections/groups/organization-pages/${encodeURIComponent(pageId)}/blocked-members/${encodeURIComponent(profileId)}`,
+      { method: "DELETE" },
+    ),
+  removeOrganizationPageFollower: (pageId, profileId) =>
+    fetchJson(
+      `/connections/groups/organization-pages/${encodeURIComponent(pageId)}/followers/${encodeURIComponent(profileId)}`,
+      { method: "DELETE" },
+    ),
+  getOrganizationPageAnalytics: (pageId) =>
+    fetchJson(
+      `/connections/groups/organization-pages/${encodeURIComponent(pageId)}/analytics`,
+      { cache: "no-store" },
+    ),
+  recordOrganizationPageVisit: (pageId) =>
+    fetchJson(
+      `/connections/groups/organization-pages/${encodeURIComponent(pageId)}/visits`,
+      { method: "POST" },
+    ),
   getOrganizationPageSubscriptionRequests: () =>
     fetchJson("/connections/groups/organization-pages/subscription-requests", {
       cache: "no-store",
@@ -416,11 +460,21 @@ export const api = {
       `/connections/groups/${encodeURIComponent(groupId)}/posts/${encodeURIComponent(postId)}/activities`,
       { method: "POST", body: activity },
     ),
+  deleteConnectionGroupPostActivity: (groupId, postId, activityId) =>
+    fetchJson(
+      `/connections/groups/${encodeURIComponent(groupId)}/posts/${encodeURIComponent(postId)}/activities/${encodeURIComponent(activityId)}`,
+      { method: "DELETE" },
+    ),
   createConnectionGroupPost: (id, post) =>
     fetchJson(`/connections/groups/${encodeURIComponent(id)}/posts`, {
       method: "POST",
       body: post,
     }),
+  updateConnectionGroupPost: (groupId, postId, post) =>
+    fetchJson(
+      `/connections/groups/${encodeURIComponent(groupId)}/posts/${encodeURIComponent(postId)}`,
+      { method: "PUT", body: post },
+    ),
   deleteConnectionGroupPost: (groupId, postId) =>
     fetchJson(
       `/connections/groups/${encodeURIComponent(groupId)}/posts/${encodeURIComponent(postId)}`,

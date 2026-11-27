@@ -4,6 +4,7 @@ import com.truehunt.social.exception.BadRequestException;
 import com.truehunt.social.model.ConnectionGroupEntity;
 import com.truehunt.social.model.ConnectionGroupPostActivityEntity;
 import com.truehunt.social.model.ConnectionGroupPostEntity;
+import com.truehunt.social.model.OrganizationPageAnalyticsEventEntity;
 import com.truehunt.social.model.ConversationEntity;
 import com.truehunt.social.model.OrganizationPageSubscriptionRequestEntity;
 import com.truehunt.social.model.ProfileEntity;
@@ -11,6 +12,7 @@ import com.truehunt.social.model.UserAccountEntity;
 import com.truehunt.social.repository.ConnectionGroupRepository;
 import com.truehunt.social.repository.ConnectionGroupPostActivityRepository;
 import com.truehunt.social.repository.ConnectionGroupPostRepository;
+import com.truehunt.social.repository.OrganizationPageAnalyticsEventRepository;
 import com.truehunt.social.repository.OrganizationPageSubscriptionRequestRepository;
 import com.truehunt.social.repository.ConversationRepository;
 import com.truehunt.social.repository.ProfileRepository;
@@ -27,8 +29,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -210,6 +215,266 @@ class ConnectionGroupServiceTest {
         assertEquals(false, publicPage.get("isOwner"));
         assertNull(publicPage.get("ownerId"));
         assertEquals(List.of(), publicPage.get("followerUserIds"));
+    }
+
+    @Test
+    void blockedPageFollowerCannotSeePageOrPostsAndKeepsTheirRelationships() {
+        ConnectionGroupRepository groups = mock(ConnectionGroupRepository.class);
+        ConnectionGroupPostRepository posts = mock(ConnectionGroupPostRepository.class);
+        UserAccountRepository accounts = mock(UserAccountRepository.class);
+        ConnectionGroupEntity page = new ConnectionGroupEntity();
+        page.setId(12L);
+        page.setOwnerId("owner-id");
+        page.setGroupType("ORG_PAGE");
+        page.setFollowerUserIds(List.of("member-id"));
+        page.setSubscriberUserIds(List.of("member-id"));
+        when(accounts.findByEmail("owner@example.com"))
+                .thenReturn(Optional.of(account(1L, "owner@example.com", "owner-id")));
+        when(accounts.findByEmail("member@example.com"))
+                .thenReturn(Optional.of(account(2L, "member@example.com", "member-id")));
+        when(groups.findByIdAndOwnerId(12L, "owner-id")).thenReturn(Optional.of(page));
+        when(groups.findById(12L)).thenReturn(Optional.of(page));
+        when(groups.findAllByOrderByCreatedAtDesc()).thenReturn(List.of(page));
+        when(groups.save(any(ConnectionGroupEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        ConnectionGroupService service = new ConnectionGroupService(groups, posts, accounts, mock(ConnectionService.class));
+
+        Map<String, Object> blocked = service.blockOrganizationPageMember(
+                "owner@example.com", 12L, "member-id");
+
+        assertEquals(List.of("member-id"), blocked.get("blockedUserIds"));
+        assertEquals(List.of("member-id"), page.getFollowerUserIds());
+        assertEquals(List.of("member-id"), page.getSubscriberUserIds());
+        assertEquals(List.of(), service.getOrganizationPages("member@example.com"));
+        Map<String, Object> feed = service.getGroupPosts("member@example.com", 12L);
+        assertEquals(false, feed.get("canViewAll"));
+        assertEquals(List.of(), feed.get("posts"));
+        verify(posts, never()).findAllByGroupIdOrderByCreatedAtDesc(12L);
+
+        service.unblockOrganizationPageMember("owner@example.com", 12L, "member-id");
+
+        assertEquals(1, service.getOrganizationPages("member@example.com").size());
+        assertEquals(List.of("member-id"), page.getFollowerUserIds());
+        assertEquals(List.of("member-id"), page.getSubscriberUserIds());
+    }
+
+    @Test
+    void pageOwnerCanOnlyBlockCurrentFollowersOrSubscribers() {
+        ConnectionGroupRepository groups = mock(ConnectionGroupRepository.class);
+        UserAccountRepository accounts = mock(UserAccountRepository.class);
+        ConnectionGroupEntity page = new ConnectionGroupEntity();
+        page.setId(12L);
+        page.setOwnerId("owner-id");
+        page.setGroupType("ORG_PAGE");
+        when(accounts.findByEmail("owner@example.com"))
+                .thenReturn(Optional.of(account(1L, "owner@example.com", "owner-id")));
+        when(groups.findByIdAndOwnerId(12L, "owner-id")).thenReturn(Optional.of(page));
+        ConnectionGroupService service = new ConnectionGroupService(
+                groups, mock(ConnectionGroupPostRepository.class), accounts, mock(ConnectionService.class));
+
+        assertThrows(
+                BadRequestException.class,
+                () -> service.blockOrganizationPageMember("owner@example.com", 12L, "stranger-id"));
+        verify(groups, never()).save(any(ConnectionGroupEntity.class));
+    }
+
+    @Test
+    void pageOwnerCanRemoveFollowerWithoutRemovingTheirSubscription() {
+        ConnectionGroupRepository groups = mock(ConnectionGroupRepository.class);
+        UserAccountRepository accounts = mock(UserAccountRepository.class);
+        UserAccountEntity owner = account(1L, "owner@example.com", "owner-id");
+        ConnectionGroupEntity page = new ConnectionGroupEntity();
+        page.setId(12L);
+        page.setOwnerId("owner-id");
+        page.setGroupType("ORG_PAGE");
+        page.setFollowerUserIds(List.of("follower-id"));
+        page.setSubscriberUserIds(List.of("follower-id"));
+        when(accounts.findByEmail("owner@example.com")).thenReturn(Optional.of(owner));
+        when(groups.findByIdAndOwnerId(12L, "owner-id")).thenReturn(Optional.of(page));
+        when(groups.save(any(ConnectionGroupEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        ConnectionGroupService service = new ConnectionGroupService(
+                groups, mock(ConnectionGroupPostRepository.class), accounts, mock(ConnectionService.class));
+
+        Map<String, Object> updatedPage =
+                service.removeOrganizationPageFollower("owner@example.com", 12L, "FOLLOWER-ID");
+
+        assertEquals(List.of(), page.getFollowerUserIds());
+        assertEquals(List.of("follower-id"), page.getSubscriberUserIds());
+        assertEquals(0, updatedPage.get("followerCount"));
+        assertEquals(List.of(), updatedPage.get("followerUserIds"));
+        verify(groups).save(page);
+        assertThrows(
+                BadRequestException.class,
+                () -> service.removeOrganizationPageFollower("owner@example.com", 12L, "follower-id"));
+    }
+
+    @Test
+    void organizationPageFollowIsRecordedOnlyWhenFollowerIsAdded() {
+        ConnectionGroupRepository groups = mock(ConnectionGroupRepository.class);
+        UserAccountRepository accounts = mock(UserAccountRepository.class);
+        OrganizationPageAnalyticsEventRepository analyticsEvents =
+                mock(OrganizationPageAnalyticsEventRepository.class);
+        UserAccountEntity follower = account(2L, "follower@example.com", "follower-id");
+        ConnectionGroupEntity page = new ConnectionGroupEntity();
+        page.setId(12L);
+        page.setOwnerId("owner-id");
+        page.setGroupType("ORG_PAGE");
+        when(accounts.findByEmail("follower@example.com")).thenReturn(Optional.of(follower));
+        when(groups.findById(12L)).thenReturn(Optional.of(page));
+        when(groups.save(any(ConnectionGroupEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(analyticsEvents.save(any(OrganizationPageAnalyticsEventEntity.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        ConnectionGroupService service = new ConnectionGroupService(
+                groups,
+                mock(ConnectionGroupPostRepository.class),
+                mock(ConnectionGroupPostActivityRepository.class),
+                null,
+                null,
+                accounts,
+                mock(ConnectionService.class),
+                null,
+                null,
+                analyticsEvents);
+
+        service.followGroup("follower@example.com", 12L);
+        service.followGroup("follower@example.com", 12L);
+
+        assertEquals(List.of("follower-id"), page.getFollowerUserIds());
+        verify(analyticsEvents, times(1)).save(any(OrganizationPageAnalyticsEventEntity.class));
+    }
+
+    @Test
+    void organizationPageUnfollowRemovesFollowerAnalyticsEvent() {
+        ConnectionGroupRepository groups = mock(ConnectionGroupRepository.class);
+        UserAccountRepository accounts = mock(UserAccountRepository.class);
+        OrganizationPageAnalyticsEventRepository analyticsEvents =
+                mock(OrganizationPageAnalyticsEventRepository.class);
+        UserAccountEntity follower = account(2L, "follower@example.com", "follower-id");
+        ConnectionGroupEntity page = organizationPage(12L, "owner-id", "Example Page");
+        page.setFollowerUserIds(List.of("follower-id"));
+        when(accounts.findByEmail("follower@example.com")).thenReturn(Optional.of(follower));
+        when(groups.findById(12L)).thenReturn(Optional.of(page));
+        when(groups.save(any(ConnectionGroupEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        ConnectionGroupService service = new ConnectionGroupService(
+                groups,
+                mock(ConnectionGroupPostRepository.class),
+                mock(ConnectionGroupPostActivityRepository.class),
+                null,
+                null,
+                accounts,
+                mock(ConnectionService.class),
+                null,
+                null,
+                analyticsEvents);
+
+        service.unfollowGroup("follower@example.com", 12L);
+
+        assertEquals(List.of(), page.getFollowerUserIds());
+        verify(analyticsEvents).deleteAllByGroupIdAndActorIdAndActivityType(12L, "follower-id", "FOLLOW");
+    }
+
+    @Test
+    void pagePostRepliesAreReturnedAndCanBeDeletedByTheirAuthor() {
+        ConnectionGroupRepository groups = mock(ConnectionGroupRepository.class);
+        ConnectionGroupPostRepository posts = mock(ConnectionGroupPostRepository.class);
+        ConnectionGroupPostActivityRepository activities = mock(ConnectionGroupPostActivityRepository.class);
+        UserAccountRepository accounts = mock(UserAccountRepository.class);
+        UserAccountEntity follower = account(2L, "follower@example.com", "follower-id");
+        ConnectionGroupEntity page = organizationPage(7L, "owner-id", "Example Page");
+        ConnectionGroupPostEntity post = new ConnectionGroupPostEntity();
+        ReflectionTestUtils.setField(post, "id", 12L);
+        post.setGroupId(7L);
+        post.setAuthorId("owner-id");
+        ConnectionGroupPostActivityEntity comment = new ConnectionGroupPostActivityEntity();
+        ReflectionTestUtils.setField(comment, "id", 50L);
+        comment.setGroupId(7L);
+        comment.setPostId(12L);
+        comment.setActorId("commenter-id");
+        comment.setActorName("Commenter");
+        comment.setActivityType("COMMENT");
+        comment.setContent("Original comment");
+        List<ConnectionGroupPostActivityEntity> savedActivities = new ArrayList<>(List.of(comment));
+
+        when(accounts.findByEmail("follower@example.com")).thenReturn(Optional.of(follower));
+        when(groups.findById(7L)).thenReturn(Optional.of(page));
+        when(posts.findByIdAndGroupId(12L, 7L)).thenReturn(Optional.of(post));
+        when(activities.findAllByPostIdOrderByCreatedAtAsc(12L))
+                .thenAnswer(invocation -> new ArrayList<>(savedActivities));
+        when(activities.save(any(ConnectionGroupPostActivityEntity.class))).thenAnswer(invocation -> {
+            ConnectionGroupPostActivityEntity reply = invocation.getArgument(0);
+            ReflectionTestUtils.setField(reply, "id", 51L);
+            savedActivities.add(reply);
+            return reply;
+        });
+        doAnswer(invocation -> {
+            savedActivities.remove(invocation.getArgument(0));
+            return null;
+        }).when(activities).delete(any(ConnectionGroupPostActivityEntity.class));
+        ConnectionGroupService service = new ConnectionGroupService(
+                groups,
+                posts,
+                activities,
+                accounts,
+                mock(ConnectionService.class),
+                null,
+                null);
+
+        assertThrows(
+                BadRequestException.class,
+                () -> service.deleteGroupPostActivity("follower@example.com", 7L, 12L, 50L));
+        verify(activities, never()).delete(comment);
+
+        Map<String, Object> withReply = service.recordGroupPostActivity(
+                "follower@example.com", 7L, 12L, "COMMENT_REPLY", "A reply", 50L);
+        ConnectionGroupPostActivityEntity replyActivity = savedActivities.get(1);
+        Map<?, ?> returnedComment = (Map<?, ?>) ((List<?>) withReply.get("comments")).get(0);
+        Map<?, ?> returnedReply = (Map<?, ?>) ((List<?>) returnedComment.get("replies")).get(0);
+        assertEquals("A reply", returnedReply.get("content"));
+        assertEquals(true, returnedReply.get("canDelete"));
+
+        Map<String, Object> afterDelete =
+                service.deleteGroupPostActivity("follower@example.com", 7L, 12L, 51L);
+
+        Map<?, ?> remainingComment = (Map<?, ?>) ((List<?>) afterDelete.get("comments")).get(0);
+        assertEquals(List.of(), remainingComment.get("replies"));
+        verify(activities).delete(replyActivity);
+    }
+
+    @Test
+    void bannerAnalyticsCountsRecentFollowsAndUniqueVisitors() {
+        ConnectionGroupRepository groups = mock(ConnectionGroupRepository.class);
+        UserAccountRepository accounts = mock(UserAccountRepository.class);
+        OrganizationPageAnalyticsEventRepository analyticsEvents =
+                mock(OrganizationPageAnalyticsEventRepository.class);
+        UserAccountEntity owner = account(1L, "owner@example.com", "owner-id");
+        ConnectionGroupEntity page = new ConnectionGroupEntity();
+        page.setId(12L);
+        page.setOwnerId("owner-id");
+        page.setGroupType("ORG_PAGE");
+        when(accounts.findByEmail("owner@example.com")).thenReturn(Optional.of(owner));
+        when(groups.findById(12L)).thenReturn(Optional.of(page));
+        when(analyticsEvents.findAllByGroupIdAndCreatedAtAfterOrderByCreatedAtAsc(
+                eq(12L), any())).thenReturn(List.of(
+                        analyticsEvent(12L, "FOLLOW", "follower-1"),
+                        analyticsEvent(12L, "FOLLOW", "follower-2"),
+                        analyticsEvent(12L, "VISIT", "visitor-1"),
+                        analyticsEvent(12L, "VISIT", "visitor-1"),
+                        analyticsEvent(12L, "VISIT", "visitor-2")));
+        ConnectionGroupService service = new ConnectionGroupService(
+                groups,
+                mock(ConnectionGroupPostRepository.class),
+                mock(ConnectionGroupPostActivityRepository.class),
+                null,
+                null,
+                accounts,
+                mock(ConnectionService.class),
+                null,
+                null,
+                analyticsEvents);
+
+        Map<String, Object> analytics = service.getOrganizationPageAnalytics("owner@example.com", 12L);
+
+        assertEquals(2L, analytics.get("newFollowers"));
+        assertEquals(2L, analytics.get("bannerVisitors"));
     }
 
     @Test
@@ -647,7 +912,7 @@ class ConnectionGroupServiceTest {
         group.setOwnerId("owner-id");
         when(accounts.findByEmail("owner@example.com")).thenReturn(Optional.of(owner));
         when(accounts.findByEmail("other@example.com")).thenReturn(Optional.of(other));
-        when(groups.findByIdAndOwnerId(7L, "owner-id")).thenReturn(Optional.of(group));
+        when(groups.findById(7L)).thenReturn(Optional.of(group));
         when(posts.save(any(ConnectionGroupPostEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
         ConnectionGroupService service = new ConnectionGroupService(groups, posts, accounts, connections);
 
@@ -663,6 +928,111 @@ class ConnectionGroupServiceTest {
     }
 
     @Test
+    void assignedPageAdminCanCreateOrganizationPagePosts() {
+        ConnectionGroupRepository groups = mock(ConnectionGroupRepository.class);
+        ConnectionGroupPostRepository posts = mock(ConnectionGroupPostRepository.class);
+        UserAccountRepository accounts = mock(UserAccountRepository.class);
+        ConnectionService connections = mock(ConnectionService.class);
+        UserAccountEntity admin = account(2L, "admin@example.com", "admin-id");
+        ConnectionGroupEntity page = new ConnectionGroupEntity();
+        page.setId(7L);
+        page.setOwnerId("owner-id");
+        page.setGroupType("ORG_PAGE");
+        page.setPageAdminUserIds(List.of("admin-id"));
+        when(accounts.findByEmail("admin@example.com")).thenReturn(Optional.of(admin));
+        when(groups.findById(7L)).thenReturn(Optional.of(page));
+        when(posts.save(any(ConnectionGroupPostEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        ConnectionGroupService service = new ConnectionGroupService(groups, posts, accounts, connections);
+
+        Map<String, Object> created =
+                service.createGroupPost("admin@example.com", 7L, "Admin post", null, null);
+
+        assertEquals("admin-id", created.get("authorId"));
+        assertEquals(true, created.get("canEdit"));
+        assertEquals("Admin post", created.get("content"));
+        verify(posts).save(any(ConnectionGroupPostEntity.class));
+    }
+
+    @Test
+    void pageOwnerCanAddAndRemoveAnAdminFromCurrentConnections() {
+        ConnectionGroupRepository groups = mock(ConnectionGroupRepository.class);
+        ConnectionGroupPostRepository posts = mock(ConnectionGroupPostRepository.class);
+        UserAccountRepository accounts = mock(UserAccountRepository.class);
+        ConnectionService connections = mock(ConnectionService.class);
+        UserAccountEntity owner = account(1L, "owner@example.com", "owner-id");
+        ConnectionGroupEntity page = new ConnectionGroupEntity();
+        page.setId(7L);
+        page.setOwnerId("owner-id");
+        page.setGroupType("ORG_PAGE");
+        page.setOwnerName("Owner");
+        List<Map<String, Object>> connectionProfiles = List.of(
+                Map.of("userId", "connection-id", "id", "connection-id", "name", "Connection"));
+        when(accounts.findByEmail("owner@example.com")).thenReturn(Optional.of(owner));
+        when(groups.findByIdAndOwnerId(7L, "owner-id")).thenReturn(Optional.of(page));
+        when(groups.save(any(ConnectionGroupEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(connections.getConnectedProfiles("owner@example.com")).thenReturn(connectionProfiles);
+        when(connections.getConnectedProfiles("owner-id")).thenReturn(connectionProfiles);
+        ConnectionGroupService service = new ConnectionGroupService(groups, posts, accounts, connections);
+
+        Map<String, Object> afterAdd =
+                service.addOrganizationPageAdmin("owner@example.com", 7L, "connection-id");
+        List<?> addedAdmins = (List<?>) afterAdd.get("admins");
+        assertEquals(List.of("connection-id"), page.getPageAdminUserIds());
+        assertEquals(2, addedAdmins.size());
+        assertEquals("Connection", ((Map<?, ?>) addedAdmins.get(1)).get("name"));
+
+        Map<String, Object> afterRemove =
+                service.removeOrganizationPageAdmin("owner@example.com", 7L, "connection-id");
+        assertEquals(List.of(), page.getPageAdminUserIds());
+        assertEquals(1, ((List<?>) afterRemove.get("admins")).size());
+    }
+
+    @Test
+    void pageOwnerCannotAddSomeoneWhoIsNotAConnection() {
+        ConnectionGroupRepository groups = mock(ConnectionGroupRepository.class);
+        ConnectionGroupPostRepository posts = mock(ConnectionGroupPostRepository.class);
+        UserAccountRepository accounts = mock(UserAccountRepository.class);
+        ConnectionService connections = mock(ConnectionService.class);
+        UserAccountEntity owner = account(1L, "owner@example.com", "owner-id");
+        ConnectionGroupEntity page = new ConnectionGroupEntity();
+        page.setId(7L);
+        page.setOwnerId("owner-id");
+        page.setGroupType("ORG_PAGE");
+        when(accounts.findByEmail("owner@example.com")).thenReturn(Optional.of(owner));
+        when(groups.findByIdAndOwnerId(7L, "owner-id")).thenReturn(Optional.of(page));
+        when(connections.getConnectedProfiles("owner@example.com")).thenReturn(List.of());
+        ConnectionGroupService service = new ConnectionGroupService(groups, posts, accounts, connections);
+
+        assertThrows(
+                BadRequestException.class,
+                () -> service.addOrganizationPageAdmin("owner@example.com", 7L, "unconnected-id"));
+        verify(groups, never()).save(any(ConnectionGroupEntity.class));
+    }
+
+    @Test
+    void assignedPageAdminCanAccessTheCreatorDashboard() {
+        ConnectionGroupRepository groups = mock(ConnectionGroupRepository.class);
+        ConnectionGroupPostRepository posts = mock(ConnectionGroupPostRepository.class);
+        UserAccountRepository accounts = mock(UserAccountRepository.class);
+        ConnectionService connections = mock(ConnectionService.class);
+        UserAccountEntity admin = account(2L, "admin@example.com", "admin-id");
+        ConnectionGroupEntity page = new ConnectionGroupEntity();
+        page.setId(7L);
+        page.setOwnerId("owner-id");
+        page.setGroupType("ORG_PAGE");
+        page.setPageAdminUserIds(List.of("admin-id"));
+        when(accounts.findByEmail("admin@example.com")).thenReturn(Optional.of(admin));
+        when(groups.findAllByOrderByCreatedAtDesc()).thenReturn(List.of(page));
+
+        Map<String, Object> pageDto = new ConnectionGroupService(groups, posts, accounts, connections)
+                .getOrganizationPages("admin@example.com")
+                .get(0);
+
+        assertEquals(true, pageDto.get("isAdmin"));
+        assertEquals(false, pageDto.get("isOwner"));
+    }
+
+    @Test
     void groupPostAuthorCanDeleteTheWholeUpdate() {
         ConnectionGroupRepository groups = mock(ConnectionGroupRepository.class);
         ConnectionGroupPostRepository posts = mock(ConnectionGroupPostRepository.class);
@@ -675,13 +1045,98 @@ class ConnectionGroupServiceTest {
         ConnectionGroupPostEntity post = new ConnectionGroupPostEntity();
         post.setAuthorId("owner-id");
         when(accounts.findByEmail("owner@example.com")).thenReturn(Optional.of(owner));
-        when(groups.findByIdAndOwnerId(7L, "owner-id")).thenReturn(Optional.of(group));
+        when(groups.findById(7L)).thenReturn(Optional.of(group));
         when(posts.findByIdAndGroupId(12L, 7L)).thenReturn(Optional.of(post));
 
         new ConnectionGroupService(groups, posts, accounts, connections)
                 .deleteGroupPost("owner@example.com", 7L, 12L);
 
         verify(posts).delete(post);
+    }
+
+    @Test
+    void postAuthorCanEditTheirOwnUpdate() {
+        ConnectionGroupRepository groups = mock(ConnectionGroupRepository.class);
+        ConnectionGroupPostRepository posts = mock(ConnectionGroupPostRepository.class);
+        UserAccountRepository accounts = mock(UserAccountRepository.class);
+        ConnectionService connections = mock(ConnectionService.class);
+        UserAccountEntity author = account(2L, "author@example.com", "author-id");
+        ConnectionGroupEntity group = new ConnectionGroupEntity();
+        group.setId(7L);
+        group.setOwnerId("owner-id");
+        ConnectionGroupPostEntity post = new ConnectionGroupPostEntity();
+        post.setGroupId(7L);
+        post.setAuthorId("author-id");
+        post.setAuthorName("Author");
+        when(accounts.findByEmail("author@example.com")).thenReturn(Optional.of(author));
+        when(groups.findById(7L)).thenReturn(Optional.of(group));
+        when(posts.findByIdAndGroupId(12L, 7L)).thenReturn(Optional.of(post));
+        when(posts.save(any(ConnectionGroupPostEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Map<String, Object> updated = new ConnectionGroupService(groups, posts, accounts, connections)
+                .updateGroupPost("author@example.com", 7L, 12L, "Updated text", null, null);
+
+        assertEquals("Updated text", post.getContent());
+        assertEquals(true, updated.get("canEdit"));
+        verify(posts).save(post);
+    }
+
+    @Test
+    void assignedPageAdminCanEditAndDeleteAnyOrganizationPagePost() {
+        ConnectionGroupRepository groups = mock(ConnectionGroupRepository.class);
+        ConnectionGroupPostRepository posts = mock(ConnectionGroupPostRepository.class);
+        UserAccountRepository accounts = mock(UserAccountRepository.class);
+        ConnectionService connections = mock(ConnectionService.class);
+        UserAccountEntity admin = account(2L, "admin@example.com", "admin-id");
+        ConnectionGroupEntity page = new ConnectionGroupEntity();
+        page.setId(7L);
+        page.setOwnerId("owner-id");
+        page.setGroupType("ORG_PAGE");
+        page.setPageAdminUserIds(List.of("admin-id"));
+        ConnectionGroupPostEntity post = new ConnectionGroupPostEntity();
+        post.setGroupId(7L);
+        post.setAuthorId("author-id");
+        post.setAuthorName("Author");
+        when(accounts.findByEmail("admin@example.com")).thenReturn(Optional.of(admin));
+        when(groups.findById(7L)).thenReturn(Optional.of(page));
+        when(posts.findByIdAndGroupId(12L, 7L)).thenReturn(Optional.of(post));
+        when(posts.save(any(ConnectionGroupPostEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        ConnectionGroupService service = new ConnectionGroupService(groups, posts, accounts, connections);
+
+        Map<String, Object> updated =
+                service.updateGroupPost("admin@example.com", 7L, 12L, "Updated by admin", null, null);
+        service.deleteGroupPost("admin@example.com", 7L, 12L);
+
+        assertEquals("Updated by admin", post.getContent());
+        assertEquals(true, updated.get("canEdit"));
+        verify(posts).save(post);
+        verify(posts).delete(post);
+    }
+
+    @Test
+    void anotherUserCannotEditOrDeleteAnUpdate() {
+        ConnectionGroupRepository groups = mock(ConnectionGroupRepository.class);
+        ConnectionGroupPostRepository posts = mock(ConnectionGroupPostRepository.class);
+        UserAccountRepository accounts = mock(UserAccountRepository.class);
+        ConnectionService connections = mock(ConnectionService.class);
+        UserAccountEntity other = account(3L, "other@example.com", "other-id");
+        ConnectionGroupEntity group = new ConnectionGroupEntity();
+        group.setId(7L);
+        ConnectionGroupPostEntity post = new ConnectionGroupPostEntity();
+        post.setAuthorId("author-id");
+        when(accounts.findByEmail("other@example.com")).thenReturn(Optional.of(other));
+        when(groups.findById(7L)).thenReturn(Optional.of(group));
+        when(posts.findByIdAndGroupId(12L, 7L)).thenReturn(Optional.of(post));
+        ConnectionGroupService service = new ConnectionGroupService(groups, posts, accounts, connections);
+
+        assertThrows(
+                BadRequestException.class,
+                () -> service.updateGroupPost("other@example.com", 7L, 12L, "Changed", null, null));
+        assertThrows(
+                BadRequestException.class,
+                () -> service.deleteGroupPost("other@example.com", 7L, 12L));
+        verify(posts, never()).save(any(ConnectionGroupPostEntity.class));
+        verify(posts, never()).delete(any(ConnectionGroupPostEntity.class));
     }
 
     @Test
@@ -697,7 +1152,7 @@ class ConnectionGroupServiceTest {
         ConnectionGroupPostEntity post = new ConnectionGroupPostEntity();
         post.setAuthorId("other-id");
         when(accounts.findByEmail("owner@example.com")).thenReturn(Optional.of(owner));
-        when(groups.findByIdAndOwnerId(7L, "owner-id")).thenReturn(Optional.of(group));
+        when(groups.findById(7L)).thenReturn(Optional.of(group));
         when(posts.findByIdAndGroupId(12L, 7L)).thenReturn(Optional.of(post));
 
         assertThrows(
@@ -914,6 +1369,17 @@ class ConnectionGroupServiceTest {
         account.setEmail(email);
         account.setPublicUserId(publicUserId);
         return account;
+    }
+
+    private static OrganizationPageAnalyticsEventEntity analyticsEvent(
+            Long groupId,
+            String activityType,
+            String actorId) {
+        OrganizationPageAnalyticsEventEntity event = new OrganizationPageAnalyticsEventEntity();
+        event.setGroupId(groupId);
+        event.setActivityType(activityType);
+        event.setActorId(actorId);
+        return event;
     }
 
     private static ConnectionGroupEntity organizationPage(Long id, String ownerId, String name) {

@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { CalendarDays } from 'lucide-react'
 import '../../App.css'
 import { api } from '../../api'
 import { api as directoryApi } from '../../services/api'

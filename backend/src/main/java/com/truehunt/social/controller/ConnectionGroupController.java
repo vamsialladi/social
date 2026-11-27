@@ -4,6 +4,8 @@ import com.truehunt.social.dto.ApiResponse;
 import com.truehunt.social.dto.CreateConnectionGroupPostActivityRequest;
 import com.truehunt.social.dto.CreateConnectionGroupRequest;
 import com.truehunt.social.dto.CreateConnectionGroupPostRequest;
+import com.truehunt.social.dto.OrganizationPageAdminRequest;
+import com.truehunt.social.dto.OrganizationPageBlockedMemberRequest;
 import com.truehunt.social.dto.RespondOrganizationPageSubscriptionRequest;
 import com.truehunt.social.service.ConnectionGroupService;
 import com.truehunt.social.service.ConversationService;
@@ -147,6 +149,105 @@ public class ConnectionGroupController {
                 "message", "Organization page deleted successfully")));
     }
 
+    @GetMapping("/organization-pages/{pageId}/admins")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getOrganizationPageAdmins(
+            @PathVariable Long pageId,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId,
+            Authentication authentication) {
+        return ResponseEntity.ok(ApiResponse.success(connectionGroupService.getOrganizationPageAdmins(
+                resolveOwnerIdentifier(userEmail, userId, authentication), pageId)));
+    }
+
+    @PostMapping("/organization-pages/{pageId}/admins")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> addOrganizationPageAdmin(
+            @PathVariable Long pageId,
+            @RequestBody(required = false) OrganizationPageAdminRequest request,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId,
+            Authentication authentication) {
+        return ResponseEntity.ok(ApiResponse.success(connectionGroupService.addOrganizationPageAdmin(
+                resolveOwnerIdentifier(userEmail, userId, authentication),
+                pageId,
+                request == null ? null : request.getProfileId())));
+    }
+
+    @DeleteMapping("/organization-pages/{pageId}/admins/{adminId}")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> removeOrganizationPageAdmin(
+            @PathVariable Long pageId,
+            @PathVariable String adminId,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId,
+            Authentication authentication) {
+        return ResponseEntity.ok(ApiResponse.success(connectionGroupService.removeOrganizationPageAdmin(
+                resolveOwnerIdentifier(userEmail, userId, authentication), pageId, adminId)));
+    }
+
+    @GetMapping("/organization-pages/{pageId}/blocked-members")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getOrganizationPageBlockedMembers(
+            @PathVariable Long pageId,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId,
+            Authentication authentication) {
+        return ResponseEntity.ok(ApiResponse.success(connectionGroupService.getOrganizationPageBlockedMembers(
+                resolveOwnerIdentifier(userEmail, userId, authentication), pageId)));
+    }
+
+    @PostMapping("/organization-pages/{pageId}/blocked-members")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> blockOrganizationPageMember(
+            @PathVariable Long pageId,
+            @RequestBody(required = false) OrganizationPageBlockedMemberRequest request,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId,
+            Authentication authentication) {
+        return ResponseEntity.ok(ApiResponse.success(connectionGroupService.blockOrganizationPageMember(
+                resolveOwnerIdentifier(userEmail, userId, authentication),
+                pageId,
+                request == null ? null : request.getProfileId())));
+    }
+
+    @DeleteMapping("/organization-pages/{pageId}/blocked-members/{profileId}")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> unblockOrganizationPageMember(
+            @PathVariable Long pageId,
+            @PathVariable String profileId,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId,
+            Authentication authentication) {
+        return ResponseEntity.ok(ApiResponse.success(connectionGroupService.unblockOrganizationPageMember(
+                resolveOwnerIdentifier(userEmail, userId, authentication), pageId, profileId)));
+    }
+
+    @DeleteMapping("/organization-pages/{pageId}/followers/{profileId}")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> removeOrganizationPageFollower(
+            @PathVariable Long pageId,
+            @PathVariable String profileId,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId,
+            Authentication authentication) {
+        return ResponseEntity.ok(ApiResponse.success(connectionGroupService.removeOrganizationPageFollower(
+                resolveOwnerIdentifier(userEmail, userId, authentication), pageId, profileId)));
+    }
+
+    @GetMapping("/organization-pages/{pageId}/analytics")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getOrganizationPageAnalytics(
+            @PathVariable Long pageId,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId,
+            Authentication authentication) {
+        return ResponseEntity.ok(ApiResponse.success(connectionGroupService.getOrganizationPageAnalytics(
+                resolveOwnerIdentifier(userEmail, userId, authentication), pageId)));
+    }
+
+    @PostMapping("/organization-pages/{pageId}/visits")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> recordOrganizationPageVisit(
+            @PathVariable Long pageId,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId,
+            Authentication authentication) {
+        return ResponseEntity.ok(ApiResponse.success(connectionGroupService.recordOrganizationPageVisit(
+                resolveOwnerIdentifier(userEmail, userId, authentication), pageId)));
+    }
+
     @PostMapping("/organization-pages/{pageId}/subscribe")
     public ResponseEntity<ApiResponse<Map<String, Object>>> subscribeToOrganizationPage(
             @PathVariable Long pageId,
@@ -267,7 +368,23 @@ public class ConnectionGroupController {
                 groupId,
                 postId,
                 request == null ? null : request.getType(),
-                request == null ? null : request.getContent())));
+                request == null ? null : request.getContent(),
+                request == null ? null : request.getParentActivityId())));
+    }
+
+    @DeleteMapping("/{groupId}/posts/{postId}/activities/{activityId}")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> deleteGroupPostActivity(
+            @PathVariable Long groupId,
+            @PathVariable Long postId,
+            @PathVariable Long activityId,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId,
+            Authentication authentication) {
+        return ResponseEntity.ok(ApiResponse.success(connectionGroupService.deleteGroupPostActivity(
+                resolveOwnerIdentifier(userEmail, userId, authentication),
+                groupId,
+                postId,
+                activityId)));
     }
 
     @PostMapping("/{groupId}/posts")
@@ -280,6 +397,23 @@ public class ConnectionGroupController {
         return ResponseEntity.ok(ApiResponse.success(connectionGroupService.createGroupPost(
                 resolveOwnerIdentifier(userEmail, userId, authentication),
                 groupId,
+                request == null ? null : request.getContent(),
+                request == null ? null : request.getMediaUrl(),
+                request == null ? null : request.getMediaType())));
+    }
+
+    @PutMapping("/{groupId}/posts/{postId}")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> updateGroupPost(
+            @PathVariable Long groupId,
+            @PathVariable Long postId,
+            @RequestBody(required = false) CreateConnectionGroupPostRequest request,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Id", required = false) String userId,
+            Authentication authentication) {
+        return ResponseEntity.ok(ApiResponse.success(connectionGroupService.updateGroupPost(
+                resolveOwnerIdentifier(userEmail, userId, authentication),
+                groupId,
+                postId,
                 request == null ? null : request.getContent(),
                 request == null ? null : request.getMediaUrl(),
                 request == null ? null : request.getMediaType())));

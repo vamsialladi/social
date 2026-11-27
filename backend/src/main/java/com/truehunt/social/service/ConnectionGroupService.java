@@ -4,12 +4,14 @@ import com.truehunt.social.exception.BadRequestException;
 import com.truehunt.social.model.ConnectionGroupEntity;
 import com.truehunt.social.model.ConnectionGroupPostActivityEntity;
 import com.truehunt.social.model.ConnectionGroupPostEntity;
+import com.truehunt.social.model.OrganizationPageAnalyticsEventEntity;
 import com.truehunt.social.model.OrganizationPageSubscriptionRequestEntity;
 import com.truehunt.social.model.ProfileEntity;
 import com.truehunt.social.model.UserAccountEntity;
 import com.truehunt.social.repository.ConnectionGroupRepository;
 import com.truehunt.social.repository.ConnectionGroupPostActivityRepository;
 import com.truehunt.social.repository.ConnectionGroupPostRepository;
+import com.truehunt.social.repository.OrganizationPageAnalyticsEventRepository;
 import com.truehunt.social.repository.OrganizationPageSubscriptionRequestRepository;
 import com.truehunt.social.repository.ConversationRepository;
 import com.truehunt.social.repository.ProfileRepository;
@@ -18,6 +20,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -36,6 +40,7 @@ public class ConnectionGroupService {
     private final ConnectionGroupRepository groupRepository;
     private final ConnectionGroupPostRepository groupPostRepository;
     private final ConnectionGroupPostActivityRepository postActivityRepository;
+    private final OrganizationPageAnalyticsEventRepository pageAnalyticsEventRepository;
     private final OrganizationPageSubscriptionRequestRepository subscriptionRequestRepository;
     private final NotificationService notificationService;
     private final UserAccountRepository userAccountRepository;
@@ -85,7 +90,6 @@ public class ConnectionGroupService {
                 connectionService, conversationRepository, profileRepository);
     }
 
-    @Autowired
     public ConnectionGroupService(
             ConnectionGroupRepository groupRepository,
             ConnectionGroupPostRepository groupPostRepository,
@@ -96,9 +100,27 @@ public class ConnectionGroupService {
             ConnectionService connectionService,
             ConversationRepository conversationRepository,
             ProfileRepository profileRepository) {
+        this(groupRepository, groupPostRepository, postActivityRepository, subscriptionRequestRepository,
+                notificationService, userAccountRepository, connectionService, conversationRepository,
+                profileRepository, null);
+    }
+
+    @Autowired
+    public ConnectionGroupService(
+            ConnectionGroupRepository groupRepository,
+            ConnectionGroupPostRepository groupPostRepository,
+            ConnectionGroupPostActivityRepository postActivityRepository,
+            OrganizationPageSubscriptionRequestRepository subscriptionRequestRepository,
+            NotificationService notificationService,
+            UserAccountRepository userAccountRepository,
+            ConnectionService connectionService,
+            ConversationRepository conversationRepository,
+            ProfileRepository profileRepository,
+            OrganizationPageAnalyticsEventRepository pageAnalyticsEventRepository) {
         this.groupRepository = groupRepository;
         this.groupPostRepository = groupPostRepository;
         this.postActivityRepository = postActivityRepository;
+        this.pageAnalyticsEventRepository = pageAnalyticsEventRepository;
         this.subscriptionRequestRepository = subscriptionRequestRepository;
         this.notificationService = notificationService;
         this.userAccountRepository = userAccountRepository;
@@ -135,6 +157,7 @@ public class ConnectionGroupService {
             newestPageByOwner.putIfAbsent(ownerKey, group);
         }
         return newestPageByOwner.values().stream()
+                .filter(group -> !isBlockedFromPage(group, viewerIdentities))
                 .map(group -> toDto(group, viewerIdentities))
                 .toList();
     }
@@ -205,6 +228,198 @@ public class ConnectionGroupService {
         }
     }
 
+    @Transactional(readOnly = true)
+    public Map<String, Object> getOrganizationPageAdmins(String ownerIdentifier, Long pageId) {
+        ResolvedOwner owner = resolveOwner(ownerIdentifier);
+        ConnectionGroupEntity page = requireOwnedOrganizationPage(pageId, owner.id());
+        return toOrganizationPageAdminsDto(page, owner);
+    }
+
+    @Transactional
+    public Map<String, Object> addOrganizationPageAdmin(
+            String ownerIdentifier,
+            Long pageId,
+            String profileId) {
+        ResolvedOwner owner = resolveOwner(ownerIdentifier);
+        ConnectionGroupEntity page = requireOwnedOrganizationPage(pageId, owner.id());
+        if (profileId == null || profileId.isBlank()) {
+            throw new BadRequestException("Choose a connection to add as a page admin.");
+        }
+
+        String adminId = resolveConnectedMemberIds(ownerIdentifier, List.of(profileId), false)
+                .stream()
+                .findFirst()
+                .orElseThrow(() -> new BadRequestException("Choose one of your current connections."));
+        if (normalize(adminId).equals(normalize(owner.id()))) {
+            throw new BadRequestException("The page owner is already the super admin.");
+        }
+        boolean alreadyAdded = page.getPageAdminUserIds().stream()
+                .anyMatch(existingId -> normalize(existingId).equals(normalize(adminId)));
+        if (!alreadyAdded) {
+            page.getPageAdminUserIds().add(adminId);
+            groupRepository.save(page);
+        }
+        return toOrganizationPageAdminsDto(page, owner);
+    }
+
+    @Transactional
+    public Map<String, Object> removeOrganizationPageAdmin(
+            String ownerIdentifier,
+            Long pageId,
+            String adminId) {
+        ResolvedOwner owner = resolveOwner(ownerIdentifier);
+        ConnectionGroupEntity page = requireOwnedOrganizationPage(pageId, owner.id());
+        if (adminId == null || adminId.isBlank()) {
+            throw new BadRequestException("Choose a page admin to remove.");
+        }
+        if (normalize(adminId).equals(normalize(page.getOwnerId()))) {
+            throw new BadRequestException("The page owner cannot be removed as an admin.");
+        }
+        boolean removed = page.getPageAdminUserIds()
+                .removeIf(existingId -> normalize(existingId).equals(normalize(adminId)));
+        if (!removed) {
+            throw new BadRequestException("Could not find this page admin.");
+        }
+        groupRepository.save(page);
+        return toOrganizationPageAdminsDto(page, owner);
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> getOrganizationPageBlockedMembers(String ownerIdentifier, Long pageId) {
+        ResolvedOwner owner = resolveOwner(ownerIdentifier);
+        return toOrganizationPageBlockedMembersDto(requireOwnedOrganizationPage(pageId, owner.id()));
+    }
+
+    @Transactional
+    public Map<String, Object> blockOrganizationPageMember(
+            String ownerIdentifier,
+            Long pageId,
+            String profileId) {
+        ResolvedOwner owner = resolveOwner(ownerIdentifier);
+        ConnectionGroupEntity page = requireOwnedOrganizationPage(pageId, owner.id());
+        String memberId = requireOrganizationPageAudienceMember(page, profileId);
+        if (normalize(memberId).equals(normalize(page.getOwnerId()))
+                || page.getPageAdminUserIds().stream()
+                        .anyMatch(adminId -> normalize(adminId).equals(normalize(memberId)))) {
+            throw new BadRequestException("Page owners and admins cannot be blocked.");
+        }
+        if (page.getPageBlockedUserIds().stream()
+                .noneMatch(blockedId -> normalize(blockedId).equals(normalize(memberId)))) {
+            page.getPageBlockedUserIds().add(memberId);
+            groupRepository.save(page);
+        }
+        return toOrganizationPageBlockedMembersDto(page);
+    }
+
+    @Transactional
+    public Map<String, Object> unblockOrganizationPageMember(
+            String ownerIdentifier,
+            Long pageId,
+            String profileId) {
+        ResolvedOwner owner = resolveOwner(ownerIdentifier);
+        ConnectionGroupEntity page = requireOwnedOrganizationPage(pageId, owner.id());
+        if (profileId == null || profileId.isBlank()) {
+            throw new BadRequestException("Choose a blocked follower to unblock.");
+        }
+        boolean removed = page.getPageBlockedUserIds()
+                .removeIf(blockedId -> normalize(blockedId).equals(normalize(profileId)));
+        if (!removed) {
+            throw new BadRequestException("Could not find this blocked follower.");
+        }
+        groupRepository.save(page);
+        return toOrganizationPageBlockedMembersDto(page);
+    }
+
+    @Transactional
+    public Map<String, Object> removeOrganizationPageFollower(
+            String ownerIdentifier,
+            Long pageId,
+            String profileId) {
+        ResolvedOwner owner = resolveOwner(ownerIdentifier);
+        ConnectionGroupEntity page = requireOwnedOrganizationPage(pageId, owner.id());
+        if (profileId == null || profileId.isBlank()) {
+            throw new BadRequestException("Choose a follower to remove.");
+        }
+        String normalizedProfileId = normalize(profileId);
+        String followerId = page.getFollowerUserIds().stream()
+                .filter(follower -> normalize(follower).equals(normalizedProfileId))
+                .findFirst()
+                .orElse(null);
+        if (followerId == null) {
+            throw new BadRequestException("Could not find this page follower.");
+        }
+        boolean removed = page.getFollowerUserIds()
+                .removeIf(currentFollowerId -> normalize(currentFollowerId).equals(normalizedProfileId));
+        if (!removed) {
+            throw new BadRequestException("Could not find this page follower.");
+        }
+        removePageFollowAnalytics(page.getId(), followerId);
+        groupRepository.save(page);
+        return toDto(page, owner.id());
+    }
+
+    private Map<String, Object> toOrganizationPageBlockedMembersDto(ConnectionGroupEntity page) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("blockedUserIds", new ArrayList<>(page.getPageBlockedUserIds()));
+        return result;
+    }
+
+    private String requireOrganizationPageAudienceMember(ConnectionGroupEntity page, String profileId) {
+        if (profileId == null || profileId.isBlank()) {
+            throw new BadRequestException("Choose a follower or subscriber to block.");
+        }
+        String normalizedProfileId = normalize(profileId);
+        for (String followerId : page.getFollowerUserIds()) {
+            if (normalize(followerId).equals(normalizedProfileId)) return followerId;
+        }
+        for (String subscriberId : page.getSubscriberUserIds()) {
+            if (normalize(subscriberId).equals(normalizedProfileId)) return subscriberId;
+        }
+        throw new BadRequestException("Only a current page follower or subscriber can be blocked.");
+    }
+
+    private ConnectionGroupEntity requireOwnedOrganizationPage(Long pageId, String ownerId) {
+        return groupRepository.findByIdAndOwnerId(pageId, ownerId)
+                .filter(this::isOrganizationPage)
+                .orElseThrow(() -> new BadRequestException("Could not find this organization page."));
+    }
+
+    private Map<String, Object> toOrganizationPageAdminsDto(
+            ConnectionGroupEntity page,
+            ResolvedOwner owner) {
+        List<Map<String, Object>> connectedProfiles = connectionService.getConnectedProfiles(owner.id());
+        List<Map<String, Object>> admins = new ArrayList<>();
+
+        Map<String, Object> ownerAdmin = new LinkedHashMap<>();
+        ownerAdmin.put("id", page.getOwnerId());
+        ownerAdmin.put("userId", page.getOwnerId());
+        ownerAdmin.put("name", displayName(page.getOwnerName(), owner.name()));
+        ownerAdmin.put("role", "Super admin");
+        ownerAdmin.put("isOwner", true);
+        ownerAdmin.put("avatar", "");
+        admins.add(ownerAdmin);
+
+        for (String adminId : page.getPageAdminUserIds()) {
+            Map<String, Object> profile = connectedProfiles.stream()
+                    .filter(candidate -> identityValues(candidate).stream()
+                            .anyMatch(identity -> normalize(identity).equals(normalize(adminId))))
+                    .findFirst()
+                    .map(LinkedHashMap::new)
+                    .orElseGet(LinkedHashMap::new);
+            profile.put("id", adminId);
+            profile.put("userId", adminId);
+            profile.put("name", displayName(
+                    firstValue(profile, "name", "fullName"),
+                    "Page admin"));
+            profile.put("role", "Page admin");
+            profile.put("isOwner", false);
+            profile.putIfAbsent("avatar", "");
+            admins.add(profile);
+        }
+
+        return Map.of("admins", admins);
+    }
+
     @Transactional
     public Map<String, Object> subscribeToOrganizationPage(String userIdentifier, Long pageId, boolean subscribe) {
         return subscribe
@@ -218,6 +433,9 @@ public class ConnectionGroupService {
         ConnectionGroupEntity page = groupRepository.findById(pageId)
                 .filter(this::isOrganizationPage)
                 .orElseThrow(() -> new BadRequestException("Could not find this organization page."));
+        if (isBlockedFromPage(page, requester.id())) {
+            throw new BadRequestException("You cannot access this organization page.");
+        }
         if (normalize(page.getOwnerId()).equals(normalize(requester.id()))) {
             throw new BadRequestException("Page owners cannot subscribe to their own page.");
         }
@@ -484,10 +702,17 @@ public class ConnectionGroupService {
         String userId = resolveOwnerId(userIdentifier);
         ConnectionGroupEntity group = groupRepository.findById(groupId)
                 .orElseThrow(() -> new BadRequestException("Could not find this group."));
+        if (isBlockedFromPage(group, userId)) {
+            throw new BadRequestException("You cannot access this organization page.");
+        }
         if (!group.getOwnerId().equals(userId)) {
-            if (group.getFollowerUserIds().stream()
-                    .noneMatch(followerId -> normalize(followerId).equals(normalize(userId)))) {
+            boolean isNewFollower = group.getFollowerUserIds().stream()
+                    .noneMatch(followerId -> normalize(followerId).equals(normalize(userId)));
+            if (isNewFollower) {
                 group.getFollowerUserIds().add(userId);
+                if (isOrganizationPage(group)) {
+                    savePageAnalyticsEvent(group.getId(), userId, "FOLLOW");
+                }
             }
             group.getMemberProfileIds().removeIf(memberId -> normalize(memberId).equals(normalize(userId)));
             groupRepository.save(group);
@@ -500,9 +725,84 @@ public class ConnectionGroupService {
         String userId = resolveOwnerId(userIdentifier);
         ConnectionGroupEntity group = groupRepository.findById(groupId)
                 .orElseThrow(() -> new BadRequestException("Could not find this group."));
-        group.getFollowerUserIds().removeIf(followerId -> normalize(followerId).equals(normalize(userId)));
+        boolean removed = group.getFollowerUserIds()
+                .removeIf(followerId -> normalize(followerId).equals(normalize(userId)));
+        if (removed && isOrganizationPage(group)) {
+            removePageFollowAnalytics(group.getId(), userId);
+        }
         groupRepository.save(group);
         return toDto(group, userId);
+    }
+
+    @Transactional
+    public Map<String, Object> recordOrganizationPageVisit(String userIdentifier, Long pageId) {
+        ResolvedOwner viewer = resolveOwner(userIdentifier);
+        ConnectionGroupEntity page = groupRepository.findById(pageId)
+                .filter(this::isOrganizationPage)
+                .orElseThrow(() -> new BadRequestException("Could not find this organization banner."));
+        if (isBlockedFromPage(page, viewer.id())) {
+            throw new BadRequestException("You cannot access this organization banner.");
+        }
+        if (normalize(page.getOwnerId()).equals(normalize(viewer.id()))
+                || isPageAdmin(page, viewer.id())) {
+            return Map.of("recorded", false);
+        }
+        if (pageAnalyticsEventRepository == null) {
+            throw new IllegalStateException("Organization banner analytics storage is not configured.");
+        }
+
+        LocalDateTime today = LocalDate.now().atStartOfDay();
+        boolean alreadyVisitedToday = pageAnalyticsEventRepository
+                .existsByGroupIdAndActorIdAndActivityTypeAndCreatedAtAfter(
+                        pageId, viewer.id(), "VISIT", today);
+        if (!alreadyVisitedToday) {
+            savePageAnalyticsEvent(pageId, viewer.id(), "VISIT");
+        }
+        return Map.of("recorded", !alreadyVisitedToday);
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> getOrganizationPageAnalytics(String userIdentifier, Long pageId) {
+        ResolvedOwner viewer = resolveOwner(userIdentifier);
+        ConnectionGroupEntity page = groupRepository.findById(pageId)
+                .filter(this::isOrganizationPage)
+                .orElseThrow(() -> new BadRequestException("Could not find this organization banner."));
+        if (!normalize(page.getOwnerId()).equals(normalize(viewer.id()))
+                && !isPageAdmin(page, viewer.id())) {
+            throw new BadRequestException("Only page owners and admins can view banner analytics.");
+        }
+        if (pageAnalyticsEventRepository == null) {
+            throw new IllegalStateException("Organization banner analytics storage is not configured.");
+        }
+
+        List<OrganizationPageAnalyticsEventEntity> events =
+                pageAnalyticsEventRepository.findAllByGroupIdAndCreatedAtAfterOrderByCreatedAtAsc(
+                        pageId, LocalDateTime.now().minusWeeks(5));
+        long newFollowers = events.stream()
+                .filter(event -> "FOLLOW".equals(event.getActivityType()))
+                .count();
+        long bannerVisitors = events.stream()
+                .filter(event -> "VISIT".equals(event.getActivityType()))
+                .map(event -> normalize(event.getActorId()))
+                .distinct()
+                .count();
+        return Map.of("newFollowers", newFollowers, "bannerVisitors", bannerVisitors);
+    }
+
+    private void savePageAnalyticsEvent(Long groupId, String actorId, String activityType) {
+        if (pageAnalyticsEventRepository == null) return;
+        OrganizationPageAnalyticsEventEntity event = new OrganizationPageAnalyticsEventEntity();
+        event.setGroupId(groupId);
+        event.setActorId(actorId);
+        event.setActivityType(activityType);
+        pageAnalyticsEventRepository.save(event);
+    }
+
+    private void removePageFollowAnalytics(Long groupId, String actorId) {
+        if (pageAnalyticsEventRepository != null) {
+            pageAnalyticsEventRepository.deleteAllByGroupIdAndActorIdAndActivityType(
+                    groupId, actorId, "FOLLOW");
+        }
     }
 
     @Transactional(readOnly = true)
@@ -510,6 +810,13 @@ public class ConnectionGroupService {
         String viewerId = resolveOwnerId(userIdentifier);
         ConnectionGroupEntity group = groupRepository.findById(groupId)
                 .orElseThrow(() -> new BadRequestException("Could not find this group."));
+        if (isBlockedFromPage(group, viewerId)) {
+            Map<String, Object> blockedResult = new LinkedHashMap<>();
+            blockedResult.put("canViewAll", false);
+            blockedResult.put("posts", List.of());
+            blockedResult.put("preview", null);
+            return blockedResult;
+        }
         boolean canViewAll = isOrganizationPage(group)
                 || group.getOwnerId().equals(viewerId)
                 || group.getFollowerUserIds().stream().anyMatch(followerId -> normalize(followerId).equals(normalize(viewerId)));
@@ -530,7 +837,8 @@ public class ConnectionGroupService {
                     .map(post -> toPostDto(
                             post,
                             viewerId,
-                            activitiesByPostId.getOrDefault(post.getId(), List.of())))
+                            activitiesByPostId.getOrDefault(post.getId(), List.of()),
+                            group))
                     .toList());
             result.put("preview", null);
             return result;
@@ -560,11 +868,25 @@ public class ConnectionGroupService {
             Long postId,
             String type,
             String content) {
+        return recordGroupPostActivity(userIdentifier, groupId, postId, type, content, null);
+    }
+
+    @Transactional
+    public Map<String, Object> recordGroupPostActivity(
+            String userIdentifier,
+            Long groupId,
+            Long postId,
+            String type,
+            String content,
+            Long parentActivityId) {
         ResolvedOwner actor = resolveOwner(userIdentifier);
         ConnectionGroupEntity group = groupRepository.findById(groupId)
                 .orElseThrow(() -> new BadRequestException("Could not find this page."));
         if (!isOrganizationPage(group)) {
             throw new BadRequestException("Engagement tracking is available only on organization pages.");
+        }
+        if (isBlockedFromPage(group, actor.id())) {
+            throw new BadRequestException("You cannot access this organization page.");
         }
         ConnectionGroupPostEntity post = groupPostRepository.findByIdAndGroupId(postId, groupId)
                 .orElseThrow(() -> new BadRequestException("Could not find this page post."));
@@ -573,7 +895,7 @@ public class ConnectionGroupService {
         }
 
         String activityType = type == null ? "" : type.trim().toUpperCase(Locale.ROOT);
-        if (!Set.of("REACTION", "COMMENT", "IMPRESSION", "REPOST").contains(activityType)) {
+        if (!Set.of("REACTION", "COMMENT", "COMMENT_REPLY", "IMPRESSION", "REPOST").contains(activityType)) {
             throw new BadRequestException("Choose a valid page post activity.");
         }
         boolean isOwner = normalize(group.getOwnerId()).equals(normalize(actor.id()));
@@ -583,14 +905,24 @@ public class ConnectionGroupService {
 
         List<ConnectionGroupPostActivityEntity> activities =
                 postActivityRepository.findAllByPostIdOrderByCreatedAtAsc(postId);
-        if ("COMMENT".equals(activityType)) {
+        if ("COMMENT".equals(activityType) || "COMMENT_REPLY".equals(activityType)) {
             String cleanContent = content == null ? "" : content.trim();
             if (cleanContent.isEmpty() || cleanContent.length() > 1000) {
                 throw new BadRequestException("Comments must be between 1 and 1,000 characters.");
             }
-            savePostActivity(group, post, actor, activityType, cleanContent);
+            if ("COMMENT_REPLY".equals(activityType)) {
+                boolean parentIsComment = parentActivityId != null && activities.stream()
+                        .anyMatch(activity -> parentActivityId.equals(activity.getId())
+                                && "COMMENT".equals(activity.getActivityType()));
+                if (!parentIsComment) {
+                    throw new BadRequestException("Choose a valid comment to reply to.");
+                }
+            } else if (parentActivityId != null) {
+                throw new BadRequestException("A comment cannot have a parent activity.");
+            }
+            savePostActivity(group, post, actor, activityType, cleanContent, parentActivityId);
         } else if ("REACTION".equals(activityType)) {
-            if (isOwner) return toPostDto(post, actor.id(), activities);
+            if (isOwner) return toPostDto(post, actor.id(), activities, group);
             List<ConnectionGroupPostActivityEntity> existingReactions = activities.stream()
                     .filter(activity -> "REACTION".equals(activity.getActivityType()))
                     .filter(activity -> normalize(activity.getActorId()).equals(normalize(actor.id())))
@@ -601,7 +933,7 @@ public class ConnectionGroupService {
                 savePostActivity(group, post, actor, activityType, null);
             }
         } else if (isOwner) {
-            return toPostDto(post, actor.id(), activities);
+            return toPostDto(post, actor.id(), activities, group);
         } else if ("IMPRESSION".equals(activityType)) {
             boolean alreadyCountedToday = activities.stream()
                     .filter(activity -> "IMPRESSION".equals(activity.getActivityType()))
@@ -618,7 +950,58 @@ public class ConnectionGroupService {
         return toPostDto(
                 post,
                 actor.id(),
-                postActivityRepository.findAllByPostIdOrderByCreatedAtAsc(postId));
+                postActivityRepository.findAllByPostIdOrderByCreatedAtAsc(postId),
+                group);
+    }
+
+    @Transactional
+    public Map<String, Object> deleteGroupPostActivity(
+            String userIdentifier,
+            Long groupId,
+            Long postId,
+            Long activityId) {
+        ResolvedOwner actor = resolveOwner(userIdentifier);
+        ConnectionGroupEntity group = groupRepository.findById(groupId)
+                .filter(this::isOrganizationPage)
+                .orElseThrow(() -> new BadRequestException("Could not find this organization page."));
+        if (isBlockedFromPage(group, actor.id())) {
+            throw new BadRequestException("You cannot access this organization page.");
+        }
+        ConnectionGroupPostEntity post = groupPostRepository.findByIdAndGroupId(postId, groupId)
+                .orElseThrow(() -> new BadRequestException("Could not find this page post."));
+        if (postActivityRepository == null) {
+            throw new IllegalStateException("Page post activity storage is not configured.");
+        }
+
+        List<ConnectionGroupPostActivityEntity> activities =
+                postActivityRepository.findAllByPostIdOrderByCreatedAtAsc(postId);
+        ConnectionGroupPostActivityEntity activity = activities.stream()
+                .filter(item -> activityId.equals(item.getId()))
+                .filter(item -> "COMMENT".equals(item.getActivityType())
+                        || "COMMENT_REPLY".equals(item.getActivityType()))
+                .findFirst()
+                .orElseThrow(() -> new BadRequestException("Could not find this comment."));
+        boolean canModerateComments = sameIdentity(group.getOwnerId(), actor.id())
+                || isPageAdmin(group, actor.id())
+                || sameIdentity(post.getAuthorId(), actor.id());
+        boolean isCommentAuthor = sameIdentity(activity.getActorId(), actor.id());
+        if (!canModerateComments && !isCommentAuthor) {
+            throw new BadRequestException("You can only delete your own comments.");
+        }
+
+        if ("COMMENT".equals(activity.getActivityType())) {
+            List<ConnectionGroupPostActivityEntity> replies = activities.stream()
+                    .filter(item -> "COMMENT_REPLY".equals(item.getActivityType()))
+                    .filter(item -> activityId.equals(item.getParentActivityId()))
+                    .toList();
+            postActivityRepository.deleteAll(replies);
+        }
+        postActivityRepository.delete(activity);
+        return toPostDto(
+                post,
+                actor.id(),
+                postActivityRepository.findAllByPostIdOrderByCreatedAtAsc(postId),
+                group);
     }
 
     private void savePostActivity(
@@ -627,9 +1010,20 @@ public class ConnectionGroupService {
             ResolvedOwner actor,
             String type,
             String content) {
+        savePostActivity(group, post, actor, type, content, null);
+    }
+
+    private void savePostActivity(
+            ConnectionGroupEntity group,
+            ConnectionGroupPostEntity post,
+            ResolvedOwner actor,
+            String type,
+            String content,
+            Long parentActivityId) {
         ConnectionGroupPostActivityEntity activity = new ConnectionGroupPostActivityEntity();
         activity.setGroupId(group.getId());
         activity.setPostId(post.getId());
+        activity.setParentActivityId(parentActivityId);
         activity.setActorId(actor.id());
         activity.setActorName(actor.name() == null || actor.name().isBlank() ? "Member" : actor.name().trim());
         activity.setActivityType(type);
@@ -646,8 +1040,15 @@ public class ConnectionGroupService {
             String mediaType) {
         ResolvedOwner owner = resolveOwner(ownerIdentifier);
         String ownerId = owner.id();
-        ConnectionGroupEntity group = groupRepository.findByIdAndOwnerId(groupId, ownerId)
-                .orElseThrow(() -> new BadRequestException("Only the group creator can publish group updates."));
+        ConnectionGroupEntity group = groupRepository.findById(groupId)
+                .orElseThrow(() -> new BadRequestException("Could not find this page."));
+        if (isBlockedFromPage(group, ownerId)) {
+            throw new BadRequestException("You cannot access this organization page.");
+        }
+        boolean isOwner = normalize(group.getOwnerId()).equals(normalize(ownerId));
+        if (!isOwner && !isPageAdmin(group, ownerId)) {
+            throw new BadRequestException("Only the page owner or an assigned page admin can publish updates.");
+        }
 
         String cleanContent = content == null ? "" : content.trim();
         String cleanMediaUrl = mediaUrl == null ? "" : mediaUrl.trim();
@@ -673,23 +1074,78 @@ public class ConnectionGroupService {
         post.setGroupId(group.getId());
         post.setAuthorId(ownerId);
         post.setAuthorName(owner.name() == null || owner.name().isBlank()
-                ? "Group creator"
+                ? (isPageAdmin(group, ownerId) ? "Page admin" : "Group creator")
                 : owner.name().trim());
         post.setContent(cleanContent);
         post.setMediaUrl(cleanMediaUrl.isEmpty() ? null : cleanMediaUrl);
         post.setMediaType(cleanMediaUrl.isEmpty() ? null : cleanMediaType);
-        return toPostDto(groupPostRepository.save(post), ownerId, List.of());
+        return toPostDto(groupPostRepository.save(post), ownerId, List.of(), group);
+    }
+
+    @Transactional
+    public Map<String, Object> updateGroupPost(
+            String userIdentifier,
+            Long groupId,
+            Long postId,
+            String content,
+            String mediaUrl,
+            String mediaType) {
+        String userId = resolveOwnerId(userIdentifier);
+        ConnectionGroupEntity group = groupRepository.findById(groupId)
+                .orElseThrow(() -> new BadRequestException("Could not find this group."));
+        if (isBlockedFromPage(group, userId)) {
+            throw new BadRequestException("You cannot access this organization page.");
+        }
+        ConnectionGroupPostEntity post = groupPostRepository.findByIdAndGroupId(postId, group.getId())
+                .orElseThrow(() -> new BadRequestException("Could not find this group update."));
+        boolean isAuthor = normalize(userId).equals(normalize(post.getAuthorId()));
+        if (!isAuthor && !isPageAdmin(group, userId)) {
+            throw new BadRequestException("Only the author or an assigned page admin can edit this update.");
+        }
+
+        String cleanContent = content == null ? "" : content.trim();
+        String cleanMediaUrl = mediaUrl == null ? "" : mediaUrl.trim();
+        String cleanMediaType = mediaType == null ? "" : mediaType.trim().toLowerCase(Locale.ROOT);
+        if (isBannerGroup(group) && (!cleanContent.isEmpty() || cleanMediaUrl.isEmpty())) {
+            throw new BadRequestException("Banner updates must contain an image or video only.");
+        }
+        if (cleanContent.isEmpty() && cleanMediaUrl.isEmpty()) {
+            throw new BadRequestException("Add text or attach an image or video before saving.");
+        }
+        if (cleanContent.length() > 10000) {
+            throw new BadRequestException("Group post text must be 10,000 characters or fewer.");
+        }
+        if (cleanMediaUrl.length() > 2048) {
+            throw new BadRequestException("Group post media URLs must be under 2048 characters.");
+        }
+        if (!cleanMediaUrl.isEmpty()
+                && !(cleanMediaType.startsWith("image/") || cleanMediaType.startsWith("video/"))) {
+            throw new BadRequestException("Group attachments must be an image or video.");
+        }
+
+        post.setContent(cleanContent);
+        post.setMediaUrl(cleanMediaUrl.isEmpty() ? null : cleanMediaUrl);
+        post.setMediaType(cleanMediaUrl.isEmpty() ? null : cleanMediaType);
+        return toPostDto(groupPostRepository.save(post), userId,
+                postActivityRepository == null
+                        ? List.of()
+                        : postActivityRepository.findAllByPostIdOrderByCreatedAtAsc(postId),
+                group);
     }
 
     @Transactional
     public void deleteGroupPost(String userIdentifier, Long groupId, Long postId) {
-        String ownerId = resolveOwnerId(userIdentifier);
-        ConnectionGroupEntity group = groupRepository.findByIdAndOwnerId(groupId, ownerId)
-                .orElseThrow(() -> new BadRequestException("Only the group creator can delete group updates."));
+        String userId = resolveOwnerId(userIdentifier);
+        ConnectionGroupEntity group = groupRepository.findById(groupId)
+                .orElseThrow(() -> new BadRequestException("Could not find this group."));
+        if (isBlockedFromPage(group, userId)) {
+            throw new BadRequestException("You cannot access this organization page.");
+        }
         ConnectionGroupPostEntity post = groupPostRepository.findByIdAndGroupId(postId, group.getId())
                 .orElseThrow(() -> new BadRequestException("Could not find this group update."));
-        if (!ownerId.equals(post.getAuthorId())) {
-            throw new BadRequestException("Only the person who posted this update can delete it.");
+        boolean isAuthor = normalize(userId).equals(normalize(post.getAuthorId()));
+        if (!isAuthor && !isPageAdmin(group, userId)) {
+            throw new BadRequestException("Only the author or an assigned page admin can delete this update.");
         }
         if (postActivityRepository != null) postActivityRepository.deleteAllByPostId(postId);
         groupPostRepository.delete(post);
@@ -708,11 +1164,16 @@ public class ConnectionGroupService {
     private Map<String, Object> toPostDto(
             ConnectionGroupPostEntity post,
             String viewerId,
-            List<ConnectionGroupPostActivityEntity> activities) {
+            List<ConnectionGroupPostActivityEntity> activities,
+            ConnectionGroupEntity group) {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("id", post.getId());
         result.put("authorId", post.getAuthorId());
         result.put("authorName", post.getAuthorName());
+        result.put("canEdit", viewerId != null
+                && ((post.getAuthorId() != null
+                        && normalize(post.getAuthorId()).equals(normalize(viewerId)))
+                        || isPageAdmin(group, viewerId)));
         result.put("content", post.getContent());
         result.put("mediaUrl", post.getMediaUrl());
         result.put("mediaType", post.getMediaType());
@@ -721,6 +1182,8 @@ public class ConnectionGroupService {
         List<Map<String, Object>> comments = new ArrayList<>();
         List<Map<String, Object>> impressions = new ArrayList<>();
         List<Map<String, Object>> reposts = new ArrayList<>();
+        Map<Long, Map<String, Object>> commentsById = new LinkedHashMap<>();
+        Map<Long, List<Map<String, Object>>> repliesByCommentId = new LinkedHashMap<>();
         boolean viewerReacted = false;
         boolean viewerReposted = false;
         for (ConnectionGroupPostActivityEntity activity : activities) {
@@ -735,9 +1198,15 @@ public class ConnectionGroupService {
                     }
                 }
                 case "COMMENT" -> {
-                    event.put("authorName", activity.getActorName());
-                    event.put("content", activity.getContent());
-                    comments.add(event);
+                    Map<String, Object> comment = toPostCommentDto(activity, viewerId, post, group);
+                    comments.add(comment);
+                    commentsById.put(activity.getId(), comment);
+                }
+                case "COMMENT_REPLY" -> {
+                    if (activity.getParentActivityId() != null) {
+                        repliesByCommentId.computeIfAbsent(activity.getParentActivityId(), ignored -> new ArrayList<>())
+                                .add(toPostCommentDto(activity, viewerId, post, group));
+                    }
                 }
                 case "IMPRESSION" -> impressions.add(event);
                 case "REPOST" -> {
@@ -749,6 +1218,8 @@ public class ConnectionGroupService {
                 default -> { }
             }
         }
+        commentsById.forEach((commentId, comment) ->
+                comment.put("replies", repliesByCommentId.getOrDefault(commentId, List.of())));
         result.put("reactions", reactions);
         result.put("comments", comments);
         result.put("impressions", impressions);
@@ -756,6 +1227,33 @@ public class ConnectionGroupService {
         result.put("viewerReacted", viewerReacted);
         result.put("viewerReposted", viewerReposted);
         return result;
+    }
+
+    private Map<String, Object> toPostCommentDto(
+            ConnectionGroupPostActivityEntity activity,
+            String viewerId,
+            ConnectionGroupPostEntity post,
+            ConnectionGroupEntity group) {
+        boolean canModerateComments = viewerId != null
+                && (sameIdentity(group.getOwnerId(), viewerId)
+                        || isPageAdmin(group, viewerId)
+                        || sameIdentity(post.getAuthorId(), viewerId));
+        Map<String, Object> comment = new LinkedHashMap<>();
+        comment.put("id", activity.getId());
+        comment.put("createdAt", activity.getCreatedAt());
+        comment.put("authorName", activity.getActorName());
+        comment.put("content", activity.getContent());
+        comment.put("canDelete", canModerateComments
+                || sameIdentity(activity.getActorId(), viewerId));
+        return comment;
+    }
+
+    private boolean isPageAdmin(ConnectionGroupEntity group, String userId) {
+        return isOrganizationPage(group)
+                && userId != null
+                && group.getPageAdminUserIds() != null
+                && group.getPageAdminUserIds().stream()
+                        .anyMatch(adminId -> normalize(adminId).equals(normalize(userId)));
     }
 
     private String normalizeImageUrl(String imageUrl) {
@@ -974,13 +1472,19 @@ public class ConnectionGroupService {
         if (group.getOwnerId() != null && !group.getOwnerId().isBlank() && viewerIdentities != null && !viewerIdentities.isEmpty()) {
             isOwner = viewerIdentities.stream().anyMatch(id -> id.equalsIgnoreCase(group.getOwnerId()));
         }
+        boolean isAdmin = isOrganizationPage(group)
+                && group.getPageAdminUserIds() != null
+                && viewerIdentities != null
+                && group.getPageAdminUserIds().stream().anyMatch(adminId ->
+                        viewerIdentities.stream().anyMatch(viewerId -> viewerId.equalsIgnoreCase(adminId)));
         boolean isFollowing = false;
         if (group.getFollowerUserIds() != null && viewerIdentities != null && !viewerIdentities.isEmpty()) {
             isFollowing = group.getFollowerUserIds().stream().anyMatch(f ->
                     f != null && viewerIdentities.stream().anyMatch(v -> v.equalsIgnoreCase(f)));
         }
         result.put("isOwner", isOwner);
-        result.put("ownerId", isOrganizationPage(group) && !isOwner ? null : group.getOwnerId());
+        result.put("isAdmin", isAdmin);
+        result.put("ownerId", isOrganizationPage(group) && !isOwner && !isAdmin ? null : group.getOwnerId());
         result.put("isFollowing", isFollowing);
         result.put("followerCount", group.getFollowerUserIds() != null ? group.getFollowerUserIds().size() : 0);
         boolean isSubscribed = group.getSubscriberUserIds() != null && viewerIdentities != null
@@ -1037,6 +1541,18 @@ public class ConnectionGroupService {
         return "ORG_PAGE".equalsIgnoreCase(group.getGroupType());
     }
 
+    private boolean isBlockedFromPage(ConnectionGroupEntity group, String userId) {
+        return isBlockedFromPage(group, userId == null ? Set.of() : Set.of(userId));
+    }
+
+    private boolean isBlockedFromPage(ConnectionGroupEntity group, Set<String> viewerIdentities) {
+        return isOrganizationPage(group)
+                && group.getPageBlockedUserIds() != null
+                && viewerIdentities != null
+                && group.getPageBlockedUserIds().stream().anyMatch(blockedId ->
+                        viewerIdentities.stream().anyMatch(viewerId -> viewerId.equalsIgnoreCase(blockedId)));
+    }
+
     private List<String> identityValues(Map<String, Object> profile) {
         List<String> values = new ArrayList<>();
         for (String key : List.of("userId", "publicUserId", "id", "profileId", "email")) {
@@ -1058,6 +1574,10 @@ public class ConnectionGroupService {
 
     private String normalize(String value) {
         return value.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private boolean sameIdentity(String first, String second) {
+        return first != null && second != null && normalize(first).equals(normalize(second));
     }
 
     private String displayName(String name, String fallback) {

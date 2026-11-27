@@ -16,6 +16,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class MediaServiceGroupPhotoTest {
@@ -77,6 +79,14 @@ class MediaServiceGroupPhotoTest {
         );
 
         assertTrue(Files.notExists(uploadDirectory) || isDirectoryEmpty(uploadDirectory));
+    }
+
+    @Test
+    void doesNotRequireBackendScannerForPagePostImages() {
+        MediaService service = createService();
+
+        assertDoesNotThrow(() -> service.uploadFile(imageFile(3), "connection-group-post"));
+        verify(contentSafetyService, never()).checkImage(any(byte[].class));
     }
 
     private MediaService createService() {

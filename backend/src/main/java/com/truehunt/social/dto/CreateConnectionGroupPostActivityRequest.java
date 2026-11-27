@@ -4,6 +4,7 @@ public class CreateConnectionGroupPostActivityRequest {
 
     private String type;
     private String content;
+    private Long parentActivityId;
 
     public String getType() {
         return type;
@@ -19,5 +20,13 @@ public class CreateConnectionGroupPostActivityRequest {
 
     public void setContent(String content) {
         this.content = content;
+    }
+
+    public Long getParentActivityId() {
+        return parentActivityId;
+    }
+
+    public void setParentActivityId(Long parentActivityId) {
+        this.parentActivityId = parentActivityId;
     }
 }

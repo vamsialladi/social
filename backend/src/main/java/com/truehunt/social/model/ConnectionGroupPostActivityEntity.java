@@ -29,6 +29,9 @@ public class ConnectionGroupPostActivityEntity {
     @Column(name = "post_id", nullable = false)
     private Long postId;
 
+    @Column(name = "parent_activity_id")
+    private Long parentActivityId;
+
     @Column(name = "actor_id", nullable = false)
     private String actorId;
 
@@ -62,6 +65,14 @@ public class ConnectionGroupPostActivityEntity {
 
     public void setPostId(Long postId) {
         this.postId = postId;
+    }
+
+    public Long getParentActivityId() {
+        return parentActivityId;
+    }
+
+    public void setParentActivityId(Long parentActivityId) {
+        this.parentActivityId = parentActivityId;
     }
 
     public String getActorId() {
