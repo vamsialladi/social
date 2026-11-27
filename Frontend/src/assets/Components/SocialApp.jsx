@@ -1937,6 +1937,12 @@ export default function SocialApp() {
       }
     }
 
+    if (!isAuthenticated) {
+      return () => {
+        isCurrentAccount = false
+      }
+    }
+
     async function loadBackendData() {
       try {
         const profile = await api.getProfile()
@@ -1968,7 +1974,7 @@ export default function SocialApp() {
     return () => {
       isCurrentAccount = false
     }
-  }, [profileStorageKey, user])
+  }, [isAuthenticated, profileStorageKey, user])
 
   useEffect(() => {
     const token = localStorage.getItem('truehunt_token') || ''
